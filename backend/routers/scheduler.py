@@ -1,0 +1,41 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import date
+
+from database import get_db
+from models import Child, ScheduledSlot
+from schemas import ScheduledSlotResponse, ScheduleResult
+from services.scheduler_engine import recalculate_schedule
+from utils import slot_to_response
+
+router = APIRouter()
+
+
+@router.post("/recalculate/{child_id}", response_model=ScheduleResult)
+def recalculate(child_id: int, db: Session = Depends(get_db)):
+    child = db.query(Child).filter(Child.id == child_id).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Child not found")
+    return recalculate_schedule(child_id, db)
+
+
+@router.get("/{child_id}", response_model=list[ScheduledSlotResponse])
+def get_schedule(
+    child_id: int,
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    db: Session = Depends(get_db),
+):
+    child = db.query(Child).filter(Child.id == child_id).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Child not found")
+
+    query = db.query(ScheduledSlot).filter(ScheduledSlot.child_id == child_id)
+    if start_date:
+        query = query.filter(ScheduledSlot.date >= start_date)
+    if end_date:
+        query = query.filter(ScheduledSlot.date <= end_date)
+
+    slots = query.order_by(ScheduledSlot.date, ScheduledSlot.time_start).all()
+    return [slot_to_response(s) for s in slots]

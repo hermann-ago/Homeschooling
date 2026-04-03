@@ -1,0 +1,53 @@
+# ─── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+backend/venv/
+venv/
+.venv/
+env/
+
+# ─── Database ────────────────────────────────────────────────────────────────
+# The live database should NEVER be committed.
+# To set up a fresh DB, run: alembic upgrade head
+backend/homeschool.db
+backend/*.db
+
+# ─── Uploaded files ──────────────────────────────────────────────────────────
+# User-uploaded PDFs — not source code, can be large
+backend/uploads/
+!backend/uploads/.gitkeep
+
+# ─── Environment / Secrets ───────────────────────────────────────────────────
+backend/.env
+.env
+*.env
+
+# ─── Node / Frontend ─────────────────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ─── IDE / OS ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Alembic ─────────────────────────────────────────────────────────────────
+# Keep migration scripts but not compiled cache
+backend/alembic/__pycache__/
+backend/alembic/versions/__pycache__/
