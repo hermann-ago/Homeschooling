@@ -12,16 +12,8 @@ import AllChildrenDashboard from './pages/AllChildrenDashboard';
 import DailyCanvas from './pages/DailyCanvas';
 import { childrenApi } from './api/children';
 import { Menu } from 'lucide-react';
+import { hexToRgb } from './utils/colors';
 
-// Helper to generate a lighter version of a hex color
-function hexToRgb(hex) {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : { r: 107, g: 158, b: 138 };
-}
 
 function App() {
   const [children, setChildren] = useState([]);
