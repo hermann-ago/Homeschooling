@@ -73,7 +73,7 @@ def start_app():
         shell=True
     )
     
-    print(f"\n🚀 App is being served!")
+    print(f"\nApp is being served!")
     print(f"Local:   http://localhost:5173")
     print(f"Network: http://{ip}:5173")
     print("\nPress Ctrl+C in this window to stop both servers.")

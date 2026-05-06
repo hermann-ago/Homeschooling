@@ -1,1 +1,10 @@
-pypdf==6.9.1
+fastapi
+uvicorn
+sqlalchemy
+python-dotenv
+pypdf
+google-generativeai
+alembic
+python-multipart
+jinja2
+pdfplumber
