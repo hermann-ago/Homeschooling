@@ -50,7 +50,7 @@ const Weekly = ({ activeChildId }) => {
   const dates = Object.keys(slotsByDate).sort();
 
   return (
-    <div className="p-4 sm:p-8 w-full max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-full bg-gray-50/50">
       <header className="mb-6 sm:mb-10">
         <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2">Weekly Overview</h1>
         <p className="text-text-secondary text-sm sm:text-base">

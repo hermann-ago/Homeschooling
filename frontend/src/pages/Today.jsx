@@ -3,7 +3,7 @@ import { checklistApi } from '../api/checklist';
 import ChecklistItem from '../components/ChecklistItem';
 import PageViewer from '../components/PageViewer';
 import { format } from 'date-fns';
-import { CheckSquare, Calendar, AlertCircle } from 'lucide-react';
+import { CheckSquare, Calendar, AlertCircle, Clock } from 'lucide-react';
 import clsx from 'clsx';
 
 const Today = ({ activeChildId }) => {
@@ -94,143 +94,180 @@ const Today = ({ activeChildId }) => {
   });
 
   const displayedMissedSlots = [...missedSlots, ...overdueTodaySlots];
+  const pendingMissed = displayedMissedSlots.filter(s => !s.is_completed);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-gray-50/50">
-      <div className={clsx("p-4 sm:p-8 flex flex-col w-full transition-all duration-300", selectedSlot ? "lg:w-3/5 lg:max-w-none lg:pr-8" : "max-w-6xl mx-auto")}>
+      <div className={clsx(
+        "flex flex-col w-full transition-all duration-300",
+        selectedSlot ? "lg:w-3/5 lg:max-w-none" : ""
+      )}>
         
         {/* Header Section */}
-        <header className="mb-6 flex-shrink-0">
-          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2 flex items-center">
-            <Calendar className="w-6 h-6 sm:w-8 sm:h-8 mr-3 text-accent" />
-            Today, {format(new Date(), 'EEEE MMM do')}
-          </h1>
-          <p className="text-text-secondary text-sm sm:text-base">
-            {slots.length === 0 
-              ? "No tasks scheduled for today." 
-              : `You have completed ${completedTodayCount} of ${slots.length} tasks.`}
-          </p>
+        <header className="p-4 sm:p-6 lg:p-8 pb-0 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-1 flex items-center">
+                <Calendar className="w-6 h-6 sm:w-8 sm:h-8 mr-3 text-accent" />
+                Today, {format(new Date(), 'EEEE MMM do')}
+              </h1>
+              <p className="text-text-secondary text-sm sm:text-base">
+                {slots.length === 0 
+                  ? "No tasks scheduled for today." 
+                  : `${completedTodayCount} of ${slots.length} tasks completed.`}
+              </p>
+            </div>
+            
+            {slots.length > 0 && (
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {pendingMissed.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-red-50 text-red-600 text-xs font-bold px-3 py-1.5 rounded-full border border-red-100">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {pendingMissed.length} to catch up
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           
           {slots.length > 0 && (
-            <div className="mt-4 bg-surface rounded-full h-3 w-full max-w-md border border-border overflow-hidden shadow-inner">
+            <div className="bg-surface rounded-full h-3 w-full border border-border overflow-hidden shadow-inner">
               <div 
-                className="bg-accent h-full transition-all duration-500 ease-out"
+                className="bg-accent h-full transition-all duration-500 ease-out rounded-full"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           )}
         </header>
 
-        {/* Catch Up Section (Pinned above grid) */}
-        {displayedMissedSlots.length > 0 && (
-          <section className="mb-6 flex-shrink-0 bg-white p-4 rounded-xl border border-red-100 shadow-sm relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-1 h-full bg-status-at-risk-text" />
-            <div className="flex items-center mb-3">
-              <h2 className="text-base font-bold text-status-at-risk-text flex items-center">
-                <AlertCircle className="w-5 h-5 mr-2" />
-                Catch Up
-              </h2>
-              <span className="ml-3 bg-status-at-risk-bg text-status-at-risk-text text-xs px-2.5 py-0.5 rounded-full font-bold">
-                {displayedMissedSlots.filter(s => !s.is_completed).length} missed
-              </span>
-            </div>
-            <div className="space-y-1 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-              {displayedMissedSlots.filter(s => !s.is_completed).map((slot, index) => (
-                <ChecklistItem 
-                  key={`${slot.id}-${index}`} 
-                  slot={slot} 
-                  onToggle={toggleSlot} 
-                  onViewPages={setSelectedSlot}
-                  showDate={true}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+        {/* Content: Side-by-side on wide screens */}
+        <div className="flex-1 overflow-hidden p-4 sm:p-6 lg:p-8 pt-4 sm:pt-4 lg:pt-6">
+          <div className={clsx(
+            "flex flex-col h-full gap-5",
+            pendingMissed.length > 0 ? "lg:flex-row" : ""
+          )}>
 
-        {/* GCal Style Day View */}
-        <div className="flex-1 bg-white rounded-2xl border border-border shadow-soft overflow-hidden flex flex-col min-h-0 relative">
-           <div className="flex items-center p-4 border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-sm">
-              <CheckSquare className="w-5 h-5 mr-2 text-text-secondary" />
-              <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider">Schedule</h2>
-           </div>
-           
-           <div 
-             className="flex-1 overflow-y-auto relative custom-scrollbar bg-white"
-             ref={containerRef}
-           >
-              {/* Day Grid Container: 24 hours, 60px per hour */}
-              <div className="relative h-[1440px] min-w-[500px] w-full mt-2 mb-8">
-                 
-                 {/* Hour Lines */}
-                 {Array.from({ length: 24 }).map((_, i) => (
-                    <div key={i} className="absolute w-full border-t border-border flex items-start" style={{ top: `${i * 60}px`, height: '60px' }}>
-                       <div className="w-16 flex-shrink-0 text-right pr-3 -mt-2.5">
-                          <span className="text-xs font-medium text-text-secondary bg-white px-1">
-                             {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
-                          </span>
-                       </div>
-                    </div>
-                 ))}
-
-                 {/* Current Time Indicator Line */}
-                 <div 
-                    className="absolute left-16 right-0 border-t-[2px] border-red-500 z-20 pointer-events-none"
-                    style={{ top: `${currentPixels}px` }}
-                 >
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-sm" />
-                 </div>
-
-                 {/* Slot Blocks */}
-                 {slots.map(slot => {
-                    const top = timeToPixels(slot.time_start);
-                    const bottom = timeToPixels(slot.time_end);
-                    const height = Math.max(bottom - top, 25); // min height
-
-                    return (
-                       <div
-                         key={slot.id}
-                         onClick={() => setSelectedSlot(slot)}
-                         className={clsx(
-                           "absolute left-16 right-4 rounded-lg p-2 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-sm z-10 group",
-                           slot.is_completed 
-                             ? "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100" 
-                             : "bg-accent/10 border-accent/40 hover:border-accent hover:shadow-md hover:-translate-y-[1px]"
-                         )}
-                         style={{ top: `${top}px`, height: `${height}px` }}
-                       >
-                          <div className="flex justify-between items-start">
-                             <div className="flex flex-col min-w-0 pr-2">
-                               <div className={clsx("font-bold text-sm truncate", slot.is_completed ? "text-text-secondary line-through" : "text-accent-dark")}>
-                                 {slot.subject_name}
-                               </div>
-                               <div className={clsx("text-xs truncate font-medium", slot.is_completed ? "text-text-secondary" : "text-text-primary")}>
-                                 {slot.topic_title}
-                               </div>
-                               <div className="text-[10px] text-text-secondary mt-0.5 font-medium flex items-center">
-                                 {slot.time_start} - {slot.time_end}
-                                 {slot.page_from && slot.page_to && (
-                                   <span className="ml-2 px-1 bg-white/50 rounded inline-block text-accent-dark/80">Pages {slot.page_from}-{slot.page_to}</span>
-                                 )}
-                               </div>
-                             </div>
-                             
-                             <button 
-                               onClick={(e) => { e.stopPropagation(); toggleSlot(slot.id, slot.is_completed); }}
-                               className="flex-shrink-0 mt-0.5 p-1 rounded-md hover:bg-white/50 transition active:scale-90"
-                             >
-                                {slot.is_completed ? (
-                                    <CheckSquare className="w-5 h-5 text-accent fill-accent/20" />
-                                ) : (
-                                    <div className="w-4 h-4 rounded border-2 border-accent bg-white mt-0.5 mr-0.5" />
-                                )}
-                             </button>
-                          </div>
-                       </div>
-                    )
-                 })}
+            {/* Catch Up Column — only visible if there are missed tasks */}
+            {pendingMissed.length > 0 && (
+              <div className="lg:w-[340px] xl:w-[380px] flex-shrink-0 flex flex-col">
+                <div className="bg-white rounded-2xl border border-red-100 shadow-soft overflow-hidden flex flex-col h-full relative">
+                  {/* Red accent bar */}
+                  <div className="absolute top-0 left-0 w-1 h-full bg-status-at-risk-text rounded-l-2xl" />
+                  
+                  <div className="flex items-center justify-between p-4 border-b border-red-100 bg-red-50/30 flex-shrink-0">
+                    <h2 className="text-sm font-bold text-status-at-risk-text flex items-center">
+                      <AlertCircle className="w-4 h-4 mr-2" />
+                      Catch Up
+                    </h2>
+                    <span className="bg-status-at-risk-bg text-status-at-risk-text text-[10px] px-2 py-0.5 rounded-full font-bold">
+                      {pendingMissed.length}
+                    </span>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-3 space-y-1.5 custom-scrollbar">
+                    {pendingMissed.map((slot, index) => (
+                      <ChecklistItem 
+                        key={`${slot.id}-${index}`} 
+                        slot={slot} 
+                        onToggle={toggleSlot} 
+                        onViewPages={setSelectedSlot}
+                        showDate={true}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-           </div>
+            )}
+
+            {/* Schedule Grid Column */}
+            <div className="flex-1 bg-white rounded-2xl border border-border shadow-soft overflow-hidden flex flex-col min-h-0 min-w-0 relative">
+              <div className="flex items-center p-4 border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-sm flex-shrink-0">
+                <CheckSquare className="w-5 h-5 mr-2 text-text-secondary" />
+                <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider">Schedule</h2>
+                <span className="ml-auto text-xs text-text-secondary flex items-center">
+                  <Clock className="w-3.5 h-3.5 mr-1" />
+                  {format(currentTime, 'h:mm a')}
+                </span>
+              </div>
+              
+              <div 
+                className="flex-1 overflow-y-auto relative custom-scrollbar bg-white"
+                ref={containerRef}
+              >
+                {/* Day Grid Container: 24 hours, 60px per hour */}
+                <div className="relative h-[1440px] min-w-[400px] w-full mt-2 mb-8">
+                   
+                   {/* Hour Lines */}
+                   {Array.from({ length: 24 }).map((_, i) => (
+                      <div key={i} className="absolute w-full border-t border-border flex items-start" style={{ top: `${i * 60}px`, height: '60px' }}>
+                         <div className="w-14 flex-shrink-0 text-right pr-3 -mt-2.5">
+                            <span className="text-[10px] sm:text-xs font-medium text-text-secondary bg-white px-1">
+                               {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
+                            </span>
+                         </div>
+                      </div>
+                   ))}
+
+                   {/* Current Time Indicator Line */}
+                   <div 
+                      className="absolute left-14 right-0 border-t-[2px] border-red-500 z-20 pointer-events-none"
+                      style={{ top: `${currentPixels}px` }}
+                   >
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-sm" />
+                   </div>
+
+                   {/* Slot Blocks */}
+                   {slots.map(slot => {
+                      const top = timeToPixels(slot.time_start);
+                      const bottom = timeToPixels(slot.time_end);
+                      const height = Math.max(bottom - top, 25); // min height
+
+                      return (
+                         <div
+                           key={slot.id}
+                           onClick={() => setSelectedSlot(slot)}
+                           className={clsx(
+                             "absolute left-14 right-3 rounded-xl p-2.5 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-sm z-10 group",
+                             slot.is_completed 
+                               ? "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100" 
+                               : "bg-accent/10 border-accent/40 hover:border-accent hover:shadow-md hover:-translate-y-[1px]"
+                           )}
+                           style={{ top: `${top}px`, height: `${height}px` }}
+                         >
+                            <div className="flex justify-between items-start h-full">
+                               <div className="flex flex-col min-w-0 pr-2">
+                                 <div className={clsx("font-bold text-sm truncate", slot.is_completed ? "text-text-secondary line-through" : "text-accent-dark")}>
+                                   {slot.subject_name}
+                                 </div>
+                                 <div className={clsx("text-xs truncate font-medium", slot.is_completed ? "text-text-secondary" : "text-text-primary")}>
+                                   {slot.topic_title}
+                                 </div>
+                                 <div className="text-[10px] text-text-secondary mt-0.5 font-medium flex items-center">
+                                   {slot.time_start} - {slot.time_end}
+                                   {slot.page_from && slot.page_to && (
+                                     <span className="ml-2 px-1.5 bg-white/50 rounded-md inline-block text-accent-dark/80">Pages {slot.page_from}-{slot.page_to}</span>
+                                   )}
+                                 </div>
+                               </div>
+                               
+                               <button 
+                                 onClick={(e) => { e.stopPropagation(); toggleSlot(slot.id, slot.is_completed); }}
+                                 className="flex-shrink-0 mt-0.5 p-1 rounded-md hover:bg-white/50 transition active:scale-90"
+                               >
+                                  {slot.is_completed ? (
+                                      <CheckSquare className="w-5 h-5 text-accent fill-accent/20" />
+                                  ) : (
+                                      <div className="w-4 h-4 rounded border-2 border-accent bg-white mt-0.5 mr-0.5" />
+                                  )}
+                               </button>
+                            </div>
+                         </div>
+                      )
+                   })}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

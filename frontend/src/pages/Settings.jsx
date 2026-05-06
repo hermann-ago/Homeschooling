@@ -42,7 +42,7 @@ const Settings = ({ activeChildId }) => {
   };
 
   return (
-    <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-8 sm:space-y-12">
+    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-full bg-gray-50/50 space-y-8 sm:space-y-12">
       <header>
         <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2">Settings</h1>
         <p className="text-text-secondary text-sm sm:text-base">Manage family profiles and app-wide configuration.</p>

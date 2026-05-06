@@ -9,6 +9,7 @@ import Calendar from './pages/Calendar';
 import Settings from './pages/Settings';
 import Progress from './pages/Progress';
 import AllChildrenDashboard from './pages/AllChildrenDashboard';
+import FamilyToday from './pages/FamilyToday';
 import DailyCanvas from './pages/DailyCanvas';
 import { childrenApi } from './api/children';
 import { Menu } from 'lucide-react';
@@ -83,7 +84,10 @@ function App() {
         <main className="flex-1 overflow-y-auto w-full">
           <ErrorBoundary>
           {activeChildId === 'all' ? (
-            <AllChildrenDashboard children={children} setActiveChildId={setActiveChildId} />
+            <Routes>
+              <Route path="/" element={<AllChildrenDashboard children={children} setActiveChildId={setActiveChildId} />} />
+              <Route path="/family-today" element={<FamilyToday children={children} />} />
+            </Routes>
           ) : activeChildId ? (
             <Routes>
               <Route path="/" element={<Today activeChildId={activeChildId} />} />

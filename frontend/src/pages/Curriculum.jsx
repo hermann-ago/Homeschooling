@@ -153,10 +153,7 @@ const Curriculum = ({ activeChildId }) => {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <div className={clsx(
-        "p-4 sm:p-8 overflow-y-auto w-full transition-all duration-300",
-        selectedTopicForViewer ? "lg:w-3/5 lg:max-w-none lg:pr-8" : "max-w-6xl mx-auto"
-      )}>
+        <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto w-full transition-all duration-300">
         <header className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2">Curriculum</h1>

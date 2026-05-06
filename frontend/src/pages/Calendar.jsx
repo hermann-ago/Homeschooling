@@ -203,7 +203,7 @@ const Calendar = ({ activeChildId }) => {
   }
 
   return (
-    <div className="p-4 sm:p-8 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 w-full min-h-full bg-gray-50/50">
       <header className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2 flex items-center">

@@ -25,6 +25,11 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
     { to: '/settings', icon: Settings, label: 'Settings' },
   ];
 
+  const allChildrenNavItems = [
+    { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/family-today', icon: CalendarIcon, label: 'Family Schedule' },
+  ];
+
   const isAllMode = activeChildId === 'all';
 
   const handleChildSelect = (id) => {
@@ -96,14 +101,14 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
         </div>
       </div>
 
-      {!isAllMode && (
-        <nav className="flex-1 px-4 py-4 border-t border-border">
+      <nav className="flex-1 px-4 py-4 border-t border-border">
           <h2 className="text-xs uppercase tracking-wider text-text-secondary font-semibold mb-3 px-2">Menu</h2>
           <ul className="space-y-1">
-            {navItems.map((item) => (
+            {(isAllMode ? allChildrenNavItems : navItems).map((item) => (
               <li key={item.to}>
                 <NavLink
                   to={item.to}
+                  end={item.to === '/'}
                   onClick={handleNavClick}
                   className={({ isActive }) =>
                     `flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 ${
@@ -113,7 +118,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
                     }`
                   }
                   style={({ isActive }) => isActive ? {
-                    backgroundColor: activeChild?.color || '#6B9E8A',
+                    backgroundColor: isAllMode ? '#6B9E8A' : (activeChild?.color || '#6B9E8A'),
                   } : {}}
                 >
                   <item.icon className="w-5 h-5 mr-3" />
@@ -123,7 +128,6 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
             ))}
           </ul>
         </nav>
-      )}
 
       {activeChild && (
         <div className="p-4 border-t border-border" style={{ backgroundColor: `${activeChild.color}08` }}>
