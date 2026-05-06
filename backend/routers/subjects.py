@@ -250,7 +250,8 @@ async def upload_pdf(
     file_bytes = await file.read()
 
     # Save PDF to disk
-    upload_dir = os.path.join("uploads", str(subject_id))
+    uploads_root = os.getenv("UPLOADS_DIR", "uploads")
+    upload_dir = os.path.join(uploads_root, str(subject_id))
     os.makedirs(upload_dir, exist_ok=True)
     
     # Generate a safe, unique filename
@@ -321,6 +322,3 @@ async def upload_pdf(
         pdf_filename=file.filename,
         total_pages=page_count,
     )
-
-
-

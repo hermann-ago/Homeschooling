@@ -30,8 +30,9 @@ app = FastAPI(
 )
 
 # Serve uploaded PDFs
-os.makedirs("uploads", exist_ok=True)
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+uploads_dir = os.getenv("UPLOADS_DIR", "uploads")
+os.makedirs(uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # CORS — allow the Vite dev server
 app.add_middleware(
@@ -75,7 +76,12 @@ def root():
 @app.get("/pdf/slice")
 def get_pdf_slice(path: str, start: int, end: int):
     # Security check: ensure the path is within uploads directory
-    if ".." in path or not (path.startswith("uploads/") or path.startswith("uploads\\")):
+    uploads_dir = os.getenv("UPLOADS_DIR", "uploads")
+    # Resolve paths for comparison
+    abs_uploads = os.path.abspath(uploads_dir)
+    abs_path = os.path.abspath(path)
+    
+    if not abs_path.startswith(abs_uploads):
         raise HTTPException(status_code=400, detail="Invalid path")
         
     if not os.path.exists(path):
