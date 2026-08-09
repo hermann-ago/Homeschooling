@@ -52,3 +52,6 @@ desktop.ini
 backend/alembic/__pycache__/
 backend/alembic/versions/__pycache__/
 node_modules/
+
+.vercel
+.env*
