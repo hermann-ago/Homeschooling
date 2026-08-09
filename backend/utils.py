@@ -22,6 +22,7 @@ def slot_to_response(slot: ScheduledSlot) -> ScheduledSlotResponse:
         subject_name=slot.subject.name if slot.subject else None,
         topic_title=slot.topic.title if slot.topic else None,
         pdf_path=slot.topic.pdf_path if slot.topic else None,
+        document_id=slot.topic.document_id if slot.topic else None,
         pdf_page_offset=slot.topic.pdf_page_offset if slot.topic else 0,
         is_completed=slot.completion is not None,
         completed_at=slot.completion.completed_at if slot.completion else None,

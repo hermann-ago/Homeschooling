@@ -5,7 +5,7 @@ import { inspectPdf } from '../utils/pdf';
 export const subjectsApi = {
   getByChildId: (childId) => fetchApi(`/subjects/by-child/${childId}`),
   getById: (id) => fetchApi(`/subjects/${id}`),
-  create: (data) => fetchApi('/subjects/', { method: 'POST', body: JSON.stringify(data) }),
+  create: (data) => fetchApi('/subjects', { method: 'POST', body: JSON.stringify(data) }),
   update: (id, data) => fetchApi(`/subjects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => fetchApi(`/subjects/${id}`, { method: 'DELETE' }),
 

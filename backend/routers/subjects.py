@@ -85,7 +85,7 @@ def list_subjects(child_id: int, user_id: str = Depends(require_family_user), db
     return db.query(Subject).filter(Subject.child_id == child_id).order_by(Subject.name).all()
 
 
-@router.post("/", response_model=SubjectResponse, status_code=201)
+@router.post("", response_model=SubjectResponse, status_code=201)
 def create_subject(subject: SubjectCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     child = get_owned_child(db, subject.child_id, user_id)
     if not child:

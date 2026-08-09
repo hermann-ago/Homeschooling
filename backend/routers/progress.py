@@ -8,6 +8,7 @@ from database import get_db
 from models import Child, Subject, CurriculumTopic, ScheduledSlot, Completion
 from schemas import ChildProgress, SubjectProgress, FamilyProgress
 from utils import get_setting
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
 
@@ -16,6 +17,7 @@ def _calculate_subject_progress(
     subject: Subject,
     db: Session,
     school_year_end: date,
+    owner_id: str,
 ) -> SubjectProgress:
     """Calculate progress for a single subject."""
     topics = db.query(CurriculumTopic).filter(
@@ -68,7 +70,7 @@ def _calculate_subject_progress(
 
     # Calculate expected progress based on time elapsed
     today = date.today()
-    school_year_start = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_START"))
+    school_year_start = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_START", owner_id))
     total_days = (school_year_end - school_year_start).days
     elapsed_days = (today - school_year_start).days
     expected_percent = (elapsed_days / total_days * 100) if total_days > 0 else 0.0
@@ -111,16 +113,16 @@ def _calculate_subject_progress(
 
 
 @router.get("/{child_id}", response_model=ChildProgress)
-def get_child_progress(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def get_child_progress(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 
-    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END"))
+    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END", user_id))
     subjects = db.query(Subject).filter(Subject.child_id == child_id).all()
 
     subject_progress_list = [
-        _calculate_subject_progress(s, db, school_year_end) for s in subjects
+        _calculate_subject_progress(s, db, school_year_end, user_id) for s in subjects
     ]
 
     # Overall progress
@@ -148,15 +150,15 @@ def get_child_progress(child_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/family/overview", response_model=FamilyProgress)
-def get_family_progress(db: Session = Depends(get_db)):
-    children = db.query(Child).order_by(Child.id).all()
-    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END"))
+def get_family_progress(user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    children = db.query(Child).filter(Child.owner_id == user_id).order_by(Child.id).all()
+    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END", user_id))
 
     child_progress_list = []
     for child in children:
         subjects = db.query(Subject).filter(Subject.child_id == child.id).all()
         subject_progress_list = [
-            _calculate_subject_progress(s, db, school_year_end) for s in subjects
+            _calculate_subject_progress(s, db, school_year_end, user_id) for s in subjects
         ]
 
         total_pages = sum(sp.total_pages for sp in subject_progress_list)

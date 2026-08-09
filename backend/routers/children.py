@@ -10,12 +10,12 @@ from auth import require_family_user
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ChildResponse])
+@router.get("", response_model=List[ChildResponse])
 def list_children(user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     return db.query(Child).filter(Child.owner_id == user_id).order_by(Child.id).all()
 
 
-@router.post("/", response_model=ChildResponse, status_code=201)
+@router.post("", response_model=ChildResponse, status_code=201)
 def create_child(child: ChildCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     db_child = Child(**child.model_dump(), owner_id=user_id)
     db.add(db_child)

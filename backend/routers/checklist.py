@@ -7,13 +7,23 @@ from database import get_db
 from models import ScheduledSlot, Completion, Child, CurriculumTopic
 from schemas import ScheduledSlotResponse, CompletionResponse
 from utils import slot_to_response
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
 
 
+def _owned_slot(db: Session, slot_id: int, user_id: str) -> ScheduledSlot | None:
+    return (
+        db.query(ScheduledSlot)
+        .join(Child, ScheduledSlot.child_id == Child.id)
+        .filter(ScheduledSlot.id == slot_id, Child.owner_id == user_id)
+        .first()
+    )
+
+
 @router.get("/{child_id}/today", response_model=List[ScheduledSlotResponse])
-def get_today_checklist(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def get_today_checklist(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 
@@ -28,8 +38,8 @@ def get_today_checklist(child_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{child_id}/week", response_model=List[ScheduledSlotResponse])
-def get_week_checklist(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def get_week_checklist(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 
@@ -52,8 +62,8 @@ def get_week_checklist(child_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/complete/{slot_id}", response_model=CompletionResponse, status_code=201)
-def complete_slot(slot_id: int, db: Session = Depends(get_db)):
-    slot = db.query(ScheduledSlot).filter(ScheduledSlot.id == slot_id).first()
+def complete_slot(slot_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    slot = _owned_slot(db, slot_id, user_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Scheduled slot not found")
 
@@ -77,8 +87,11 @@ def complete_slot(slot_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/complete/{slot_id}", status_code=204)
-def uncomplete_slot(slot_id: int, db: Session = Depends(get_db)):
-    completion = db.query(Completion).filter(Completion.slot_id == slot_id).first()
+def uncomplete_slot(slot_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    slot = _owned_slot(db, slot_id, user_id)
+    if not slot:
+        raise HTTPException(status_code=404, detail="Completion not found")
+    completion = db.query(Completion).filter(Completion.slot_id == slot.id).first()
     if not completion:
         raise HTTPException(status_code=404, detail="Completion not found")
     # Sync with curriculum: Before deleting, check if this was the last completed slot for the topic
@@ -100,8 +113,8 @@ def uncomplete_slot(slot_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{child_id}/missed", response_model=List[ScheduledSlotResponse])
-def get_missed_items(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def get_missed_items(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 

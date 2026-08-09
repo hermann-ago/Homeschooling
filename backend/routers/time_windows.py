@@ -5,14 +5,15 @@ from typing import List
 from database import get_db
 from models import TimeWindow, Child
 from schemas import TimeWindowCreate, TimeWindowResponse
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
 
 
 # Time windows are nested under children in the API but managed in Settings
 @router.get("/by-child/{child_id}", response_model=List[TimeWindowResponse])
-def list_time_windows(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def list_time_windows(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
     return (
@@ -23,9 +24,9 @@ def list_time_windows(child_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/", response_model=TimeWindowResponse, status_code=201)
-def create_time_window(tw: TimeWindowCreate, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == tw.child_id).first()
+@router.post("", response_model=TimeWindowResponse, status_code=201)
+def create_time_window(tw: TimeWindowCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, tw.child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
     db_tw = TimeWindow(**tw.model_dump())
@@ -36,8 +37,13 @@ def create_time_window(tw: TimeWindowCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{tw_id}", status_code=204)
-def delete_time_window(tw_id: int, db: Session = Depends(get_db)):
-    tw = db.query(TimeWindow).filter(TimeWindow.id == tw_id).first()
+def delete_time_window(tw_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    tw = (
+        db.query(TimeWindow)
+        .join(Child, TimeWindow.child_id == Child.id)
+        .filter(TimeWindow.id == tw_id, Child.owner_id == user_id)
+        .first()
+    )
     if not tw:
         raise HTTPException(status_code=404, detail="Time window not found")
     db.delete(tw)

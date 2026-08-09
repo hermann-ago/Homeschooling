@@ -20,14 +20,19 @@ function App() {
   const [children, setChildren] = useState([]);
   const [activeChildId, setActiveChildId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   const loadChildren = () => {
+    setLoadError(null);
     childrenApi.getAll().then(data => {
       setChildren(data);
       if (!activeChildId && data.length > 0) {
         setActiveChildId(data[0].id);
       }
-    }).catch(console.error);
+    }).catch(error => {
+      console.error(error);
+      setLoadError(error.message || 'Unable to load the family workspace.');
+    });
   };
 
   useEffect(() => {
@@ -75,6 +80,14 @@ function App() {
               style={{ backgroundColor: activeChild.color }}
             >
               {activeChild.name.charAt(0)}
+            </div>
+          ) : loadError ? (
+            <div className="flex items-center justify-center h-full p-6">
+              <div className="max-w-md text-center">
+                <p className="font-medium text-red-700">Unable to load the family workspace</p>
+                <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
+                <button onClick={loadChildren} className="mt-4 rounded bg-accent px-4 py-2 text-white">Try again</button>
+              </div>
             </div>
           ) : (
             <div className="w-8 h-8" /> /* spacer */

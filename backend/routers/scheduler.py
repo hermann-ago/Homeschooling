@@ -8,16 +8,17 @@ from models import Child, ScheduledSlot
 from schemas import ScheduledSlotResponse, ScheduleResult
 from services.scheduler_engine import recalculate_schedule
 from utils import slot_to_response
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
 
 
 @router.post("/recalculate/{child_id}", response_model=ScheduleResult)
-def recalculate(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def recalculate(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
-    return recalculate_schedule(child_id, db)
+    return recalculate_schedule(child_id, user_id, db)
 
 
 @router.get("/{child_id}", response_model=list[ScheduledSlotResponse])
@@ -25,9 +26,10 @@ def get_schedule(
     child_id: int,
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    user_id: str = Depends(require_family_user),
     db: Session = Depends(get_db),
 ):
-    child = db.query(Child).filter(Child.id == child_id).first()
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 

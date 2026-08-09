@@ -21,7 +21,7 @@ from schemas import ScheduleResult, ScheduleWarning
 from utils import get_setting
 
 
-def recalculate_schedule(child_id: int, db: Session) -> ScheduleResult:
+def recalculate_schedule(child_id: int, owner_id: str, db: Session) -> ScheduleResult:
     warnings: list[ScheduleWarning] = []
 
     # ── 1. Gather subjects and remaining topics ─────────────────────
@@ -87,12 +87,13 @@ def recalculate_schedule(child_id: int, db: Session) -> ScheduleResult:
         windows_by_day.setdefault(tw.weekday, []).append(tw)
 
     # ── 3. Blocked days ─────────────────────────────────────────────
-    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END"))
+    school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END", owner_id))
     today = date.today()
 
     blocked_dates = set(
         bd.date for bd in db.query(BlockedDay)
         .filter(
+            BlockedDay.owner_id == owner_id,
             BlockedDay.date >= today, 
             BlockedDay.date <= school_year_end,
             (BlockedDay.child_id == child_id) | (BlockedDay.child_id.is_(None))

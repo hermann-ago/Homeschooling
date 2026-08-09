@@ -15,10 +15,21 @@ from schemas import (
     CanvasAIRequest, CanvasAIResponse
 )
 from services import ai_enrichment
+from auth import get_owned_child, require_family_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _owned_topic(db: Session, topic_id: int, user_id: str) -> CurriculumTopic | None:
+    return (
+        db.query(CurriculumTopic)
+        .join(Subject, CurriculumTopic.subject_id == Subject.id)
+        .join(Child, Subject.child_id == Child.id)
+        .filter(CurriculumTopic.id == topic_id, Child.owner_id == user_id)
+        .first()
+    )
 
 
 def _insert_to_response(ci: CanvasInsert) -> dict:
@@ -40,9 +51,9 @@ def _insert_to_response(ci: CanvasInsert) -> dict:
 
 
 @router.get("/{child_id}/today", response_model=List[CanvasSlotResponse])
-def get_today_canvas(child_id: int, db: Session = Depends(get_db)):
+def get_today_canvas(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """Get today's scheduled slots enriched with canvas inserts."""
-    child = db.query(Child).filter(Child.id == child_id).first()
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 
@@ -87,14 +98,14 @@ def get_today_canvas(child_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/insert", response_model=CanvasInsertResponse, status_code=201)
-def create_insert(payload: CanvasInsertCreate, db: Session = Depends(get_db)):
+def create_insert(payload: CanvasInsertCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """Create a cross-book insert link."""
     # Validate both topics exist
-    parent = db.query(CurriculumTopic).filter(CurriculumTopic.id == payload.parent_topic_id).first()
+    parent = _owned_topic(db, payload.parent_topic_id, user_id)
     if not parent:
         raise HTTPException(status_code=404, detail="Parent topic not found")
 
-    insert_topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == payload.insert_topic_id).first()
+    insert_topic = _owned_topic(db, payload.insert_topic_id, user_id)
     if not insert_topic:
         raise HTTPException(status_code=404, detail="Insert topic not found")
 
@@ -120,10 +131,12 @@ def create_insert(payload: CanvasInsertCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/insert/{insert_id}", status_code=204)
-def delete_insert(insert_id: int, db: Session = Depends(get_db)):
+def delete_insert(insert_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """Remove a canvas insert."""
     ci = db.query(CanvasInsert).filter(CanvasInsert.id == insert_id).first()
     if not ci:
+        raise HTTPException(status_code=404, detail="Canvas insert not found")
+    if not _owned_topic(db, ci.parent_topic_id, user_id):
         raise HTTPException(status_code=404, detail="Canvas insert not found")
     db.delete(ci)
     db.commit()
@@ -131,8 +144,10 @@ def delete_insert(insert_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{child_id}/available-topics")
-def get_available_topics(child_id: int, db: Session = Depends(get_db)):
+def get_available_topics(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """List all subjects & topics for a child (for the insert picker)."""
+    if not get_owned_child(db, child_id, user_id):
+        raise HTTPException(status_code=404, detail="Child not found")
     subjects = (
         db.query(Subject)
         .filter(Subject.child_id == child_id)
@@ -171,7 +186,7 @@ def get_available_topics(child_id: int, db: Session = Depends(get_db)):
 # ─── AI Enrichment Endpoints (Phase 2) ───────────────────────────────────────
 
 @router.post("/ai-content/generate", response_model=CanvasAIResponse, status_code=200)
-def generate_ai_content(payload: CanvasAIRequest, db: Session = Depends(get_db)):
+def generate_ai_content(payload: CanvasAIRequest, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """
     Generate (or return cached) AI enrichment content for a canvas section.
 
@@ -187,7 +202,7 @@ def generate_ai_content(payload: CanvasAIRequest, db: Session = Depends(get_db))
     HTTP 500: Gemini API error or PDF extraction problem.
     """
     # Validate the topic exists
-    topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == payload.topic_id).first()
+    topic = _owned_topic(db, payload.topic_id, user_id)
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
 
@@ -277,13 +292,15 @@ def generate_ai_content(payload: CanvasAIRequest, db: Session = Depends(get_db))
 
 
 @router.get("/ai-content/{topic_id}", response_model=List[CanvasAIResponse])
-def get_ai_content_for_topic(topic_id: int, db: Session = Depends(get_db)):
+def get_ai_content_for_topic(topic_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """
     Return all cached AI enrichment rows for a given topic.
 
     The frontend uses this to show ⚡ badges on tools that are already cached,
     so the child knows which tools are instant vs which need generation time.
     """
+    if not _owned_topic(db, topic_id, user_id):
+        raise HTTPException(status_code=404, detail="Topic not found")
     rows = (
         db.query(CanvasAIContent)
         .filter(CanvasAIContent.topic_id == topic_id)
