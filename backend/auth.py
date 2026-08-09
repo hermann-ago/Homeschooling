@@ -7,6 +7,7 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, Header, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -63,32 +64,21 @@ def create_first_family_account(payload: SetupRequest, db: Session) -> dict:
     if db.query(FamilyAccount).first():
         raise HTTPException(status_code=409, detail="Family setup has already been completed")
     expected = os.getenv("FAMILY_SETUP_CODE", "")
-    secret_key = os.getenv("SUPABASE_SECRET_KEY", "")
-    if not expected or not secret_key:
+    if not expected:
         raise HTTPException(status_code=503, detail="Initial setup is not configured")
     if not secrets.compare_digest(expected, payload.setup_code):
         raise HTTPException(status_code=401, detail="Invalid setup code")
 
     try:
-        response = httpx.post(
-            f"{_supabase_url()}/auth/v1/admin/users",
-            headers={"Authorization": f"Bearer {secret_key}", "apikey": secret_key},
-            json={"email": payload.email, "password": payload.password, "email_confirm": True},
-            timeout=15.0,
-        )
-    except httpx.HTTPError as exc:
-        raise HTTPException(status_code=503, detail="Unable to create the family account") from exc
-    if response.status_code not in (200, 201):
-        detail = response.json().get("message", "Unable to create the family account")
-        raise HTTPException(status_code=400, detail=detail)
-
-    payload_json = response.json()
-    user_id = payload_json.get("id") or payload_json.get("user", {}).get("id")
-    if not user_id:
-        raise HTTPException(status_code=502, detail="Authentication service returned no user identifier")
-    db.add(FamilyAccount(user_id=user_id))
-    db.commit()
-    return {"user_id": user_id, "email": payload.email}
+        user_id = db.execute(
+            text("select app.create_first_family_account(:email, :password)"),
+            {"email": payload.email, "password": payload.password},
+        ).scalar_one()
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Unable to create the family account") from exc
+    return {"user_id": str(user_id), "email": payload.email}
 
 
 def get_owned_child(db: Session, child_id: int, user_id: str):
