@@ -34,11 +34,17 @@ try:
     else:
         # Supavisor owns pooling in production; each Vercel invocation should not
         # retain an additional local pool.
+        connect_args = {"sslmode": "require", "options": "-c search_path=app,public"}
+        # Supavisor transaction pooling is required from Vercel's IPv4-only
+        # runtime. psycopg server-side prepared statements are not compatible
+        # with transaction pooling, so disable them for that endpoint.
+        if ".pooler.supabase.com:6543" in DATABASE_URL:
+            connect_args["prepare_threshold"] = None
         engine = create_engine(
             DATABASE_URL,
             poolclass=NullPool,
             pool_pre_ping=True,
-            connect_args={"sslmode": "require", "options": "-c search_path=app,public"},
+            connect_args=connect_args,
             echo=False,
         )
 except Exception as e:
