@@ -19,10 +19,12 @@ begin
 
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
+    confirmation_token, email_change, email_change_token_new, recovery_token,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   ) values (
     '00000000-0000-0000-0000-000000000000', new_user_id, 'authenticated', 'authenticated', normalized_email,
     extensions.crypt(p_password, extensions.gen_salt('bf')), now(),
+    '', '', '', '',
     jsonb_build_object('provider', 'email', 'providers', jsonb_build_array('email')),
     '{}'::jsonb, now(), now()
   );
