@@ -8,6 +8,7 @@ from database import get_db
 from models import BlockedDay, Child
 from schemas import BlockedDayCreate, BlockedDayResponse, SchoolYearSettings
 from utils import get_setting, set_setting
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
 
@@ -17,9 +18,10 @@ def list_blocked_days(
     child_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    user_id: str = Depends(require_family_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(BlockedDay)
+    query = db.query(BlockedDay).filter(BlockedDay.owner_id == user_id)
     if child_id is not None:
         # Include blocks for this child + blocks for all children (child_id=NULL)
         query = query.filter(
@@ -33,12 +35,12 @@ def list_blocked_days(
 
 
 @router.post("/blocked-days", response_model=BlockedDayResponse, status_code=201)
-def create_blocked_day(blocked: BlockedDayCreate, db: Session = Depends(get_db)):
+def create_blocked_day(blocked: BlockedDayCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     if blocked.child_id is not None:
-        child = db.query(Child).filter(Child.id == blocked.child_id).first()
+        child = get_owned_child(db, blocked.child_id, user_id)
         if not child:
             raise HTTPException(status_code=404, detail="Child not found")
-    db_blocked = BlockedDay(**blocked.model_dump())
+    db_blocked = BlockedDay(**blocked.model_dump(), owner_id=user_id)
     db.add(db_blocked)
     db.commit()
     db.refresh(db_blocked)
@@ -46,8 +48,8 @@ def create_blocked_day(blocked: BlockedDayCreate, db: Session = Depends(get_db))
 
 
 @router.delete("/blocked-days/{blocked_id}", status_code=204)
-def delete_blocked_day(blocked_id: int, db: Session = Depends(get_db)):
-    blocked = db.query(BlockedDay).filter(BlockedDay.id == blocked_id).first()
+def delete_blocked_day(blocked_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    blocked = db.query(BlockedDay).filter(BlockedDay.id == blocked_id, BlockedDay.owner_id == user_id).first()
     if not blocked:
         raise HTTPException(status_code=404, detail="Blocked day not found")
     db.delete(blocked)
@@ -56,17 +58,17 @@ def delete_blocked_day(blocked_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/settings/school-year", response_model=SchoolYearSettings)
-def get_school_year(db: Session = Depends(get_db)):
+def get_school_year(user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """Return current school year dates from database."""
     return SchoolYearSettings(
-        start_date=date.fromisoformat(get_setting(db, "SCHOOL_YEAR_START")),
-        end_date=date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END")),
+        start_date=date.fromisoformat(get_setting(db, "SCHOOL_YEAR_START", user_id)),
+        end_date=date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END", user_id)),
     )
 
 
 @router.put("/settings/school-year", response_model=SchoolYearSettings)
-def update_school_year(settings: SchoolYearSettings, db: Session = Depends(get_db)):
+def update_school_year(settings: SchoolYearSettings, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
     """Update school year dates in database."""
-    set_setting(db, "SCHOOL_YEAR_START", settings.start_date.isoformat())
-    set_setting(db, "SCHOOL_YEAR_END", settings.end_date.isoformat())
+    set_setting(db, "SCHOOL_YEAR_START", settings.start_date.isoformat(), user_id)
+    set_setting(db, "SCHOOL_YEAR_END", settings.end_date.isoformat(), user_id)
     return settings

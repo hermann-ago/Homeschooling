@@ -34,6 +34,7 @@ def _insert_to_response(ci: CanvasInsert) -> dict:
         "insert_page_start": topic.page_start if topic else None,
         "insert_page_end": topic.page_end if topic else None,
         "insert_pdf_path": topic.pdf_path if topic else None,
+        "insert_document_id": topic.document_id if topic else None,
         "insert_pdf_page_offset": topic.pdf_page_offset if topic else 0,
     }
 
@@ -75,6 +76,7 @@ def get_today_canvas(child_id: int, db: Session = Depends(get_db)):
             page_from=slot.page_from,
             page_to=slot.page_to,
             pdf_path=slot.topic.pdf_path if slot.topic else None,
+            document_id=slot.topic.document_id if slot.topic else None,
             pdf_page_offset=slot.topic.pdf_page_offset if slot.topic else 0,
             is_completed=slot.completion is not None,
             topic_id=slot.topic_id,
@@ -156,6 +158,7 @@ def get_available_topics(child_id: int, db: Session = Depends(get_db)):
                     "page_start": t.page_start,
                     "page_end": t.page_end,
                     "pdf_path": t.pdf_path,
+                    "document_id": t.document_id,
                     "pdf_filename": t.pdf_filename,
                 }
                 for t in topics
@@ -216,31 +219,12 @@ def generate_ai_content(payload: CanvasAIRequest, db: Session = Depends(get_db))
         )
 
     # ── 2. Extract PDF text ───────────────────────────────────────────────────
-    if not payload.pdf_path:
+    if not payload.source_text or not payload.source_text.strip():
         raise HTTPException(
             status_code=400,
-            detail="pdf_path is required to generate AI content. "
-                   "This topic has no associated PDF."
+            detail="Page text is required when this AI result is not already cached."
         )
-
-    try:
-        page_text = ai_enrichment.extract_pages_text(
-            pdf_path=payload.pdf_path,
-            page_start=payload.page_start,
-            page_end=payload.page_end,
-            offset=payload.pdf_page_offset,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-    if not page_text.strip():
-        raise HTTPException(
-            status_code=400,
-            detail="Could not extract any text from these PDF pages. "
-                   "The pages may be scanned images rather than selectable text."
-        )
+    page_text = payload.source_text.strip()
 
     # ── 3. Generate via Gemini ────────────────────────────────────────────────
     try:

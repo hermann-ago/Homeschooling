@@ -7,6 +7,7 @@ class Child(Base):
     __tablename__ = "children"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(String(36), nullable=True, index=True)
     name = Column(String(100), nullable=False)
     nickname = Column(String(50), nullable=True)
     color = Column(String(7), nullable=False, default="#6B9E8A")

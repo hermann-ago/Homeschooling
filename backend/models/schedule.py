@@ -20,6 +20,7 @@ class BlockedDay(Base):
     __tablename__ = "blocked_days"
 
     id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(String(36), nullable=True, index=True)
     child_id = Column(Integer, ForeignKey("children.id", ondelete="CASCADE"), nullable=True)
     date = Column(Date, nullable=False)
     block_type = Column(String(20), nullable=False)

@@ -5,21 +5,12 @@ Handles bilingual content (Portuguese/English).
 import os
 import json
 import re
-import warnings
-
-# Suppress the deprecation warning for google-generativeai
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
-    import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# Configure Gemini
-api_key = os.getenv("GEMINI_API_KEY", "")
-if api_key and api_key != "your_key_here":
-    genai.configure(api_key=api_key)
 
 SYSTEM_INSTRUCTION = """You are an expert curriculum analyst for homeschool education.
 You analyze the Table of Contents (TOC) or index from textbooks and extract structured chapter/topic information.
@@ -55,14 +46,7 @@ def analyze_curriculum(text: str, page_count: int) -> dict:
             "Please add your API key to the .env file: GEMINI_API_KEY=your_actual_key"
         )
 
-    # Re-configure in case key was updated at runtime
-    genai.configure(api_key=current_key)
-
-    model = genai.GenerativeModel(
-        "gemini-2.5-flash",
-        system_instruction=SYSTEM_INSTRUCTION,
-        generation_config={"response_mime_type": "application/json"}
-    )
+    client = genai.Client(api_key=current_key)
 
     # Build the user prompt focused on TOC
     user_prompt = f"""The following text is the Table of Contents or index from a textbook.
@@ -79,7 +63,14 @@ TOC Content:
 Return ONLY the JSON object."""
 
     try:
-        response = model.generate_content(user_prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+            ),
+        )
         return _parse_response(response.text, page_count)
     except Exception as e:
         raise ValueError(f"Gemini API call failed: {str(e)}")

@@ -19,7 +19,7 @@ export const canvasApi = {
 
   /**
    * Generate (or fetch from cache) AI content for a canvas section.
-   * @param {Object} data - { topic_id, page_start, page_end, content_type, pdf_path, pdf_page_offset, language }
+   * @param {Object} data - { topic_id, page_start, page_end, content_type, source_text, language }
    * @returns {Promise<Object>} CanvasAIResponse with `content` and `from_cache` fields.
    */
   generateAIContent: (data) => fetchApi('/canvas/ai-content/generate', {

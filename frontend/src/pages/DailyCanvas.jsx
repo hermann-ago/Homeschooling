@@ -3,7 +3,7 @@ import { canvasApi } from '../api/canvas';
 import { checklistApi } from '../api/checklist';
 import InsertPicker from '../components/InsertPicker';
 import AIEnrichmentPanel from '../components/AIEnrichmentPanel';
-import { API_BASE_URL } from '../api/client';
+import PageViewer from '../components/PageViewer';
 import { format } from 'date-fns';
 import {
   BookOpen, CheckSquare, Plus, Trash2, ChevronDown,
@@ -15,7 +15,6 @@ const DailyCanvas = ({ activeChildId }) => {
   const [slots, setSlots] = useState([]);
   const [loading, setLoading] = useState(true);
   const [insertPicker, setInsertPicker] = useState({ open: false, parentTopicId: null });
-  const [collapsedSlots, setCollapsedSlots] = useState({});
   const [activeSlotId, setActiveSlotId] = useState(null);
 
   const loadCanvas = async () => {
@@ -75,17 +74,6 @@ const DailyCanvas = ({ activeChildId }) => {
     } catch (err) {
       console.error('Failed to delete insert:', err);
     }
-  };
-
-  const toggleCollapse = (slotId) => {
-    setCollapsedSlots(prev => ({ ...prev, [slotId]: !prev[slotId] }));
-  };
-
-  const buildPdfUrl = (pdfPath, pageFrom, pageTo, offset) => {
-    if (!pdfPath) return null;
-    const physicalStart = (pageFrom || 1) + (offset || 0);
-    const physicalEnd = (pageTo || pageFrom || 1) + (offset || 0);
-    return `${API_BASE_URL}/pdf/slice?path=${encodeURIComponent(pdfPath)}&start=${physicalStart}&end=${physicalEnd}#view=FitH`;
   };
 
   const completedCount = slots.filter(s => s.is_completed).length;
@@ -272,40 +260,23 @@ const DailyCanvas = ({ activeChildId }) => {
                 {/* Content area */}
                 <div className="flex-1 overflow-y-auto min-h-0">
                   {/* Main PDF */}
-                  {(() => {
-                    const pdfUrl = buildPdfUrl(activeSlot.pdf_path, activeSlot.page_from, activeSlot.page_to, activeSlot.pdf_page_offset);
-                    if (pdfUrl) {
-                      return (
-                        <div className="border-t border-border h-full">
-                          <iframe
-                            src={pdfUrl}
-                            title={`${activeSlot.subject_name} - ${activeSlot.topic_title}`}
-                            className="w-full h-full border-none bg-gray-100"
-                            style={{ minHeight: '500px' }}
-                          />
-                        </div>
-                      );
-                    }
-                    return (
+                  {activeSlot.document_id ? (
+                    <div className="border-t border-border" style={{ minHeight: '560px' }}>
+                      <PageViewer slot={activeSlot} onClose={() => setActiveSlotId(null)} />
+                    </div>
+                  ) : (
                       <div className="border-t border-border p-8 text-center bg-gray-50 flex-1 flex flex-col items-center justify-center">
                         <BookOpen className="w-10 h-10 text-text-secondary/30 mx-auto mb-3" />
                         <p className="text-sm text-text-secondary">
                           {activeSlot.topic_title || 'No PDF available — read from your physical book.'}
                         </p>
                       </div>
-                    );
-                  })()}
+                  )}
 
                   {/* Inserts */}
                   {activeSlot.inserts && activeSlot.inserts.length > 0 && (
                     <div className="border-t border-dashed border-accent/20">
                       {activeSlot.inserts.map(insert => {
-                        const insertPdfUrl = buildPdfUrl(
-                          insert.insert_pdf_path,
-                          insert.insert_page_start,
-                          insert.insert_page_end,
-                          insert.insert_pdf_page_offset
-                        );
                         return (
                           <div key={insert.id} className="border-b border-border last:border-b-0">
                             <div className="px-4 py-3 bg-amber-50/50 flex items-center justify-between">
@@ -330,13 +301,17 @@ const DailyCanvas = ({ activeChildId }) => {
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
-                            {insertPdfUrl && (
-                              <iframe
-                                src={insertPdfUrl}
-                                title={`Insert: ${insert.insert_topic_title}`}
-                                className="w-full border-none bg-gray-100"
-                                style={{ height: '50vh', minHeight: '300px' }}
-                              />
+                            {insert.insert_document_id && (
+                              <div style={{ height: '420px' }}>
+                                <PageViewer slot={{
+                                  document_id: insert.insert_document_id,
+                                  page_from: insert.insert_page_start,
+                                  page_to: insert.insert_page_end,
+                                  pdf_page_offset: insert.insert_pdf_page_offset,
+                                  subject_name: insert.insert_subject_name,
+                                  topic_title: insert.insert_topic_title,
+                                }} onClose={() => {}} />
+                              </div>
                             )}
                           </div>
                         );
@@ -349,7 +324,7 @@ const DailyCanvas = ({ activeChildId }) => {
                     topicId={activeSlot.topic_id}
                     pageStart={activeSlot.page_from}
                     pageEnd={activeSlot.page_to}
-                    pdfPath={activeSlot.pdf_path}
+                    documentId={activeSlot.document_id}
                     pdfPageOffset={activeSlot.pdf_page_offset}
                     language={activeSlot.language}
                   />

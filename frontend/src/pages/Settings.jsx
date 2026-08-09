@@ -5,7 +5,7 @@ import { timeWindowsApi } from '../api/timeWindows';
 import { User, Clock, Calendar as CalendarIcon, Save, X, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 
-const Settings = ({ activeChildId }) => {
+const Settings = () => {
   const [children, setChildren] = useState([]);
   const [schoolYear, setSchoolYear] = useState({ start_date: '', end_date: '' });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -34,7 +34,7 @@ const Settings = ({ activeChildId }) => {
     try {
       await calendarApi.updateSchoolYearSettings(schoolYear);
       alert('School year saved successfully! Remember to recalculate schedules.');
-    } catch (e) {
+    } catch {
       alert('Failed to save settings.');
     } finally {
       setSavingSettings(false);
@@ -219,7 +219,7 @@ const Settings = ({ activeChildId }) => {
                     }
                     loadData();
                     setIsChildModalOpen(false);
-                  } catch (e) { alert("Failed to save child."); }
+                  } catch { alert("Failed to save child."); }
                 }}
                 className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-sm"
               >
@@ -314,7 +314,7 @@ const Settings = ({ activeChildId }) => {
                       await timeWindowsApi.create({ ...newTw, child_id: activeChildForTw.id });
                       const fresh = await timeWindowsApi.getByChildId(activeChildForTw.id);
                       setTimeWindows(fresh);
-                    } catch (e) { alert("Failed to add window."); }
+                    } catch { alert("Failed to add window."); }
                   }}
                   className="w-full mt-4 bg-text-primary text-white py-2 rounded-xl font-bold hover:bg-gray-800 transition"
                 >

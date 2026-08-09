@@ -1,27 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-import os
-import uuid
-
 from datetime import datetime
 from database import get_db
-from models import Subject, CurriculumTopic, Child, ScheduledSlot, Completion
+from models import Subject, CurriculumTopic, Child, ScheduledSlot, Completion, Document
 from schemas import (
     SubjectCreate, SubjectUpdate, SubjectResponse,
-    TopicResponse, TopicUpdate, AIAnalysisResult,
+    TopicResponse, TopicUpdate, AIAnalysisResult, DocumentFinalizeRequest,
 )
-from services.pdf_parser import extract_text_from_pdf
 from services.ai_analyzer import analyze_curriculum
+from auth import get_owned_child, require_family_user
 
 router = APIRouter()
+
+
+def _owned_subject(db: Session, subject_id: int, user_id: str) -> Subject | None:
+    return (
+        db.query(Subject)
+        .join(Child, Subject.child_id == Child.id)
+        .filter(Subject.id == subject_id, Child.owner_id == user_id)
+        .first()
+    )
 
 
 # ─── Books Management ────────────────────────────────────────────────
 
 @router.put("/{subject_id}/books/set-main-book", response_model=dict)
-def set_main_book(subject_id: int, pdf_filename: str, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def set_main_book(subject_id: int, pdf_filename: str, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     
@@ -35,8 +41,8 @@ def set_main_book(subject_id: int, pdf_filename: str, db: Session = Depends(get_
 
 
 @router.put("/{subject_id}/books/set-book-offset", response_model=dict)
-def set_book_offset(subject_id: int, pdf_filename: str, offset: int, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def set_book_offset(subject_id: int, pdf_filename: str, offset: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
         
@@ -53,8 +59,8 @@ def set_book_offset(subject_id: int, pdf_filename: str, offset: int, db: Session
 
 
 @router.delete("/{subject_id}/books", status_code=204)
-def delete_book(subject_id: int, pdf_filename: str, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def delete_book(subject_id: int, pdf_filename: str, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
         
@@ -72,16 +78,16 @@ def delete_book(subject_id: int, pdf_filename: str, db: Session = Depends(get_db
 
 
 @router.get("/by-child/{child_id}", response_model=List[SubjectResponse])
-def list_subjects(child_id: int, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == child_id).first()
+def list_subjects(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
     return db.query(Subject).filter(Subject.child_id == child_id).order_by(Subject.name).all()
 
 
 @router.post("/", response_model=SubjectResponse, status_code=201)
-def create_subject(subject: SubjectCreate, db: Session = Depends(get_db)):
-    child = db.query(Child).filter(Child.id == subject.child_id).first()
+def create_subject(subject: SubjectCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    child = get_owned_child(db, subject.child_id, user_id)
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
     db_subject = Subject(**subject.model_dump())
@@ -92,8 +98,8 @@ def create_subject(subject: SubjectCreate, db: Session = Depends(get_db)):
 
 
 @router.delete("/{subject_id}", status_code=204)
-def delete_subject(subject_id: int, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def delete_subject(subject_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     db.delete(subject)
@@ -102,16 +108,16 @@ def delete_subject(subject_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{subject_id}", response_model=SubjectResponse)
-def get_subject(subject_id: int, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def get_subject(subject_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     return subject
 
 
 @router.put("/{subject_id}", response_model=SubjectResponse)
-def update_subject(subject_id: int, updates: SubjectUpdate, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def update_subject(subject_id: int, updates: SubjectUpdate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     for key, value in updates.model_dump(exclude_unset=True).items():
@@ -127,8 +133,8 @@ def update_subject(subject_id: int, updates: SubjectUpdate, db: Session = Depend
 # ─── Topics ──────────────────────────────────────────────────────────
 
 @router.get("/{subject_id}/topics", response_model=List[TopicResponse])
-def list_topics(subject_id: int, db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def list_topics(subject_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     return (
@@ -141,8 +147,8 @@ def list_topics(subject_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{subject_id}/generate-chapters", response_model=List[TopicResponse])
-def generate_chapters(subject_id: int, count: int = Query(..., ge=1, le=100), db: Session = Depends(get_db)):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+def generate_chapters(subject_id: int, count: int = Query(..., ge=1, le=100), user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
         
@@ -167,7 +173,9 @@ def generate_chapters(subject_id: int, count: int = Query(..., ge=1, le=100), db
 
 
 @router.put("/{subject_id}/topics/{topic_id}", response_model=TopicResponse)
-def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate, db: Session = Depends(get_db)):
+def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    if not _owned_subject(db, subject_id, user_id):
+        raise HTTPException(status_code=404, detail="Subject not found")
     topic = (
         db.query(CurriculumTopic)
         .filter(CurriculumTopic.id == topic_id, CurriculumTopic.subject_id == subject_id)
@@ -183,7 +191,9 @@ def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate, db: Sessi
 
 
 @router.delete("/{subject_id}/topics/{topic_id}", status_code=204)
-def delete_topic(subject_id: int, topic_id: int, db: Session = Depends(get_db)):
+def delete_topic(subject_id: int, topic_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    if not _owned_subject(db, subject_id, user_id):
+        raise HTTPException(status_code=404, detail="Subject not found")
     topic = (
         db.query(CurriculumTopic)
         .filter(CurriculumTopic.id == topic_id, CurriculumTopic.subject_id == subject_id)
@@ -199,7 +209,9 @@ def delete_topic(subject_id: int, topic_id: int, db: Session = Depends(get_db)):
 # ─── Topic Completion ────────────────────────────────────────────────
 
 @router.post("/{subject_id}/topics/{topic_id}/toggle-complete", response_model=TopicResponse)
-def toggle_topic_complete(subject_id: int, topic_id: int, db: Session = Depends(get_db)):
+def toggle_topic_complete(subject_id: int, topic_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    if not _owned_subject(db, subject_id, user_id):
+        raise HTTPException(status_code=404, detail="Subject not found")
     topic = (
         db.query(CurriculumTopic)
         .filter(CurriculumTopic.id == topic_id, CurriculumTopic.subject_id == subject_id)
@@ -227,7 +239,9 @@ def toggle_topic_complete(subject_id: int, topic_id: int, db: Session = Depends(
 
 
 @router.post("/{subject_id}/topics/{topic_id}/complete-previous")
-def complete_previous(subject_id: int, topic_id: int, db: Session = Depends(get_db)):
+def complete_previous(subject_id: int, topic_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
+    if not _owned_subject(db, subject_id, user_id):
+        raise HTTPException(status_code=404, detail="Subject not found")
     target_topic = (
         db.query(CurriculumTopic)
         .filter(CurriculumTopic.id == topic_id, CurriculumTopic.subject_id == subject_id)
@@ -261,92 +275,63 @@ def complete_previous(subject_id: int, topic_id: int, db: Session = Depends(get_
 
 # ─── PDF Upload & AI Analysis ────────────────────────────────────────
 
-@router.post("/{subject_id}/upload-pdf", response_model=AIAnalysisResult)
-async def upload_pdf(
+@router.post("/{subject_id}/documents", response_model=AIAnalysisResult)
+def finalize_document(
     subject_id: int,
-    file: UploadFile = File(...),
+    payload: DocumentFinalizeRequest,
+    user_id: str = Depends(require_family_user),
     db: Session = Depends(get_db),
 ):
-    subject = db.query(Subject).filter(Subject.id == subject_id).first()
+    """Persist a browser-uploaded Blob document and create its curriculum topics."""
+    subject = _owned_subject(db, subject_id, user_id)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
-
-    if not file.filename.lower().endswith(".pdf"):
+    if not payload.original_filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-
-    # Read file bytes
-    file_bytes = await file.read()
-
-    # Save PDF to disk
-    uploads_root = os.getenv("UPLOADS_DIR", "uploads")
-    upload_dir = os.path.join(uploads_root, str(subject_id))
-    os.makedirs(upload_dir, exist_ok=True)
-    
-    # Generate a safe, unique filename
-    safe_filename = f"{uuid.uuid4().hex}_{file.filename}"
-    pdf_path = os.path.join(upload_dir, safe_filename)
-    
-    with open(pdf_path, "wb") as f:
-        f.write(file_bytes)
-
-    # Extract text using pdfplumber
-    try:
-        text, page_count = extract_text_from_pdf(file_bytes)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}")
-
-    if not text.strip():
+    if not payload.toc_text.strip():
         raise HTTPException(status_code=400, detail="No text could be extracted from the PDF")
 
-    # Send to Gemini for analysis
     try:
-        analysis = analyze_curriculum(text, page_count)
-    except ValueError as e:
-        raise HTTPException(status_code=502, detail=f"AI analysis failed: {str(e)}")
+        analysis = analyze_curriculum(payload.toc_text, payload.page_count)
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=f"AI analysis failed: {exc}") from exc
 
-    # Check if this subject already has a core book
-    has_core = db.query(CurriculumTopic).filter(
-        CurriculumTopic.subject_id == subject_id, 
-        CurriculumTopic.is_core == True
-    ).first() is not None
-    is_core_for_new = not has_core
+    document = Document(
+        owner_id=user_id,
+        blob_path=payload.blob_path,
+        original_filename=payload.original_filename,
+        size_bytes=payload.size_bytes,
+        page_count=payload.page_count,
+        sha256=payload.sha256,
+    )
+    db.add(document)
+    db.flush()
 
-    # Store topics in database
-    for i, topic_data in enumerate(analysis["topics"]):
+    is_core_for_new = db.query(CurriculumTopic).filter(
+        CurriculumTopic.subject_id == subject_id,
+        CurriculumTopic.is_core.is_(True),
+    ).first() is None
+    created = []
+    for index, topic_data in enumerate(analysis["topics"]):
         topic = CurriculumTopic(
             subject_id=subject_id,
+            document_id=document.id,
             title=topic_data["title"],
             page_start=topic_data["page_start"],
             page_end=topic_data["page_end"],
             complexity=topic_data.get("complexity", 1),
             language=analysis.get("language", "unknown"),
-            chapter_order=i,
-            pdf_filename=file.filename,
-            pdf_path=pdf_path.replace("\\", "/"),  # store forward slashes for cross-platform ease
+            chapter_order=index,
+            pdf_filename=payload.original_filename,
             pdf_page_offset=0,
             is_core=is_core_for_new,
         )
         db.add(topic)
-
+        created.append(topic)
     db.commit()
 
     return AIAnalysisResult(
         language=analysis.get("language", "unknown"),
-        topics=[
-            {
-                "title": t["title"],
-                "page_start": t["page_start"],
-                "page_end": t["page_end"],
-                "complexity": t.get("complexity", 1),
-                "language": analysis.get("language", "unknown"),
-                "chapter_order": i,
-                "pdf_filename": file.filename,
-                "pdf_path": pdf_path.replace("\\", "/"),
-                "pdf_page_offset": 0,
-                "is_core": is_core_for_new,
-            }
-            for i, t in enumerate(analysis["topics"])
-        ],
-        pdf_filename=file.filename,
-        total_pages=page_count,
+        topics=created,
+        pdf_filename=payload.original_filename,
     )

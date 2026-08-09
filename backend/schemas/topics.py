@@ -12,6 +12,7 @@ class TopicBase(BaseModel):
     chapter_order: int = Field(default=0)
     pdf_filename: Optional[str] = None
     pdf_path: Optional[str] = None
+    document_id: Optional[int] = None
     pdf_page_offset: int = Field(default=0)
     is_core: bool = True
 
@@ -40,3 +41,12 @@ class AIAnalysisResult(BaseModel):
     language: str
     topics: List[TopicBase]
     pdf_filename: str
+
+
+class DocumentFinalizeRequest(BaseModel):
+    blob_path: str = Field(..., min_length=5, max_length=600)
+    original_filename: str = Field(..., min_length=1, max_length=255)
+    size_bytes: int = Field(..., gt=0, le=262_144_000)
+    page_count: int = Field(..., gt=0, le=20_000)
+    toc_text: str = Field(..., min_length=1, max_length=500_000)
+    sha256: Optional[str] = Field(None, pattern=r"^[a-fA-F0-9]{64}$")

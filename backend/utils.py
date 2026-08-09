@@ -35,20 +35,26 @@ SETTING_DEFAULTS = {
 }
 
 
-def get_setting(db: Session, key: str) -> str:
+def get_setting(db: Session, key: str, owner_id: str | None = None) -> str:
     """Get an app setting from the database, falling back to defaults."""
-    setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+    query = db.query(AppSetting).filter(AppSetting.key == key)
+    if owner_id:
+        query = query.filter(AppSetting.owner_id == owner_id)
+    setting = query.first()
     if setting:
         return setting.value
     return SETTING_DEFAULTS.get(key, "")
 
 
-def set_setting(db: Session, key: str, value: str) -> None:
+def set_setting(db: Session, key: str, value: str, owner_id: str | None = None) -> None:
     """Set an app setting in the database (upsert)."""
-    setting = db.query(AppSetting).filter(AppSetting.key == key).first()
+    query = db.query(AppSetting).filter(AppSetting.key == key)
+    if owner_id:
+        query = query.filter(AppSetting.owner_id == owner_id)
+    setting = query.first()
     if setting:
         setting.value = value
     else:
-        setting = AppSetting(key=key, value=value)
+        setting = AppSetting(key=key, value=value, owner_id=owner_id)
         db.add(setting)
     db.commit()

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { calendarApi } from '../api/calendar';
 import { schedulerApi } from '../api/scheduler';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isSameMonth, isSameDay, startOfWeek, endOfWeek, addMonths, subMonths } from 'date-fns';
 import { ChevronLeft, ChevronRight, Ban, RefreshCw, Calendar as CalendarIcon, Umbrella, ShieldAlert, CheckCircle2 } from 'lucide-react';
 import clsx from 'clsx';
 import InputDialog from '../components/InputDialog';

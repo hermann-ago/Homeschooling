@@ -27,11 +27,10 @@ The router catches these and returns HTTP 502 with a user-friendly message.
 """
 
 import os
-import io
 import json
 import re
-import pdfplumber
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -43,7 +42,7 @@ GEMINI_MODEL = "gemini-2.5-flash"
 VALID_CONTENT_TYPES = {"quiz", "audio", "terms", "explain"}
 
 
-def _get_model(response_json: bool = False) -> genai.GenerativeModel:
+def _get_client() -> genai.Client:
     """
     Instantiate a Gemini model, re-reading the API key at call time so
     that runtime key updates (via Settings page) are respected.
@@ -54,13 +53,7 @@ def _get_model(response_json: bool = False) -> genai.GenerativeModel:
             "Gemini API key not configured. "
             "Please add your API key in the Settings page."
         )
-    genai.configure(api_key=api_key)
-
-    config = {}
-    if response_json:
-        config["response_mime_type"] = "application/json"
-
-    return genai.GenerativeModel(GEMINI_MODEL, generation_config=config)
+    return genai.Client(api_key=api_key)
 
 
 # ── PDF Text Extraction ───────────────────────────────────────────────────────
@@ -162,9 +155,13 @@ TEXT:
 {text[:4000]}
 ---"""
 
-    model = _get_model(response_json=True)
+    client = _get_client()
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
         parsed = json.loads(_clean_json(response.text))
         if not isinstance(parsed, list):
             raise ValueError("Expected a JSON array")
@@ -198,9 +195,9 @@ TEXT:
 
 Return ONLY the summary text."""
 
-    model = _get_model(response_json=False)
+    client = _get_client()
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         return response.text.strip()
     except Exception as e:
         raise ValueError(f"Audio summary generation failed: {e}")
@@ -231,9 +228,13 @@ TEXT:
 {text[:4000]}
 ---"""
 
-    model = _get_model(response_json=True)
+    client = _get_client()
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
+        )
         parsed = json.loads(_clean_json(response.text))
         if not isinstance(parsed, list):
             raise ValueError("Expected a JSON array")
@@ -267,9 +268,9 @@ TEXT:
 
 Return ONLY the explanation text."""
 
-    model = _get_model(response_json=False)
+    client = _get_client()
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         return response.text.strip()
     except Exception as e:
         raise ValueError(f"Simple explanation generation failed: {e}")

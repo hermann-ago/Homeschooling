@@ -17,8 +17,6 @@ class Subject(Base):
     # Relationships
     child = relationship("Child", back_populates="subjects")
     curriculum_topics = relationship("CurriculumTopic", back_populates="subject", cascade="all, delete-orphan")
-    scheduled_slots = relationship("Subject", back_populates="subject", cascade="all, delete-orphan", overlaps="scheduled_slots") # Wait, this overlaps name
-    # Correction: original says back_populates="subject", cascade="all, delete-orphan"
     scheduled_slots = relationship("ScheduledSlot", back_populates="subject", cascade="all, delete-orphan")
 
 
@@ -36,10 +34,12 @@ class CurriculumTopic(Base):
     chapter_order = Column(Integer, default=0)
     pdf_filename = Column(String(255), nullable=True)
     pdf_path = Column(String(500), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
     pdf_page_offset = Column(Integer, default=0)
     is_core = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     subject = relationship("Subject", back_populates="curriculum_topics")
+    document = relationship("Document", back_populates="topics")
     scheduled_slots = relationship("ScheduledSlot", back_populates="topic", cascade="all, delete-orphan")

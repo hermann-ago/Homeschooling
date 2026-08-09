@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { checklistApi } from '../api/checklist';
+import React from 'react';
 import { format, isToday, isPast, parseISO } from 'date-fns';
 import { CheckCircle2, Circle, AlertCircle, CalendarIcon, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
@@ -58,7 +57,7 @@ const ChecklistItem = ({ slot, onToggle, onViewPages, showDate = false }) => {
             </span>
           )}
           
-          {slot.pdf_path && onViewPages && (
+          {slot.document_id && onViewPages && (
             <button 
               onClick={(e) => { e.stopPropagation(); onViewPages(slot); }}
               className="group/btn flex items-center text-xs font-medium text-text-secondary hover:text-accent transition-colors px-2 py-0.5 rounded bg-gray-50 hover:bg-accent/10"

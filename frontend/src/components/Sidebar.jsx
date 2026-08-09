@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { 
   CheckSquare, 
   Calendar as CalendarIcon, 
@@ -9,11 +9,12 @@ import {
   LayoutDashboard,
   Layout,
   Users,
-  X
+  X,
+  LogOut
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpen, onClose }) => {
-  const navigate = useNavigate();
 
   const navItems = [
     { to: '/', icon: CheckSquare, label: 'Today' },
@@ -145,6 +146,11 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
           </div>
         </div>
       )}
+      <div className="p-4 border-t border-border">
+        <button onClick={() => supabase?.auth.signOut()} className="w-full flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
+          <LogOut className="w-4 h-4" /> Sign out
+        </button>
+      </div>
     </>
   );
 

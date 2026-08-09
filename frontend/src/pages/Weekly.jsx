@@ -40,7 +40,6 @@ const Weekly = ({ activeChildId }) => {
   }
 
   // Create a grid by day
-  const daysOfWeek = [1, 2, 3, 4, 5, 6, 0]; // Mon to Sun
   const slotsByDate = slots.reduce((acc, slot) => {
     if (!acc[slot.date]) acc[slot.date] = [];
     acc[slot.date].push(slot);

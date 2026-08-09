@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { canvasApi } from '../../api/canvas';
+import { getDocument, getDocumentUrl } from '../../api/documents';
+import { extractPdfPages } from '../../utils/pdf';
 import {
   Sparkles, ChevronDown, ChevronUp, Loader2, Zap, RefreshCw, AlertCircle
 } from 'lucide-react';
@@ -14,7 +16,7 @@ export default function AIEnrichmentPanel({
   topicId,
   pageStart,
   pageEnd,
-  pdfPath,
+  documentId,
   pdfPageOffset = 0,
   language = 'en',
 }) {
@@ -61,13 +63,17 @@ export default function AIEnrichmentPanel({
     setLoadingTool(toolKey);
     setActiveTool(toolKey);
     try {
+      if (!documentId) throw new Error('This topic has no hosted document.');
+      const document = await getDocument(documentId);
+      const url = await getDocumentUrl(document.blob_path);
+      const sourceText = await extractPdfPages(url, pageStart, pageEnd, pdfPageOffset);
+      if (!sourceText) throw new Error('No selectable text was found in these pages. Scanned pages need OCR first.');
       const res = await canvasApi.generateAIContent({
         topic_id: topicId,
         page_start: pageStart,
         page_end: pageEnd,
         content_type: toolKey,
-        pdf_path: pdfPath,
-        pdf_page_offset: pdfPageOffset,
+        source_text: sourceText,
         language: language || 'en',
       });
       setResults(prev => ({
@@ -178,7 +184,7 @@ export default function AIEnrichmentPanel({
           )}
 
           {/* No-PDF notice */}
-          {!pdfPath && (
+          {!documentId && (
             <p className="text-xs text-center text-text-secondary py-2">
               AI tools require a PDF to be linked to this topic.
             </p>

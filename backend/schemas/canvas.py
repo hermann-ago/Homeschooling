@@ -18,6 +18,7 @@ class CanvasInsertResponse(BaseModel):
     insert_page_start: Optional[int] = None
     insert_page_end: Optional[int] = None
     insert_pdf_path: Optional[str] = None
+    insert_document_id: Optional[int] = None
     insert_pdf_page_offset: Optional[int] = 0
 
     model_config = ConfigDict(from_attributes=True)
@@ -32,6 +33,7 @@ class CanvasSlotResponse(BaseModel):
     page_from: Optional[int] = None
     page_to: Optional[int] = None
     pdf_path: Optional[str] = None
+    document_id: Optional[int] = None
     pdf_page_offset: Optional[int] = 0
     is_completed: bool = False
     topic_id: Optional[int] = None
@@ -47,8 +49,7 @@ class CanvasAIRequest(BaseModel):
     page_start: int
     page_end: int
     content_type: str = Field(..., pattern=r"^(quiz|audio|terms|explain)$")
-    pdf_path: Optional[str] = None
-    pdf_page_offset: int = 0
+    source_text: Optional[str] = Field(None, max_length=200_000)
     language: str = Field(default="en", max_length=10)
 
 class CanvasAIResponse(BaseModel):

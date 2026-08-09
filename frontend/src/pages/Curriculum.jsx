@@ -386,7 +386,7 @@ const Curriculum = ({ activeChildId }) => {
                                         )}
                                         onClick={() => setSelectedTopicForViewer({
                                           id: topic.id,
-                                          pdf_path: topic.pdf_path,
+                                          document_id: topic.document_id,
                                           page_from: topic.page_start,
                                           page_to: topic.page_end,
                                           pdf_page_offset: topic.pdf_page_offset || 0,
@@ -631,7 +631,7 @@ const Curriculum = ({ activeChildId }) => {
                         try {
                           await subjectsApi.generateChapters(editingSubject.id, chaptersCount);
                           await loadTopics(editingSubject.id);
-                        } catch (e) {
+                        } catch {
                           alert("Failed to generate chapters.");
                         } finally {
                           setGenerating(false);
@@ -681,7 +681,7 @@ const Curriculum = ({ activeChildId }) => {
                      await subjectsApi.update(editingSubject.id, payload);
                      loadSubjects();
                      setEditingSubject(null);
-                   } catch (e) { alert("Failed to save subject."); }
+                   } catch { alert("Failed to save subject."); }
                 }}
                 className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-sm"
               >
