@@ -3,12 +3,17 @@ import os
 import traceback
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from auth import SetupRequest, create_first_family_account, require_family_user
 from database import get_db
+from models import (AppSetting, BlockedDay, CanvasAIContent, CanvasInsert, Child,
+                    Completion, CurriculumTopic, Document, ScheduledSlot, Subject,
+                    TimeWindow)
+from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from routers import calendar, canvas, checklist, children, documents, progress, scheduler, subjects, time_windows
 
 load_dotenv()
@@ -64,3 +69,51 @@ def health_check():
 def setup_family(payload: SetupRequest, db=Depends(get_db)):
     """One-time, code-protected creation of the shared family account."""
     return create_first_family_account(payload, db)
+
+
+@app.post("/api/internal/import-legacy", include_in_schema=False)
+def import_legacy_snapshot(
+    payload: dict,
+    x_migration_code: str = Header(default=""),
+    db=Depends(get_db),
+):
+    """Temporary, code-gated bulk importer used only to move the local backup."""
+    expected = os.getenv("MIGRATION_CODE", "")
+    if not expected or not __import__("secrets").compare_digest(expected, x_migration_code):
+        raise HTTPException(status_code=404, detail="Not found")
+    owner_id = payload.get("owner_id")
+    if not owner_id:
+        raise HTTPException(status_code=422, detail="Migration owner is required")
+
+    models = {
+        "documents": Document, "children": Child, "blocked_days": BlockedDay,
+        "subjects": Subject, "curriculum_topics": CurriculumTopic,
+        "time_windows": TimeWindow, "scheduled_slots": ScheduledSlot,
+        "completions": Completion, "canvas_inserts": CanvasInsert,
+        "canvas_ai_content": CanvasAIContent, "app_settings": AppSetting,
+    }
+    try:
+        for name, values in payload.get("tables", {}).items():
+            model = models.get(name)
+            if model is None or not isinstance(values, list):
+                raise HTTPException(status_code=422, detail="Invalid migration table")
+            if not values:
+                continue
+            if name in {"documents", "children", "blocked_days", "app_settings"}:
+                for value in values:
+                    if value.get("owner_id") != owner_id:
+                        raise HTTPException(status_code=422, detail="Owner mismatch")
+            table = model.__table__
+            statement = postgres_insert(table).values(values)
+            update_values = {column.name: statement.excluded[column.name] for column in table.columns if column.name != "id"}
+            db.execute(statement.on_conflict_do_update(index_elements=[table.c.id], set_=update_values))
+        for table in models.values():
+            db.execute(text(
+                "select setval(pg_get_serial_sequence(:table_name, 'id'), "
+                "coalesce((select max(id) from " + table.__table__.fullname + "), 1), true)"
+            ), {"table_name": table.__table__.fullname})
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"status": "imported", "tables": {name: len(values) for name, values in payload.get("tables", {}).items()}}

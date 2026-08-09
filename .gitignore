@@ -56,3 +56,6 @@ public/
 
 .vercel
 .env*
+migration-manifest.json
+migration-sql*/
+migration-payload.json
