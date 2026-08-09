@@ -1,11 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm --prefix frontend ci --legacy-peer-deps && npm --prefix frontend run build",
-  "outputDirectory": "frontend/dist",
+  "buildCommand": "npm --prefix frontend ci --legacy-peer-deps && npm --prefix frontend run build -- --outDir ../public",
   "functions": {
     "api/[...path].py": {
       "maxDuration": 60,
-      "excludeFiles": "{backend/venv/**,backend/uploads/**,backend/**/*.sqlite}"
+      "excludeFiles": "{backend/venv/**,backend/uploads/**,backend/**/*.sqlite,public/**}"
     }
   },
   "rewrites": [
