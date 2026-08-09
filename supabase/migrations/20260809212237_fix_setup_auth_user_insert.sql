@@ -1,5 +1,3 @@
--- A narrowly scoped, server-only one-time setup operation. The app role can
--- execute this function but cannot directly access auth schema tables.
 create or replace function app.create_first_family_account(p_email text, p_password text)
 returns uuid
 language plpgsql
