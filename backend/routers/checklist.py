@@ -4,7 +4,7 @@ from typing import List
 from datetime import date, datetime, timedelta
 
 from database import get_db
-from models import ScheduledSlot, Completion, Child
+from models import ScheduledSlot, Completion, Child, CurriculumTopic
 from schemas import ScheduledSlotResponse, CompletionResponse
 from utils import slot_to_response
 
@@ -64,6 +64,13 @@ def complete_slot(slot_id: int, db: Session = Depends(get_db)):
 
     completion = Completion(slot_id=slot_id, completed_at=datetime.utcnow())
     db.add(completion)
+    
+    # Sync with curriculum: If this slot has a topic, mark it as completed
+    if slot.topic_id:
+        topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
+        if topic:
+            topic.completed = True
+
     db.commit()
     db.refresh(completion)
     return completion
@@ -74,6 +81,19 @@ def uncomplete_slot(slot_id: int, db: Session = Depends(get_db)):
     completion = db.query(Completion).filter(Completion.slot_id == slot_id).first()
     if not completion:
         raise HTTPException(status_code=404, detail="Completion not found")
+    # Sync with curriculum: Before deleting, check if this was the last completed slot for the topic
+    slot = completion.slot
+    if slot and slot.topic_id:
+        # Check if any other slots for this topic are completed
+        other_completions = db.query(Completion).join(ScheduledSlot).filter(
+            ScheduledSlot.topic_id == slot.topic_id,
+            ScheduledSlot.id != slot.id
+        ).first()
+        if not other_completions:
+            topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
+            if topic:
+                topic.completed = False
+
     db.delete(completion)
     db.commit()
     return None

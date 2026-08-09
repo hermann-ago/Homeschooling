@@ -5,7 +5,13 @@ Handles bilingual content (Portuguese/English).
 import os
 import json
 import re
-import google.generativeai as genai
+import warnings
+
+# Suppress the deprecation warning for google-generativeai
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=FutureWarning, module="google.generativeai")
+    import google.generativeai as genai
+
 from dotenv import load_dotenv
 
 load_dotenv()

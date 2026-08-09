@@ -57,6 +57,20 @@ def start_app():
     ip = get_ip()
     print(f"Local Network IP: {ip}")
     
+    # Pre-flight check: Verify database exists if it's on a mapped drive
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(backend_dir, ".env"))
+        db_url = os.getenv("DATABASE_URL", "")
+        if "G:" in db_url.upper():
+            db_path = db_url.split("sqlite:///")[-1].replace('"', '').replace("'", "")
+            if not os.path.exists(db_path):
+                print(f"\nCRITICAL ERROR: Database not found at {db_path}")
+                print("Please ensure your Google Drive (G:) is mounted and accessible.")
+                return
+    except Exception:
+        pass # If dotenv or logic fails, let the backend try its best
+    
     # 1. Start Backend
     print("Launching Backend (FastAPI)...")
     backend_proc = subprocess.Popen(

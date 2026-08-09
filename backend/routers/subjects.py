@@ -4,8 +4,9 @@ from typing import List, Optional
 import os
 import uuid
 
+from datetime import datetime
 from database import get_db
-from models import Subject, CurriculumTopic, Child
+from models import Subject, CurriculumTopic, Child, ScheduledSlot, Completion
 from schemas import (
     SubjectCreate, SubjectUpdate, SubjectResponse,
     TopicResponse, TopicUpdate, AIAnalysisResult,
@@ -207,6 +208,19 @@ def toggle_topic_complete(subject_id: int, topic_id: int, db: Session = Depends(
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
     topic.completed = not topic.completed
+    
+    if topic.completed:
+        # Create completions for any existing slots of this topic
+        slots = db.query(ScheduledSlot).filter(ScheduledSlot.topic_id == topic_id).all()
+        for slot in slots:
+            if not db.query(Completion).filter(Completion.slot_id == slot.id).first():
+                db.add(Completion(slot_id=slot.id, completed_at=datetime.utcnow()))
+    else:
+        # Remove completions for this topic's slots
+        slots = db.query(ScheduledSlot).filter(ScheduledSlot.topic_id == topic_id).all()
+        for slot in slots:
+            db.query(Completion).filter(Completion.slot_id == slot.id).delete()
+
     db.commit()
     db.refresh(topic)
     return topic
@@ -222,10 +236,24 @@ def complete_previous(subject_id: int, topic_id: int, db: Session = Depends(get_
     if not target_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
         
+    # Update the topics to completed
     db.query(CurriculumTopic).filter(
         CurriculumTopic.subject_id == subject_id,
         CurriculumTopic.chapter_order <= target_topic.chapter_order
     ).update({"completed": True})
+    
+    # Sync with calendar: Create completions for all slots of these topics
+    topics_to_complete = db.query(CurriculumTopic).filter(
+        CurriculumTopic.subject_id == subject_id,
+        CurriculumTopic.chapter_order <= target_topic.chapter_order
+    ).all()
+    
+    topic_ids = [t.id for t in topics_to_complete]
+    slots = db.query(ScheduledSlot).filter(ScheduledSlot.topic_id.in_(topic_ids)).all()
+    
+    for slot in slots:
+        if not db.query(Completion).filter(Completion.slot_id == slot.id).first():
+            db.add(Completion(slot_id=slot.id, completed_at=datetime.utcnow()))
     
     db.commit()
     return {"message": "Updated previous topics"}

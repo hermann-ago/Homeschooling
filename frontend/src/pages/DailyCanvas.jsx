@@ -154,11 +154,11 @@ const DailyCanvas = ({ activeChildId }) => {
               {slots.map((slot, idx) => {
                 const isActive = activeSlotId === slot.id;
                 return (
-                  <button
+                  <div
                     key={slot.id}
                     onClick={() => setActiveSlotId(slot.id)}
                     className={clsx(
-                      "w-full text-left p-3 rounded-xl border transition-all duration-200 group flex items-start gap-3",
+                      "w-full text-left p-3 rounded-xl border transition-all duration-200 group flex items-start gap-3 cursor-pointer",
                       isActive
                         ? "bg-accent/10 border-accent/30 shadow-sm"
                         : slot.is_completed
@@ -205,7 +205,7 @@ const DailyCanvas = ({ activeChildId }) => {
                     >
                       <CheckSquare className="w-4 h-4" />
                     </button>
-                  </button>
+                  </div>
                 );
               })}
             </div>
