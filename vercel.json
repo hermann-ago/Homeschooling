@@ -3,15 +3,12 @@
   "buildCommand": "npm --prefix frontend ci --legacy-peer-deps && npm --prefix frontend run build",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/index.py": {
+    "api/[...path].py": {
       "maxDuration": 60,
       "excludeFiles": "{backend/venv/**,backend/uploads/**,backend/**/*.sqlite}"
     }
   },
   "rewrites": [
-    { "source": "/api/blob/upload", "destination": "/api/blob-upload.js" },
-    { "source": "/api/blob/read", "destination": "/api/blob-read.js" },
-    { "source": "/api/(.*)", "destination": "/api/index.py" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
