@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
@@ -26,6 +26,7 @@ const PageViewer = ({ slot, onClose }) => {
     return () => { active = false; };
   }, [slot?.document_id, start, offset]);
 
+  const pdfFile = useMemo(() => (pdfData ? { data: pdfData.slice() } : null), [pdfData]);
   if (!slot || !slot.document_id) return null;
   const physicalStart = start + offset;
   const physicalEnd = end + offset;
@@ -38,7 +39,7 @@ const PageViewer = ({ slot, onClose }) => {
       <div className="flex-1 overflow-auto bg-gray-100 p-3 text-center">
         {error && <p className="text-red-700">{error}</p>}
         {!pdfData && !error && <p className="text-text-secondary">Loading assigned pages…</p>}
-        {pdfData && <Document file={{ data: pdfData }} loading="Loading PDF…" onLoadError={(loadError) => setError(loadError.message)}><Page pageNumber={page} renderTextLayer renderAnnotationLayer className="mx-auto shadow" /></Document>}
+        {pdfFile && <Document file={pdfFile} loading="Loading PDF…" onLoadError={(loadError) => setError(loadError.message)}><Page pageNumber={page} renderTextLayer renderAnnotationLayer className="mx-auto shadow" /></Document>}
       </div>
       <div className="border-t p-3 flex justify-between items-center">
         <button disabled={page <= physicalStart} onClick={() => setPage((value) => value - 1)} className="p-2 disabled:opacity-30"><ChevronLeft /></button>
