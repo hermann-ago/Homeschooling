@@ -72,7 +72,7 @@ def setup_family(payload: SetupRequest, db=Depends(get_db)):
     return create_first_family_account(payload, db)
 
 
-@app.post("/api/internal/import-legacy", include_in_schema=False)
+@app.post("/api/migrate-legacy", include_in_schema=False)
 def import_legacy_snapshot(
     payload: dict,
     x_migration_code: str = Header(default=""),
