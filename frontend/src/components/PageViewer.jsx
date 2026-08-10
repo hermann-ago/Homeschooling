@@ -20,7 +20,7 @@ const PageViewer = ({ slot, onClose }) => {
     setError('');
     setPage(start + offset);
     getDocument(slot.document_id)
-      .then((document) => getDocumentData(document.blob_path))
+      .then((document) => getDocumentData(document.blob_path, document.size_bytes))
       .then((nextData) => { if (active) setPdfData(nextData); })
       .catch((nextError) => { if (active) setError(nextError.message); });
     return () => { active = false; };

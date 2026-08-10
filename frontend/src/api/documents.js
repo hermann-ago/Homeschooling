@@ -12,7 +12,7 @@ export async function getDocumentUrl(blobPath) {
   return body.url;
 }
 
-export async function getDocumentData(blobPath) {
+export async function getDocumentData(blobPath, expectedSize) {
   const headers = await getAuthHeaders();
   const response = await fetch(`/api/blob/content?blobPath=${encodeURIComponent(blobPath)}`, { headers });
   if (!response.ok) {
@@ -24,7 +24,10 @@ export async function getDocumentData(blobPath) {
   if (signature !== '%PDF') {
     throw new Error(`Hosted PDF response is invalid (${response.headers.get('content-type') || 'unknown type'}, ${data.byteLength} bytes).`);
   }
-  return data;
+  if (expectedSize && data.byteLength !== expectedSize) {
+    throw new Error(`Hosted PDF response was incomplete (${data.byteLength} of ${expectedSize} bytes).`);
+  }
+  return new Uint8Array(data);
 }
 
 export async function getDocument(documentId) {
