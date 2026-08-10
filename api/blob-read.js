@@ -1,4 +1,4 @@
-import { presignUrl } from '@vercel/blob';
+import { issueSignedToken, presignUrl } from '@vercel/blob';
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(request, response) {
@@ -18,8 +18,19 @@ export default async function handler(request, response) {
       headers: { Authorization: authorization },
     });
     if (!ownership.ok) return response.status(404).json({ error: 'Document not found' });
-    const url = await presignUrl(blobPath, { access: 'read', expiresIn: 300 });
-    return response.status(200).json({ url });
+    const validUntil = Date.now() + 5 * 60 * 1000;
+    const signedToken = await issueSignedToken({
+      pathname: blobPath,
+      operations: ['get'],
+      validUntil,
+    });
+    const { presignedUrl } = await presignUrl(signedToken, {
+      operation: 'get',
+      pathname: blobPath,
+      access: 'private',
+      validUntil,
+    });
+    return response.status(200).json({ url: presignedUrl });
   } catch (error) {
     return response.status(500).json({ error: error.message || 'Could not create document URL' });
   }
