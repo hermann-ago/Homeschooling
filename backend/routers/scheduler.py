@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import Optional
 from datetime import date
 
@@ -33,7 +33,15 @@ def get_schedule(
     if not child:
         raise HTTPException(status_code=404, detail="Child not found")
 
-    query = db.query(ScheduledSlot).filter(ScheduledSlot.child_id == child_id)
+    query = (
+        db.query(ScheduledSlot)
+        .options(
+            selectinload(ScheduledSlot.subject),
+            selectinload(ScheduledSlot.topic),
+            selectinload(ScheduledSlot.completion),
+        )
+        .filter(ScheduledSlot.child_id == child_id)
+    )
     if start_date:
         query = query.filter(ScheduledSlot.date >= start_date)
     if end_date:

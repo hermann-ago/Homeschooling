@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from datetime import date, datetime, timedelta
 
@@ -30,6 +30,11 @@ def get_today_checklist(child_id: int, user_id: str = Depends(require_family_use
     today = date.today()
     slots = (
         db.query(ScheduledSlot)
+        .options(
+            selectinload(ScheduledSlot.subject),
+            selectinload(ScheduledSlot.topic),
+            selectinload(ScheduledSlot.completion),
+        )
         .filter(ScheduledSlot.child_id == child_id, ScheduledSlot.date == today)
         .order_by(ScheduledSlot.time_start)
         .all()
@@ -50,6 +55,11 @@ def get_week_checklist(child_id: int, user_id: str = Depends(require_family_user
 
     slots = (
         db.query(ScheduledSlot)
+        .options(
+            selectinload(ScheduledSlot.subject),
+            selectinload(ScheduledSlot.topic),
+            selectinload(ScheduledSlot.completion),
+        )
         .filter(
             ScheduledSlot.child_id == child_id,
             ScheduledSlot.date >= week_start,
@@ -122,6 +132,11 @@ def get_missed_items(child_id: int, user_id: str = Depends(require_family_user),
     # Find past slots without completions
     slots = (
         db.query(ScheduledSlot)
+        .options(
+            selectinload(ScheduledSlot.subject),
+            selectinload(ScheduledSlot.topic),
+            selectinload(ScheduledSlot.completion),
+        )
         .outerjoin(Completion)
         .filter(
             ScheduledSlot.child_id == child_id,
