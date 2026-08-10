@@ -97,7 +97,14 @@ def import_legacy_snapshot(
         "canvas_ai_content": CanvasAIContent, "app_settings": AppSetting,
     }
     try:
-        for name, values in payload.get("tables", {}).items():
+        table_order = (
+            "documents", "children", "blocked_days", "subjects", "curriculum_topics",
+            "time_windows", "scheduled_slots", "completions", "canvas_inserts",
+            "canvas_ai_content", "app_settings",
+        )
+        payload_tables = payload.get("tables", {})
+        for name in table_order:
+            values = payload_tables.get(name, [])
             model = models.get(name)
             if model is None or not isinstance(values, list):
                 raise HTTPException(status_code=422, detail="Invalid migration table")
