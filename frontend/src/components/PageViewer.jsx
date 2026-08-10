@@ -38,7 +38,7 @@ const PageViewer = ({ slot, onClose }) => {
       <div className="flex-1 overflow-auto bg-gray-100 p-3 text-center">
         {error && <p className="text-red-700">{error}</p>}
         {!pdfData && !error && <p className="text-text-secondary">Loading assigned pages…</p>}
-        {pdfData && <Document file={{ data: pdfData }} loading="Loading PDF…"><Page pageNumber={page} renderTextLayer renderAnnotationLayer className="mx-auto shadow" /></Document>}
+        {pdfData && <Document file={{ data: pdfData }} loading="Loading PDF…" onLoadError={(loadError) => setError(loadError.message)}><Page pageNumber={page} renderTextLayer renderAnnotationLayer className="mx-auto shadow" /></Document>}
       </div>
       <div className="border-t p-3 flex justify-between items-center">
         <button disabled={page <= physicalStart} onClick={() => setPage((value) => value - 1)} className="p-2 disabled:opacity-30"><ChevronLeft /></button>
