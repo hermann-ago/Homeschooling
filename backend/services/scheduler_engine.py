@@ -11,6 +11,7 @@ Behavior:
 """
 import math
 from datetime import date, timedelta
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from models import (
@@ -23,6 +24,7 @@ from utils import get_setting
 
 def recalculate_schedule(child_id: int, owner_id: str, db: Session) -> ScheduleResult:
     warnings: list[ScheduleWarning] = []
+    today = date.today()
 
     # ── 1. Gather subjects and remaining topics ─────────────────────
     subjects = db.query(Subject).filter(Subject.child_id == child_id).all()
@@ -65,6 +67,8 @@ def recalculate_schedule(child_id: int, owner_id: str, db: Session) -> ScheduleR
             subject_map[subject.id] = subject
 
     if not subject_topics:
+        _clear_reschedulable_slots(child_id, today, db)
+        db.commit()
         return ScheduleResult(slots_created=0, warnings=[
             ScheduleWarning(message="All content completed 🎉")
         ])
@@ -88,8 +92,6 @@ def recalculate_schedule(child_id: int, owner_id: str, db: Session) -> ScheduleR
 
     # ── 3. Blocked days ─────────────────────────────────────────────
     school_year_end = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_END", owner_id))
-    today = date.today()
-
     blocked_dates = set(
         bd.date for bd in db.query(BlockedDay)
         .filter(
@@ -130,17 +132,7 @@ def recalculate_schedule(child_id: int, owner_id: str, db: Session) -> ScheduleR
         ])
 
     # ── 5. Clear old schedule ───────────────────────────────────────
-    old_slots = (
-        db.query(ScheduledSlot)
-        .outerjoin(Completion)
-        .filter(ScheduledSlot.child_id == child_id, Completion.id.is_(None))
-        .all()
-    )
-
-    for s in old_slots:
-        db.delete(s)
-
-    db.flush()
+    _clear_reschedulable_slots(child_id, today, db)
 
     # ── 6. Alternating slot scheduling ──────────────────────────────
 
@@ -343,6 +335,35 @@ def _get_completed_pages(topic_id, subject_id, db):
         max(0, (s.page_to or 0) - (s.page_from or 0) + 1)
         for s in slots
     )
+
+
+def _clear_reschedulable_slots(child_id: int, today: date, db: Session) -> int:
+    """Clear drafts and stale current/future slots for completed topics."""
+    old_slots = (
+        db.query(ScheduledSlot)
+        .outerjoin(Completion)
+        .outerjoin(
+            CurriculumTopic,
+            ScheduledSlot.topic_id == CurriculumTopic.id,
+        )
+        .filter(
+            ScheduledSlot.child_id == child_id,
+            or_(
+                Completion.id.is_(None),
+                and_(
+                    ScheduledSlot.date >= today,
+                    CurriculumTopic.completed.is_(True),
+                ),
+            ),
+        )
+        .all()
+    )
+
+    for slot in old_slots:
+        db.delete(slot)
+
+    db.flush()
+    return len(old_slots)
 
 
 def _time_diff_minutes(start, end):

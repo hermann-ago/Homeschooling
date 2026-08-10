@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import date, datetime
 from database import get_db
 from models import Subject, CurriculumTopic, Child, ScheduledSlot, Completion, Document
 from schemas import (
@@ -222,8 +222,11 @@ def toggle_topic_complete(subject_id: int, topic_id: int, user_id: str = Depends
     topic.completed = not topic.completed
     
     if topic.completed:
-        # Create completions for any existing slots of this topic
-        slots = db.query(ScheduledSlot).filter(ScheduledSlot.topic_id == topic_id).all()
+        # Preserve completed study history without protecting future assignments.
+        slots = db.query(ScheduledSlot).filter(
+            ScheduledSlot.topic_id == topic_id,
+            ScheduledSlot.date <= date.today(),
+        ).all()
         for slot in slots:
             if not db.query(Completion).filter(Completion.slot_id == slot.id).first():
                 db.add(Completion(slot_id=slot.id, completed_at=datetime.utcnow()))
@@ -256,14 +259,17 @@ def complete_previous(subject_id: int, topic_id: int, user_id: str = Depends(req
         CurriculumTopic.chapter_order <= target_topic.chapter_order
     ).update({"completed": True})
     
-    # Sync with calendar: Create completions for all slots of these topics
+    # Sync completed calendar history through today only.
     topics_to_complete = db.query(CurriculumTopic).filter(
         CurriculumTopic.subject_id == subject_id,
         CurriculumTopic.chapter_order <= target_topic.chapter_order
     ).all()
     
     topic_ids = [t.id for t in topics_to_complete]
-    slots = db.query(ScheduledSlot).filter(ScheduledSlot.topic_id.in_(topic_ids)).all()
+    slots = db.query(ScheduledSlot).filter(
+        ScheduledSlot.topic_id.in_(topic_ids),
+        ScheduledSlot.date <= date.today(),
+    ).all()
     
     for slot in slots:
         if not db.query(Completion).filter(Completion.slot_id == slot.id).first():
