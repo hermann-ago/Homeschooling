@@ -19,7 +19,12 @@ export async function getDocumentData(blobPath) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error || body.detail || 'Could not load document');
   }
-  return response.arrayBuffer();
+  const data = await response.arrayBuffer();
+  const signature = new TextDecoder().decode(data.slice(0, 4));
+  if (signature !== '%PDF') {
+    throw new Error(`Hosted PDF response is invalid (${response.headers.get('content-type') || 'unknown type'}, ${data.byteLength} bytes).`);
+  }
+  return data;
 }
 
 export async function getDocument(documentId) {
