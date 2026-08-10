@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { canvasApi } from '../../api/canvas';
-import { getDocument, getDocumentUrl } from '../../api/documents';
+import { getDocument, getDocumentData } from '../../api/documents';
 import { extractPdfPages } from '../../utils/pdf';
 import {
   Sparkles, ChevronDown, ChevronUp, Loader2, Zap, RefreshCw, AlertCircle
@@ -65,8 +65,8 @@ export default function AIEnrichmentPanel({
     try {
       if (!documentId) throw new Error('This topic has no hosted document.');
       const document = await getDocument(documentId);
-      const url = await getDocumentUrl(document.blob_path);
-      const sourceText = await extractPdfPages(url, pageStart, pageEnd, pdfPageOffset);
+      const pdfData = await getDocumentData(document.blob_path, document.size_bytes);
+      const sourceText = await extractPdfPages(pdfData, pageStart, pageEnd, pdfPageOffset);
       if (!sourceText) throw new Error('No selectable text was found in these pages. Scanned pages need OCR first.');
       const res = await canvasApi.generateAIContent({
         topic_id: topicId,

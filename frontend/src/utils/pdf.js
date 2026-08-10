@@ -14,8 +14,8 @@ export async function inspectPdf(file) {
   return { pageCount: pdf.numPages, tocText: text.join('\n\n').trim(), workerUrl };
 }
 
-export async function extractPdfPages(url, start, end, offset = 0) {
-  const pdf = await getDocument(url).promise;
+export async function extractPdfPages(data, start, end, offset = 0) {
+  const pdf = await getDocument({ data: new Uint8Array(data) }).promise;
   const physicalStart = Math.max(1, start + offset);
   const physicalEnd = Math.min(pdf.numPages, end + offset);
   const text = [];
