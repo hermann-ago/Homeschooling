@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { subjectsApi } from '../api/subjects';
 import { UploadCloud, FileText, ChevronDown, ChevronRight, Edit3, Loader2, BookOpen, CheckCircle2, Circle, Trash2, Star, Book, X } from 'lucide-react';
-import PageViewer from '../components/PageViewer';
+import ResponsivePageViewerPanel from '../components/ResponsivePageViewerPanel';
 import clsx from 'clsx';
 import { format } from 'date-fns';
 
@@ -154,7 +154,7 @@ const Curriculum = ({ activeChildId }) => {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-        <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto w-full transition-all duration-300">
+        <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-w-0 transition-all duration-300">
         <header className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2">Curriculum</h1>
@@ -465,13 +465,11 @@ const Curriculum = ({ activeChildId }) => {
 
       {/* Right side panel for PDF viewer - overlay on mobile, side panel on lg+ */}
       {selectedTopicForViewer && (
-        <div className="fixed inset-0 z-50 bg-surface h-full min-w-0 lg:static lg:inset-auto lg:z-10 lg:w-2/5 lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:flex-shrink-0">
-          <PageViewer
-            slot={selectedTopicForViewer}
-            childId={activeChildId}
-            onClose={() => setSelectedTopicForViewer(null)}
-          />
-        </div>
+        <ResponsivePageViewerPanel
+          slot={selectedTopicForViewer}
+          childId={activeChildId}
+          onClose={() => setSelectedTopicForViewer(null)}
+        />
       )}
 
       {/* Subject Edit Modal */}

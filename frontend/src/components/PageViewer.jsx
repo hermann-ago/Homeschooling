@@ -129,27 +129,6 @@ const PageViewer = ({ slot, childId, onClose }) => {
         </button>
       </div>
 
-      {childId && (
-        <AnnotationToolbar
-          tool={tool}
-          setTool={setTool}
-          color={color}
-          setColor={setColor}
-          strokeWidth={strokeWidth}
-          setStrokeWidth={setStrokeWidth}
-          zoom={zoom}
-          setZoom={setZoom}
-          saveStatus={annotation.saveStatus}
-          canUndo={annotation.canUndo}
-          canRedo={annotation.canRedo}
-          hasStrokes={annotation.strokes.length > 0}
-          onUndo={annotation.undo}
-          onRedo={annotation.redo}
-          onClear={clearPage}
-          onRetry={annotation.retry}
-        />
-      )}
-
       {annotation.conflict && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex flex-wrap items-center gap-2">
           <span className="font-semibold flex-1 min-w-48">This page changed on another device. Your local handwriting is still safe.</span>
@@ -165,12 +144,34 @@ const PageViewer = ({ slot, childId, onClose }) => {
         </div>
       )}
 
-      <div
-        ref={viewportRef}
-        data-testid="pdf-page-viewport"
-        className="flex-1 overflow-x-auto overflow-y-scroll bg-gray-100 p-3 text-center min-h-0"
-        style={{ scrollbarGutter: 'stable' }}
-      >
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+        {childId && (
+          <AnnotationToolbar
+            tool={tool}
+            setTool={setTool}
+            color={color}
+            setColor={setColor}
+            strokeWidth={strokeWidth}
+            setStrokeWidth={setStrokeWidth}
+            zoom={zoom}
+            setZoom={setZoom}
+            saveStatus={annotation.saveStatus}
+            canUndo={annotation.canUndo}
+            canRedo={annotation.canRedo}
+            hasStrokes={annotation.strokes.length > 0}
+            onUndo={annotation.undo}
+            onRedo={annotation.redo}
+            onClear={clearPage}
+            onRetry={annotation.retry}
+          />
+        )}
+
+        <div
+          ref={viewportRef}
+          data-testid="pdf-page-viewport"
+          className="flex-1 overflow-x-auto overflow-y-scroll bg-gray-100 p-3 text-center min-h-0 min-w-0"
+          style={{ scrollbarGutter: 'stable' }}
+        >
         {pdfError && <p className="text-red-700 p-4">{pdfError}</p>}
         {!pdfData && !pdfError && <p className="text-text-secondary p-4">Loading assigned pages...</p>}
         {pdfFile && viewportWidth > 0 && (
@@ -204,6 +205,7 @@ const PageViewer = ({ slot, childId, onClose }) => {
             </div>
           </Document>
         )}
+        </div>
       </div>
 
       <div className="border-t px-3 py-2 flex justify-between items-center gap-2 flex-shrink-0 bg-white">

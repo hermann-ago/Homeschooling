@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { checklistApi } from '../api/checklist';
 import { CheckSquare, AlertCircle, Calendar, Clock } from 'lucide-react';
-import PageViewer from '../components/PageViewer';
+import ResponsivePageViewerPanel from '../components/ResponsivePageViewerPanel';
 import ChecklistItem from '../components/ChecklistItem';
 import clsx from 'clsx';
 import { format } from 'date-fns';
@@ -124,7 +124,7 @@ const FamilyToday = ({ children }) => {
     <div className="flex h-full w-full overflow-hidden bg-gray-50/50">
       <div className={clsx(
         "flex flex-col w-full transition-all duration-300",
-        selectedSlot ? "lg:w-3/5 lg:max-w-none" : ""
+        selectedSlot ? "lg:flex-1 lg:min-w-0" : ""
       )}>
         {/* Header */}
         <header className="p-4 sm:p-6 lg:p-8 pb-0 flex-shrink-0">
@@ -313,9 +313,7 @@ const FamilyToday = ({ children }) => {
 
       {/* Right side PDF viewer panel */}
       {selectedSlot && (
-        <div className="fixed inset-0 z-50 bg-surface h-full min-w-0 lg:static lg:inset-auto lg:z-40 lg:w-2/5 lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:flex-shrink-0">
-          <PageViewer slot={selectedSlot} childId={selectedSlot.child_id} onClose={() => setSelectedSlot(null)} />
-        </div>
+        <ResponsivePageViewerPanel slot={selectedSlot} childId={selectedSlot.child_id} onClose={() => setSelectedSlot(null)} />
       )}
     </div>
   );
