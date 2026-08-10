@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
@@ -28,18 +28,31 @@ const PageViewer = ({ slot, childId, onClose }) => {
   const [color, setColor] = useState('#111827');
   const [strokeWidth, setStrokeWidth] = useState(0.005);
   const [zoom, setZoom] = useState(100);
-  const [viewportWidth, setViewportWidth] = useState(420);
+  const [viewportWidth, setViewportWidth] = useState(0);
   const viewportRef = useRef(null);
   const pageSurfaceRef = useRef(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
-    const measure = () => setViewportWidth(Math.max(240, viewport.clientWidth - 24));
-    measure();
+    let animationFrame = null;
+    const updateWidth = () => {
+      const nextWidth = Math.max(240, Math.floor(viewport.clientWidth - 24));
+      setViewportWidth((currentWidth) => (
+        currentWidth === nextWidth ? currentWidth : nextWidth
+      ));
+    };
+    const measure = () => {
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(updateWidth);
+    };
+    updateWidth();
     const observer = new ResizeObserver(measure);
     observer.observe(viewport);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (animationFrame !== null) cancelAnimationFrame(animationFrame);
+    };
   }, []);
 
   useEffect(() => {
@@ -150,10 +163,15 @@ const PageViewer = ({ slot, childId, onClose }) => {
         </div>
       )}
 
-      <div ref={viewportRef} className="flex-1 overflow-auto bg-gray-100 p-3 text-center min-h-0">
+      <div
+        ref={viewportRef}
+        data-testid="pdf-page-viewport"
+        className="flex-1 overflow-x-auto overflow-y-scroll bg-gray-100 p-3 text-center min-h-0"
+        style={{ scrollbarGutter: 'stable' }}
+      >
         {pdfError && <p className="text-red-700 p-4">{pdfError}</p>}
         {!pdfData && !pdfError && <p className="text-text-secondary p-4">Loading assigned pages...</p>}
-        {pdfFile && (
+        {pdfFile && viewportWidth > 0 && (
           <Document
             file={pdfFile}
             loading="Loading PDF..."

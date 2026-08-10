@@ -37,7 +37,13 @@ const AnnotationLayer = ({
     if (!surface) return undefined;
     const measure = () => {
       const rect = surface.getBoundingClientRect();
-      setSurfaceSize({ width: rect.width, height: rect.height });
+      const nextWidth = Math.round(rect.width * 100) / 100;
+      const nextHeight = Math.round(rect.height * 100) / 100;
+      setSurfaceSize((currentSize) => (
+        currentSize.width === nextWidth && currentSize.height === nextHeight
+          ? currentSize
+          : { width: nextWidth, height: nextHeight }
+      ));
     };
     measure();
     const observer = new ResizeObserver(measure);

@@ -273,14 +273,9 @@ const Today = ({ activeChildId }) => {
 
       {/* Right side panel for PDF viewer */}
       {selectedSlot && (
-        <>
-          <div className="lg:hidden fixed inset-0 z-50 bg-surface">
-            <PageViewer slot={selectedSlot} childId={activeChildId} onClose={() => setSelectedSlot(null)} />
-          </div>
-          <div className="hidden lg:block lg:w-2/5 min-w-[380px] border-l border-border bg-surface h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-40 flex-shrink-0">
-            <PageViewer slot={selectedSlot} childId={activeChildId} onClose={() => setSelectedSlot(null)} />
-          </div>
-        </>
+        <div className="fixed inset-0 z-50 bg-surface h-full min-w-0 lg:static lg:inset-auto lg:z-40 lg:w-2/5 lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:flex-shrink-0">
+          <PageViewer slot={selectedSlot} childId={activeChildId} onClose={() => setSelectedSlot(null)} />
+        </div>
       )}
     </div>
   );

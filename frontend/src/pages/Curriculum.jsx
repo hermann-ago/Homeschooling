@@ -465,24 +465,13 @@ const Curriculum = ({ activeChildId }) => {
 
       {/* Right side panel for PDF viewer - overlay on mobile, side panel on lg+ */}
       {selectedTopicForViewer && (
-        <>
-          {/* Mobile: full-screen overlay */}
-          <div className="lg:hidden fixed inset-0 z-50 bg-surface">
-            <PageViewer 
-              slot={selectedTopicForViewer} 
-              childId={activeChildId}
-              onClose={() => setSelectedTopicForViewer(null)} 
-            />
-          </div>
-          {/* Desktop: side panel */}
-          <div className="hidden lg:block lg:w-2/5 min-w-[380px] border-l border-border bg-surface h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-10 flex-shrink-0">
-            <PageViewer 
-              slot={selectedTopicForViewer} 
-              childId={activeChildId}
-              onClose={() => setSelectedTopicForViewer(null)} 
-            />
-          </div>
-        </>
+        <div className="fixed inset-0 z-50 bg-surface h-full min-w-0 lg:static lg:inset-auto lg:z-10 lg:w-2/5 lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:flex-shrink-0">
+          <PageViewer
+            slot={selectedTopicForViewer}
+            childId={activeChildId}
+            onClose={() => setSelectedTopicForViewer(null)}
+          />
+        </div>
       )}
 
       {/* Subject Edit Modal */}
