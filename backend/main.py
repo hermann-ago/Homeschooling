@@ -116,7 +116,11 @@ def import_legacy_snapshot(
                         raise HTTPException(status_code=422, detail="Owner mismatch")
             table = model.__table__
             statement = postgres_insert(table).values(values)
-            update_values = {column.name: statement.excluded[column.name] for column in table.columns if column.name != "id"}
+            update_values = {
+                column: statement.excluded[column]
+                for column in values[0]
+                if column != "id"
+            }
             db.execute(statement.on_conflict_do_update(index_elements=[table.c.id], set_=update_values))
         for table in models.values():
             db.execute(text(
