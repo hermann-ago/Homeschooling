@@ -23,7 +23,7 @@ export async function fetchApi(endpoint, options = {}) {
     if (response.status === 401) {
       window.dispatchEvent(new Event('auth:expired'));
     }
-    let errorMessage = 'An error occurred';
+    let errorMessage = `Request failed (${response.status})`;
     try {
       const errorData = await response.json();
       errorMessage = errorData.detail || errorMessage;
