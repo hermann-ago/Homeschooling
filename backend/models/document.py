@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Uuid
+from sqlalchemy import BigInteger, Column, DateTime, Integer, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 
 from database import Base
@@ -8,6 +8,9 @@ from database import Base
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_documents_id_owner"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Uuid(as_uuid=False), nullable=False, index=True)

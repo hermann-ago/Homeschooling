@@ -5,3 +5,4 @@ from .canvas import CanvasInsert, CanvasAIContent
 from .settings import AppSetting
 from .account import FamilyAccount
 from .document import Document
+from .annotation import PdfPageAnnotation

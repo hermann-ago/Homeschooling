@@ -262,7 +262,7 @@ const DailyCanvas = ({ activeChildId }) => {
                   {/* Main PDF */}
                   {activeSlot.document_id ? (
                     <div className="border-t border-border" style={{ minHeight: '560px' }}>
-                      <PageViewer slot={activeSlot} onClose={() => setActiveSlotId(null)} />
+                      <PageViewer slot={activeSlot} childId={activeChildId} onClose={() => setActiveSlotId(null)} />
                     </div>
                   ) : (
                       <div className="border-t border-border p-8 text-center bg-gray-50 flex-1 flex flex-col items-center justify-center">
@@ -310,7 +310,7 @@ const DailyCanvas = ({ activeChildId }) => {
                                   pdf_page_offset: insert.insert_pdf_page_offset,
                                   subject_name: insert.insert_subject_name,
                                   topic_title: insert.insert_topic_title,
-                                }} onClose={() => {}} />
+                                }} childId={activeChildId} onClose={() => {}} />
                               </div>
                             )}
                           </div>

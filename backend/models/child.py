@@ -1,10 +1,13 @@
-from sqlalchemy import Column, Integer, String, DateTime, Uuid
+from sqlalchemy import Column, Integer, String, DateTime, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
 class Child(Base):
     __tablename__ = "children"
+    __table_args__ = (
+        UniqueConstraint("id", "owner_id", name="uq_children_id_owner"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Uuid(as_uuid=False), nullable=True, index=True)

@@ -16,3 +16,4 @@ from .canvas import (
     CanvasAIRequest, CanvasAIResponse
 )
 from .documents import DocumentResponse, StorageUsageResponse
+from .annotations import AnnotationPageResponse, AnnotationPageUpdate

@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from auth import SetupRequest, create_first_family_account, require_family_user
 from database import get_db
-from routers import calendar, canvas, checklist, children, documents, progress, scheduler, subjects, time_windows
+from routers import annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, time_windows
 
 load_dotenv()
 
@@ -41,6 +41,7 @@ app.include_router(progress.router, prefix="/api/progress", tags=["Progress"], d
 app.include_router(time_windows.router, prefix="/api/time-windows", tags=["Time Windows"], dependencies=protected)
 app.include_router(canvas.router, prefix="/api/canvas", tags=["Canvas"], dependencies=protected)
 app.include_router(documents.router, prefix="/api", dependencies=protected)
+app.include_router(annotations.router, prefix="/api", dependencies=protected)
 
 
 @app.exception_handler(Exception)

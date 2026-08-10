@@ -315,10 +315,10 @@ const FamilyToday = ({ children }) => {
       {selectedSlot && (
         <>
           <div className="lg:hidden fixed inset-0 z-50 bg-surface">
-            <PageViewer slot={selectedSlot} onClose={() => setSelectedSlot(null)} />
+            <PageViewer slot={selectedSlot} childId={selectedSlot.child_id} onClose={() => setSelectedSlot(null)} />
           </div>
           <div className="hidden lg:block lg:w-2/5 min-w-[380px] border-l border-border bg-surface h-full shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] z-40 flex-shrink-0">
-            <PageViewer slot={selectedSlot} onClose={() => setSelectedSlot(null)} />
+            <PageViewer slot={selectedSlot} childId={selectedSlot.child_id} onClose={() => setSelectedSlot(null)} />
           </div>
         </>
       )}
