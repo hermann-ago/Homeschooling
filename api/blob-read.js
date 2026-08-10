@@ -31,6 +31,7 @@ export default async function handler(request, response) {
       validUntil,
     });
     const verification = await fetch(presignedUrl, { method: 'HEAD' });
+    console.log(`Private Blob read host=${new URL(presignedUrl).host} status=${verification.status}`);
     if (!verification.ok) {
       throw new Error(`Hosted document is unavailable (${verification.status})`);
     }
