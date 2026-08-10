@@ -30,6 +30,10 @@ export default async function handler(request, response) {
       access: 'private',
       validUntil,
     });
+    const verification = await fetch(presignedUrl, { method: 'HEAD' });
+    if (!verification.ok) {
+      throw new Error(`Hosted document is unavailable (${verification.status})`);
+    }
     return response.status(200).json({ url: presignedUrl });
   } catch (error) {
     return response.status(500).json({ error: error.message || 'Could not create document URL' });
