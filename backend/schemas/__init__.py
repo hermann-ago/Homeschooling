@@ -6,6 +6,7 @@ from .slots import (
     BlockedDayCreate, BlockedDayResponse,
     ScheduledSlotResponse, 
     CompletionCreate, CompletionResponse,
+    TopicCompletionActivity,
     ScheduleWarning, ScheduleResult
 )
 from .progress import SubjectProgress, ChildProgress, FamilyProgress

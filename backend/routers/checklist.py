@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, selectinload
 from typing import List
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from database import get_db
 from models import ScheduledSlot, Completion, Child, CurriculumTopic
 from schemas import ScheduledSlotResponse, CompletionResponse
 from utils import slot_to_response
 from auth import get_owned_child, require_family_user
+from services.completion_tracking import mark_topic_completed, mark_topic_incomplete
 
 router = APIRouter()
 
@@ -82,14 +83,18 @@ def complete_slot(slot_id: int, user_id: str = Depends(require_family_user), db:
     if existing:
         return existing
 
-    completion = Completion(slot_id=slot_id, completed_at=datetime.utcnow())
+    recorded_at = datetime.now(timezone.utc)
+    completion = Completion(
+        slot_id=slot_id,
+        completed_at=recorded_at.replace(tzinfo=None),
+    )
     db.add(completion)
     
     # Sync with curriculum: If this slot has a topic, mark it as completed
     if slot.topic_id:
         topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
         if topic:
-            topic.completed = True
+            mark_topic_completed(topic, recorded_at)
 
     db.commit()
     db.refresh(completion)
@@ -115,7 +120,7 @@ def uncomplete_slot(slot_id: int, user_id: str = Depends(require_family_user), d
         if not other_completions:
             topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
             if topic:
-                topic.completed = False
+                mark_topic_incomplete(topic)
 
     db.delete(completion)
     db.commit()

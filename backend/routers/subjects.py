@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from database import get_db
 from models import Subject, CurriculumTopic, Child, ScheduledSlot, Completion, Document
 from schemas import (
@@ -10,6 +10,7 @@ from schemas import (
 )
 from services.ai_analyzer import analyze_curriculum
 from auth import get_owned_child, require_family_user
+from services.completion_tracking import mark_topic_completed, mark_topic_incomplete
 
 router = APIRouter()
 
@@ -183,8 +184,14 @@ def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate, user_id: 
     )
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    for key, value in updates.model_dump(exclude_unset=True).items():
+    changes = updates.model_dump(exclude_unset=True)
+    completed = changes.pop("completed", None)
+    for key, value in changes.items():
         setattr(topic, key, value)
+    if completed is True:
+        mark_topic_completed(topic)
+    elif completed is False:
+        mark_topic_incomplete(topic)
     db.commit()
     db.refresh(topic)
     return topic
@@ -219,8 +226,12 @@ def toggle_topic_complete(subject_id: int, topic_id: int, user_id: str = Depends
     )
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
-    topic.completed = not topic.completed
-    
+    if topic.completed:
+        mark_topic_incomplete(topic)
+    else:
+        recorded_at = datetime.now(timezone.utc)
+        mark_topic_completed(topic, recorded_at)
+
     if topic.completed:
         # Preserve completed study history without protecting future assignments.
         slots = db.query(ScheduledSlot).filter(
@@ -253,18 +264,17 @@ def complete_previous(subject_id: int, topic_id: int, user_id: str = Depends(req
     if not target_topic:
         raise HTTPException(status_code=404, detail="Topic not found")
         
-    # Update the topics to completed
-    db.query(CurriculumTopic).filter(
-        CurriculumTopic.subject_id == subject_id,
-        CurriculumTopic.chapter_order <= target_topic.chapter_order
-    ).update({"completed": True})
-    
-    # Sync completed calendar history through today only.
     topics_to_complete = db.query(CurriculumTopic).filter(
         CurriculumTopic.subject_id == subject_id,
         CurriculumTopic.chapter_order <= target_topic.chapter_order
     ).all()
-    
+
+    recorded_at = datetime.now(timezone.utc)
+    for topic in topics_to_complete:
+        if not topic.completed:
+            mark_topic_completed(topic, recorded_at)
+
+    # Sync completed calendar history through today only.
     topic_ids = [t.id for t in topics_to_complete]
     slots = db.query(ScheduledSlot).filter(
         ScheduledSlot.topic_id.in_(topic_ids),

@@ -1,6 +1,7 @@
 import { fetchApi } from './client';
 
 export const calendarApi = {
+  getCompletedTopics: (childId) => fetchApi(`/calendar/completed-topics/${childId}`),
   getBlockedDays: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return fetchApi(`/calendar/blocked-days?${query}`);

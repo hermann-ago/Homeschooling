@@ -5,12 +5,60 @@ from typing import List, Optional
 from datetime import date
 
 from database import get_db
-from models import BlockedDay, Child
-from schemas import BlockedDayCreate, BlockedDayResponse, SchoolYearSettings
+from models import BlockedDay, Child, Completion, CurriculumTopic, ScheduledSlot, Subject
+from schemas import (
+    BlockedDayCreate,
+    BlockedDayResponse,
+    SchoolYearSettings,
+    TopicCompletionActivity,
+)
 from utils import get_setting, set_setting
 from auth import get_owned_child, require_family_user
 
 router = APIRouter()
+
+
+@router.get(
+    "/completed-topics/{child_id}",
+    response_model=List[TopicCompletionActivity],
+)
+def list_standalone_topic_completions(
+    child_id: int,
+    user_id: str = Depends(require_family_user),
+    db: Session = Depends(get_db),
+):
+    """Return automatic topic timestamps not already represented by a slot."""
+    child = get_owned_child(db, child_id, user_id)
+    if not child:
+        raise HTTPException(status_code=404, detail="Child not found")
+
+    represented_topic_ids = (
+        db.query(ScheduledSlot.topic_id)
+        .join(Completion, Completion.slot_id == ScheduledSlot.id)
+        .filter(ScheduledSlot.topic_id.is_not(None))
+    )
+    rows = (
+        db.query(CurriculumTopic, Subject)
+        .join(Subject, CurriculumTopic.subject_id == Subject.id)
+        .filter(
+            Subject.child_id == child_id,
+            CurriculumTopic.completed.is_(True),
+            CurriculumTopic.completed_at.is_not(None),
+            CurriculumTopic.id.not_in(represented_topic_ids),
+        )
+        .order_by(CurriculumTopic.completed_at, CurriculumTopic.chapter_order)
+        .all()
+    )
+    return [
+        TopicCompletionActivity(
+            topic_id=topic.id,
+            subject_id=subject.id,
+            subject_name=subject.name,
+            topic_title=topic.title,
+            completed_at=topic.completed_at,
+        )
+        for topic, subject in rows
+    ]
 
 
 @router.get("/blocked-days", response_model=List[BlockedDayResponse])

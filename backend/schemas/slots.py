@@ -61,6 +61,13 @@ class CompletionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class TopicCompletionActivity(BaseModel):
+    topic_id: int
+    subject_id: int
+    subject_name: str
+    topic_title: str
+    completed_at: datetime
+
 class ScheduleWarning(BaseModel):
     message: str
     suggestion: Optional[str] = None

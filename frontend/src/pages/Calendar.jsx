@@ -10,6 +10,7 @@ const Calendar = ({ activeChildId }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [blockedDays, setBlockedDays] = useState([]);
   const [scheduledSlots, setScheduledSlots] = useState([]);
+  const [topicCompletions, setTopicCompletions] = useState([]);
   const [recalculating, setRecalculating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [blockPrompt, setBlockPrompt] = useState({ open: false, date: null });
@@ -23,12 +24,14 @@ const Calendar = ({ activeChildId }) => {
       const startDate = format(startOfWeek(monthStart, { weekStartsOn: 0 }), 'yyyy-MM-dd');
       const endDate = format(endOfWeek(monthEnd, { weekStartsOn: 0 }), 'yyyy-MM-dd');
 
-      const [days, slots] = await Promise.all([
+      const [days, slots, completions] = await Promise.all([
         calendarApi.getBlockedDays({ child_id: activeChildId, start_date: startDate, end_date: endDate }),
         schedulerApi.getSchedule(activeChildId, { start_date: startDate, end_date: endDate }),
+        calendarApi.getCompletedTopics(activeChildId),
       ]);
       setBlockedDays(days);
       setScheduledSlots(slots);
+      setTopicCompletions(completions);
     } catch (e) {
       console.error(e);
     } finally {
@@ -110,6 +113,15 @@ const Calendar = ({ activeChildId }) => {
     slotsByDate[slot.date].push(slot);
   });
 
+  const topicCompletionsByDate = {};
+  topicCompletions.forEach(activity => {
+    const completedDate = new Date(activity.completed_at);
+    if (Number.isNaN(completedDate.getTime())) return;
+    const dateKey = format(completedDate, 'yyyy-MM-dd');
+    if (!topicCompletionsByDate[dateKey]) topicCompletionsByDate[dateKey] = [];
+    topicCompletionsByDate[dateKey].push(activity);
+  });
+
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 0 });
@@ -125,6 +137,8 @@ const Calendar = ({ activeChildId }) => {
       const dateStr = format(day, 'yyyy-MM-dd');
       const blocked = blockedDays.find(b => b.date === dateStr);
       const daySlots = slotsByDate[dateStr] || [];
+      const completedActivities = topicCompletionsByDate[dateStr] || [];
+      const visibleSlotCount = completedActivities.length > 0 ? 2 : 3;
       
       days.push(
         <div 
@@ -159,7 +173,7 @@ const Calendar = ({ activeChildId }) => {
           {/* Activity chips */}
           {!blocked && daySlots.length > 0 && (
             <div className="flex-1 overflow-hidden space-y-0.5">
-              {daySlots.slice(0, 3).map(slot => (
+              {daySlots.slice(0, visibleSlotCount).map(slot => (
                 <div 
                   key={slot.id} 
                   className={clsx(
@@ -174,16 +188,28 @@ const Calendar = ({ activeChildId }) => {
                   <span className="truncate">{slot.subject_name}</span>
                 </div>
               ))}
-              {daySlots.length > 3 && (
+              {daySlots.length > visibleSlotCount && (
                 <div className="text-[9px] text-text-secondary font-medium px-1.5">
-                  +{daySlots.length - 3} more
+                  +{daySlots.length - visibleSlotCount} more
                 </div>
               )}
             </div>
           )}
+
+          {!blocked && completedActivities.length > 0 && (
+            <div
+              className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded flex items-center bg-green-50 text-green-700"
+              title={completedActivities.map(activity => `${activity.subject_name}: ${activity.topic_title}`).join('\n')}
+            >
+              <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 flex-shrink-0" />
+              <span className="truncate">
+                {completedActivities.length} chapter{completedActivities.length === 1 ? '' : 's'} checked
+              </span>
+            </div>
+          )}
           
           {/* Hover overlay for blocking — only show when no activities are visible */}
-          {!blocked && daySlots.length === 0 && (
+          {!blocked && daySlots.length === 0 && completedActivities.length === 0 && (
             <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
               <span className="bg-surface px-2 py-1 rounded shadow-sm text-[10px] font-medium text-text-primary">
                 Block Day

@@ -3,6 +3,7 @@ import { subjectsApi } from '../api/subjects';
 import { UploadCloud, FileText, ChevronDown, ChevronRight, Edit3, Loader2, BookOpen, CheckCircle2, Circle, Trash2, Star, Book, X } from 'lucide-react';
 import PageViewer from '../components/PageViewer';
 import clsx from 'clsx';
+import { format } from 'date-fns';
 
 const Curriculum = ({ activeChildId }) => {
   const [subjects, setSubjects] = useState([]);
@@ -77,7 +78,7 @@ const Curriculum = ({ activeChildId }) => {
       setTopics(prev => ({
         ...prev,
         [subjectId]: prev[subjectId].map(t =>
-          t.id === topicId ? { ...t, completed: updated.completed } : t
+          t.id === topicId ? { ...t, ...updated } : t
         ),
       }));
     } catch (e) {
@@ -86,7 +87,7 @@ const Curriculum = ({ activeChildId }) => {
   };
 
   const handleCompletePrevious = async (subjectId, topicId) => {
-    if (!window.confirm("Action required: This will mark this topic and ALL previous topics as completed. This is helpful to 'catch up' to your current chapter. Continue?")) return;
+    if (!window.confirm("Mark this chapter and all previous chapters as completed? The completion time is recorded automatically.")) return;
     try {
       await subjectsApi.completePrevious(subjectId, topicId);
       await loadTopics(subjectId);
@@ -408,6 +409,13 @@ const Curriculum = ({ activeChildId }) => {
                                         </td>
                                         <td className="px-6 py-4">
                                           <div className={clsx("text-sm font-medium", topic.completed ? "text-text-secondary line-through" : "text-text-primary")}>{topic.title}</div>
+                                          {topic.completed && (
+                                            <div className="mt-1 text-[11px] text-text-secondary">
+                                              {topic.completed_at
+                                                ? `Recorded ${format(new Date(topic.completed_at), 'MMM d, h:mm a')}`
+                                                : 'Completed before automatic tracking'}
+                                            </div>
+                                          )}
                                         </td>
                                         <td className="px-6 py-4 text-center whitespace-nowrap">
                                           <span className={clsx("text-sm font-medium px-2 py-1 rounded inline-block min-w-16", topic.completed ? "bg-gray-100 text-gray-400" : "bg-accent-light text-accent")}>

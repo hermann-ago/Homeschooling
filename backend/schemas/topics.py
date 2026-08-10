@@ -30,6 +30,7 @@ class TopicUpdate(BaseModel):
 class TopicResponse(TopicBase):
     id: int
     subject_id: int
+    completed_at: Optional[datetime] = None
     created_at: datetime
     class Config:
         from_attributes = True

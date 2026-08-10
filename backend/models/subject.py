@@ -30,6 +30,7 @@ class CurriculumTopic(Base):
     page_end = Column(Integer, nullable=False)
     complexity = Column(Integer, default=1)
     completed = Column(Boolean, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
     language = Column(String(10), nullable=True)
     chapter_order = Column(Integer, default=0)
     pdf_filename = Column(String(255), nullable=True)
