@@ -10,6 +10,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/[...path]" },
     { "source": "/", "destination": "/index.html" },
     { "source": "/((?!api/|assets/|favicon\\.svg$|index\\.html$).+)", "destination": "/index.html" }
   ]
