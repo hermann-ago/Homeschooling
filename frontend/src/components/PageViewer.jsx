@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
 import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
