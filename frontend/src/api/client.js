@@ -30,7 +30,7 @@ export async function fetchApi(endpoint, options = {}) {
     } catch {
       // Ignored
     }
-    throw new Error(errorMessage);
+    throw new Error(`${endpoint}: ${errorMessage}`);
   }
 
   // Handle 204 No Content
