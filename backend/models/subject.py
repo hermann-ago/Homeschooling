@@ -33,7 +33,6 @@ class CurriculumTopic(Base):
     language = Column(String(10), nullable=True)
     chapter_order = Column(Integer, default=0)
     pdf_filename = Column(String(255), nullable=True)
-    pdf_path = Column(String(500), nullable=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
     pdf_page_offset = Column(Integer, default=0)
     is_core = Column(Boolean, default=True)
