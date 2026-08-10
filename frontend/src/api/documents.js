@@ -12,6 +12,16 @@ export async function getDocumentUrl(blobPath) {
   return body.url;
 }
 
+export async function getDocumentData(blobPath) {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`/api/blob/content?blobPath=${encodeURIComponent(blobPath)}`, { headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || body.detail || 'Could not load document');
+  }
+  return response.arrayBuffer();
+}
+
 export async function getDocument(documentId) {
   return fetchApi(`/documents/${documentId}`);
 }
