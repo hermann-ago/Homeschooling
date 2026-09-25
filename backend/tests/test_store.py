@@ -1,75 +1,65 @@
-import json
+import sqlite3
 
 import pytest
 
 from storage import (
-    PENDING, RECONCILE, SAVED, DuplicateOperation, FakeDrive, FakeSheets, IntegrityViolation, MaintenancePaused,
-    RevisionConflict, Store,
+    SAVED, DriveFolder, DuplicateOperation, FileUnavailable, IntegrityViolation, OutsideBoundary, RevisionConflict,
+    Store,
 )
-from storage.workbook import bootstrap, export_snapshot, restore_requests
+from storage.backups import create_backup, export_excel, latest_backup, verify_restore
 
 
 @pytest.fixture
-def sheets():
-    fake = FakeSheets()
-    bootstrap(fake)
-    return fake
+def folder(tmp_path):
+    root = tmp_path / "Drive" / "Homeschooling"
+    root.mkdir(parents=True)
+    drive = DriveFolder(root)
+    drive.ensure_folders()
+    return drive
 
 
-def open_store(tmp_path, sheets, drive=None):
-    return Store(tmp_path / "local", sheets, drive or FakeDrive()).load()
+def open_store(tmp_path, folder=None):
+    return Store(tmp_path / "local" / "homeschooling.sqlite3", folder).load()
 
 
-def child_rows(sheets):
-    return sheets.rows("Children")[1:]
-
-
-def test_commit_is_pending_until_verified_in_sheets(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_commit_is_saved_with_a_receipt(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction(operation_id="op-1") as tx:
         child = tx.insert("children", {"name": "Lucas", "color": "#123456"})
-    assert tx.result["sync"] == PENDING
-    assert store.operation_state("op-1") == PENDING
-    store.flush()
+    assert tx.result["sync"] == SAVED
     assert store.operation_state("op-1") == SAVED
-    rows = child_rows(sheets)
-    assert rows[0][0] == str(child["id"]) and rows[0][3] == "Lucas"
-    assert [r[0] for r in sheets.rows("Operation Receipts")[1:]] == ["op-1"]
+    connection = sqlite3.connect(tmp_path / "local" / "homeschooling.sqlite3")
+    assert connection.execute("SELECT name FROM children WHERE id=?", (child["id"],)).fetchone() == ("Lucas",)
+    assert [r[0] for r in connection.execute("SELECT id FROM operation_receipts")] == ["op-1"]
 
 
-def test_lost_response_is_saved_once_and_not_duplicated(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
-    with store.transaction(operation_id="op-lost") as tx:
-        tx.insert("children", {"name": "Lucas"})
-    sheets.fail_next("lost_response")
-    status = store.flush()
-    assert status["pending"] == 1 and status["online"] is False
-    store.flush()
-    assert store.operation_state("op-lost") == SAVED
-    assert len(child_rows(sheets)) == 1
-    assert len(sheets.rows("Operation Receipts")) == 2
-
-
-def test_offline_work_survives_restart_and_saves_once(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
-    sheets.fail_next("offline")
+def test_data_survives_restart(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction(operation_id="op-a") as tx:
         tx.insert("children", {"name": "Lucas"})
-    store.flush()
-    assert store.status()["state"] == PENDING
-    # Server restarts while Google is still unreachable.
-    sheets.fail_next("offline")
-    restarted = Store(tmp_path / "local", sheets, FakeDrive()).load()
+        tx.insert("preferences", {"id": "1:narrator", "child_id": 1, "key": "narrator",
+                                  "value": {"voice": "en-US-Neural2-J", "rate": 0.9}})
+    restarted = open_store(tmp_path)
     assert [c["name"] for c in restarted.all("children")] == ["Lucas"]
-    assert restarted.operation_state("op-a") == PENDING
-    restarted.flush()
-    restarted.flush()
+    assert restarted.all("preferences")[0]["value"] == {"voice": "en-US-Neural2-J", "rate": 0.9}
     assert restarted.operation_state("op-a") == SAVED
-    assert len(child_rows(sheets)) == 1
+    with restarted.transaction() as tx:
+        second = tx.insert("children", {"name": "Mila"})
+    assert second["id"] == 2
 
 
-def test_repeated_operation_id_is_rejected_not_duplicated(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_failed_transaction_changes_nothing(tmp_path):
+    store = open_store(tmp_path)
+    with pytest.raises(RuntimeError):
+        with store.transaction(operation_id="op-fail") as tx:
+            tx.insert("children", {"name": "Lucas"})
+            raise RuntimeError("boom")
+    assert store.all("children") == [] and store.operation_state("op-fail") is None
+    assert open_store(tmp_path).all("children") == []
+
+
+def test_repeated_operation_id_is_rejected_not_duplicated(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction(operation_id="op-x", request_sha256="abc") as tx:
         tx.insert("children", {"name": "Lucas"})
     with pytest.raises(DuplicateOperation) as duplicate:
@@ -79,8 +69,8 @@ def test_repeated_operation_id_is_rejected_not_duplicated(tmp_path, sheets):
     assert len(store.all("children")) == 1
 
 
-def test_expected_revision_conflict(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_expected_revision_conflict(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
     with store.transaction() as tx:
@@ -91,25 +81,22 @@ def test_expected_revision_conflict(tmp_path, sheets):
     assert conflict.value.current["revision"] == 2
 
 
-def test_sheet_edit_outside_app_needs_reconciliation(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_database_edit_outside_the_app_is_not_overwritten(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
-    store.flush()
-    sheets.edit_cell("Children", 1, 1, "7")  # someone bumped the revision directly
-    with store.transaction(operation_id="op-edit") as tx:
-        tx.update("children", child["id"], {"nickname": "Luke"})
-    store.flush()
-    assert store.operation_state("op-edit") == RECONCILE
-    assert store.get("children", child["id"])["nickname"] is None  # not applied to the live view
-    assert store.unsettled()[0]["last_error"].startswith("Children")
-    store.discard("op-edit")
-    assert store.status()["state"] == SAVED
-    assert list((tmp_path / "local" / "queue" / "discarded").glob("*op-edit.json"))
+    connection = sqlite3.connect(tmp_path / "local" / "homeschooling.sqlite3")
+    with connection:
+        connection.execute("UPDATE children SET revision=7 WHERE id=?", (child["id"],))
+    connection.close()
+    with pytest.raises(RevisionConflict):
+        with store.transaction() as tx:
+            tx.update("children", child["id"], {"nickname": "Luke"})
+    assert store.get("children", child["id"])["nickname"] is None
 
 
-def test_cascade_and_restrict(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_cascade_and_restrict(tmp_path):
+    store = open_store(tmp_path)
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
         subject = tx.insert("subjects", {"child_id": child["id"], "name": "History"})
@@ -122,55 +109,68 @@ def test_cascade_and_restrict(tmp_path, sheets):
     assert store.get("topics", topic["id"]) is not None
 
 
-def test_blob_uploaded_before_reference_reaches_sheets(tmp_path, sheets):
-    drive = FakeDrive()
-    store = open_store(tmp_path, sheets, drive)
+def test_files_are_written_into_the_drive_folder(tmp_path, folder):
+    store = open_store(tmp_path, folder)
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
         document = tx.insert("documents", {"original_filename": "a.pdf", "page_count": 1})
-        file_id, sha = tx.add_blob(b'{"strokes":[]}', "Annotations", "a.json", "application/json")
+        path, sha = tx.add_blob(b'{"strokes":[]}', "Annotations", "a.json", "application/json")
         tx.insert("annotations", {"child_id": child["id"], "document_id": document["id"], "page_number": 1,
-                                  "file_id": file_id, "sha256": sha})
-    assert file_id.startswith("pending:")
-    drive.faults.append("offline")
-    store.flush()
-    assert all("pending:" not in cell for row in sheets.rows("Annotation References") for cell in row)
-    store.flush()
-    row = sheets.rows("Annotation References")[1]
-    assert row[6] in drive.files and drive.files[row[6]]["data"] == b'{"strokes":[]}'
-    assert store.all("annotations")[0]["file_id"] == row[6]
+                                  "file_path": path, "sha256": sha})
+    assert path == "Annotations/a.json"
+    assert (folder.root / "Annotations" / "a.json").read_bytes() == b'{"strokes":[]}'
+    assert folder.read(path, sha) == b'{"strokes":[]}'
+    # Identical content reuses the file; different content never overwrites it.
+    assert folder.write("Annotations", "a.json", b'{"strokes":[]}')[0] == "Annotations/a.json"
+    assert folder.write("Annotations", "a.json", b'{"strokes":[1]}')[0] == "Annotations/a-2.json"
+    assert not list(folder.root.rglob("*.part"))
 
 
-def test_maintenance_pauses_writes_and_validates(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
-    with store.transaction() as tx:
-        tx.insert("children", {"name": "Lucas"})
-    store.begin_maintenance()
-    with pytest.raises(MaintenancePaused):
-        with store.transaction() as tx:
-            tx.insert("children", {"name": "Mila"})
-    sheets.edit_cell("Children", 1, 0, "")  # parent blanked an id
-    result = store.end_maintenance()
-    assert result["resumed"] is False and result["problems"]
-    sheets.edit_cell("Children", 1, 0, "1")
-    sheets.edit_cell("Children", 1, 4, "Lu")  # nickname edited directly
-    result = store.end_maintenance()
-    assert result["resumed"] is True and result["edited_rows"] == 1
-    assert store.get("children", 1)["nickname"] == "Lu"
-    assert store.get("children", 1)["revision"] == 2
+def test_drive_folder_boundary_and_availability(tmp_path, folder):
+    (tmp_path / "Drive" / "secret.pdf").write_bytes(b"%PDF-1.4")
+    for bad in ("../secret.pdf", "/etc/passwd", "C:/Windows/win.ini", "Books/../../secret.pdf"):
+        with pytest.raises(OutsideBoundary):
+            folder.read(bad)
+    with pytest.raises(FileUnavailable):
+        folder.read("Books/missing.pdf")
+    (folder.root / "Books" / "book.pdf").write_bytes(b"%PDF-1.4 book")
+    with pytest.raises(FileUnavailable):
+        folder.read("Books/book.pdf", sha256="0" * 64)
+    assert [f["path"] for f in folder.list_pdfs()] == ["Books/book.pdf"]
+    from storage.files import sha256_bytes
+    assert folder.find_by_checksum(sha256_bytes(b"%PDF-1.4 book"), size=13) == "Books/book.pdf"
+    offline = DriveFolder(tmp_path / "not-mounted")
+    assert not offline.available
+    with pytest.raises(FileUnavailable):
+        offline.read("Books/book.pdf")
 
 
-def test_backup_restores_into_new_workbook(tmp_path, sheets):
-    store = open_store(tmp_path, sheets)
+def test_backup_is_verified_and_restorable(tmp_path, folder):
+    store = open_store(tmp_path, folder)
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
         tx.insert("preferences", {"id": f"{child['id']}:narrator", "child_id": child["id"], "key": "narrator",
                                   "value": {"voice": "en-US-Neural2-J", "rate": 0.9}})
-    store.flush()
-    snapshot = json.loads(json.dumps(export_snapshot(store)))
-    fresh = FakeSheets()
-    bootstrap(fresh)
-    fresh.batch_update(restore_requests(fresh, snapshot))
-    restored = Store(tmp_path / "restored", fresh, FakeDrive()).load()
-    assert restored.all("children") == store.all("children")
+    result = create_backup(store, tmp_path / "local-backups")
+    assert result["counts"]["children"] == 1
+    assert (folder.root / "Backups" / result["name"]).exists()
+    assert latest_backup(store, tmp_path / "local-backups") == result["name"]
+    check = verify_restore(folder.root / "Backups" / result["name"])
+    assert check["integrity"] and check["counts"]["children"] == 1 and check["counts"]["preferences"] == 1
+    restored = Store(folder.root / "Backups" / result["name"]).load()
     assert restored.all("preferences")[0]["value"] == {"rate": 0.9, "voice": "en-US-Neural2-J"}
+
+
+def test_excel_copy_leaves_out_answer_keys(tmp_path, folder):
+    import openpyxl
+    store = open_store(tmp_path, folder)
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Lucas"})
+        subject = tx.insert("subjects", {"child_id": child["id"], "name": "History"})
+        tx.insert("teacher_keys", {"id": "k1", "subject_id": subject["id"], "chapter": 21, "question_start": 1,
+                                   "question_end": 1,
+                                   "answer": "SECRET-ANSWER"})
+    relative = export_excel(store)
+    workbook = openpyxl.load_workbook(folder.root / relative, read_only=True)
+    text = " ".join(str(c) for ws in workbook.worksheets for row in ws.iter_rows(values_only=True) for c in row)
+    assert "Lucas" in text and "SECRET-ANSWER" not in text

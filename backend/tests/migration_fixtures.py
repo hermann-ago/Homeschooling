@@ -126,6 +126,7 @@ def build_history_folder(root: Path, voice="en-US-Neural2-J", rate=0.9) -> dict:
     (root / "context" / "session.json").write_text(json.dumps({"status": "saved", "session_id": "2026-09-23-01",
                                                                "topic_id": "C20-T02"}))
     (root / "evidence" / "2026-09-11").mkdir(parents=True)
+    (root / "evidence" / "2026-09-11" / "page-71.jpg").write_bytes(b"\xff\xd8\xff photo of page 71")
 
     workbook = openpyxl.Workbook()
     start = workbook.active
@@ -183,12 +184,7 @@ def build_history_folder(root: Path, voice="en-US-Neural2-J", rate=0.9) -> dict:
     tracker = root / config["tracker"]
     tracker.parent.mkdir(parents=True)
     workbook.save(tracker)
-    drive_paths = {"evidence/2026-09-11/page-71.jpg": "photoFileId0001",
-                   "assets/reading/narration-5e9d-part-1.mp3": "audioFileId0001",
-                   "assets/reading/c20-t02-part-1.mp3": "audioFileId0002",
-                   "assets/reading/robin-hood-elevenlabs-part-1.mp3": "audioFileId0003",
-                   "assets/reading/robin-hood-elevenlabs-part-2.mp3": "audioFileId0004"}
-    return {"book": book, "tests": tests, "book_sha": book_sha, "drive_paths": drive_paths, "tracker": tracker}
+    return {"book": book, "tests": tests, "book_sha": book_sha, "tracker": tracker}
 
 
 def build_hosted_export(root: Path, book: bytes) -> Path:

@@ -3,7 +3,7 @@ from fastapi.responses import Response
 
 from dependencies import context, require_member, require_parent, store
 from schemas.documents import DocumentResponse, StorageUsageResponse
-from storage.gateway import AuthorizationRequired, GoogleUnavailable, OutsideBoundary
+from storage import FileUnavailable, OutsideBoundary
 from utils import get_or_404
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -21,15 +21,11 @@ def get_document(document_id: int):
 
 def document_bytes(document: dict) -> bytes:
     try:
-        data = context().file_bytes(document["drive_file_id"], document["sha256"])
+        data = context().file_bytes(document["file_path"], document["sha256"])
     except OutsideBoundary as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    except AuthorizationRequired as exc:
-        raise HTTPException(status_code=503, detail="This book is not cached yet and Google needs a parent to "
-                                                    "reconnect on the host computer") from exc
-    except GoogleUnavailable as exc:
-        raise HTTPException(status_code=503, detail="This book is not cached on the home server and Google "
-                                                    "Drive is unreachable") from exc
+    except FileUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if not data.startswith(b"%PDF"):
@@ -39,7 +35,7 @@ def document_bytes(document: dict) -> bytes:
 
 @router.get("/{document_id:int}/content", dependencies=[Depends(require_member)])
 def document_content(document_id: int):
-    """PDF bytes proxied from Drive through the home server and cached locally."""
+    """PDF bytes read from the synced Homeschooling folder."""
     document = get_or_404(store(), "documents", document_id, "Document")
     data = document_bytes(document)
     return Response(content=data, media_type="application/pdf", headers={
@@ -50,11 +46,9 @@ def document_content(document_id: int):
 @router.get("/drive/books", dependencies=[Depends(require_parent)])
 def drive_books():
     """PDFs beneath the Homeschooling folder, with whether each is already linked."""
-    ctx = context()
-    if ctx.drive is None:
-        raise HTTPException(status_code=503, detail="Connect Google Drive first")
-    linked_ids = {d["drive_file_id"] for d in store().all("documents")}
-    linked_sha = {d["sha256"] for d in store().all("documents") if d["sha256"]}
-    return [{"id": f["id"], "name": f["name"], "size": int(f.get("size") or 0),
-             "linked": f["id"] in linked_ids or f.get("sha256Checksum") in linked_sha}
-            for f in ctx.drive.list_pdfs()]
+    try:
+        pdfs = context().files.list_pdfs()
+    except FileUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    linked = {d["file_path"] for d in store().all("documents")}
+    return [{**f, "linked": f["path"] in linked} for f in pdfs if not f["path"].startswith("Backups/")]

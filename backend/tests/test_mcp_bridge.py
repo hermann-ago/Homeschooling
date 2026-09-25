@@ -42,7 +42,7 @@ def test_start_lesson_via_bridge_returns_reader_url_and_receipt(harness):
     assert body["result"]["reader_url"].startswith("http://192.168.1.2:8000/lesson?learner=")
     assert body["result"]["next_prompt"] == "What did the man who spoke up do next?"
     assert body["receipt"] == {"operation_id": "codex-start-0001", "sync_state": "saved", "replayed": False,
-                               "meaning": "verified in the Google Sheets database"}
+                               "meaning": "committed to the Homeschooling database on the home server"}
     error, again = call(bridge, "start_lesson", {"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"],
                                                  "operation_id": "codex-start-0001"})
     assert again["receipt"]["replayed"] is True and again["result"] == body["result"]

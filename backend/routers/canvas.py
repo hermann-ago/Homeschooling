@@ -9,7 +9,7 @@ from app_context import request_operation as write
 from dependencies import context, require_member, store
 from schemas import CanvasAIRequest, CanvasAIResponse, CanvasInsertCreate, CanvasInsertResponse, CanvasSlotResponse
 from services import ai_enrichment
-from storage.gateway import GoogleUnavailable
+from storage import FileUnavailable
 from utils import completion_by_slot, get_or_404
 
 logger = logging.getLogger(__name__)
@@ -100,10 +100,9 @@ def get_available_topics(child_id: int):
 
 def _content(row: dict) -> str:
     try:
-        return context().file_bytes(row["content_file_id"], row["content_sha256"]).decode("utf-8")
-    except GoogleUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Saved enrichment is not cached and Google Drive is "
-                                                    "unreachable") from exc
+        return context().file_bytes(row["content_path"], row["content_sha256"]).decode("utf-8")
+    except FileUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"Saved enrichment cannot be opened: {exc}") from exc
 
 
 def _response(row: dict, from_cache: bool) -> CanvasAIResponse:
@@ -117,8 +116,8 @@ def generate_ai_content(payload: CanvasAIRequest):
     """Generate (or return cached) AI enrichment content for a canvas section.
 
     Cached rows (same topic, pages and content type) are returned without a
-    Gemini call. New content is stored as a Drive file in Tutor Content and
-    indexed in the Enrichment tab.
+    Gemini call. New content is saved as a file in the Drive folder's Tutor
+    Content and indexed in the enrichment table.
     """
     _topic(payload.topic_id)
     cached = store().first("enrichment", topic_id=payload.topic_id, page_start=payload.page_start,
@@ -139,10 +138,10 @@ def generate_ai_content(payload: CanvasAIRequest):
     content = json.dumps(raw_result, ensure_ascii=False) if isinstance(raw_result, (list, dict)) else str(raw_result)
     with write("enrichment.generate") as tx:
         name = f"enrichment-topic{payload.topic_id}-p{payload.page_start}-{payload.page_end}-{payload.content_type}.txt"
-        file_id, sha = tx.add_blob(content.encode("utf-8"), "Tutor Content", name, "text/plain")
+        path, sha = tx.add_blob(content.encode("utf-8"), "Tutor Content", name, "text/plain")
         row = tx.insert("enrichment", {"topic_id": payload.topic_id, "page_start": payload.page_start,
                                        "page_end": payload.page_end, "content_type": payload.content_type,
-                                       "content_file_id": file_id, "content_sha256": sha})
+                                       "content_path": path, "content_sha256": sha})
     return _response(row, False)
 
 

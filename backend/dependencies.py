@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, Request, status
 import request_context
 from security.devices import Device
 from security.network import is_loopback
+from storage import SAVED
 
 _context = None
 
@@ -68,14 +69,13 @@ def require_host(request: Request):
 
 
 class IdempotencyMiddleware:
-    """Replay retried writes and report their Google Sheets sync state.
+    """Replay retried writes so a lost response never creates a duplicate.
 
-    Mutating ``/api`` requests carry an ``Idempotency-Key``. Every store
+    Mutating ``/api`` requests carry an ``Idempotency-Key``. Every database
     operation created by the request uses that key as its operation ID, so a
-    retry after a timeout returns the original response rather than creating a
-    duplicate. Responses carry ``X-Sync-State``: ``saved`` (verified in Google
-    Sheets), ``pending`` (safe on the home server, not yet in Google) or
-    ``needs_reconciliation``.
+    retry after a timeout returns the original response. Responses that saved
+    something carry ``X-Sync-State: saved`` (committed to the home server's
+    database) and ``X-Operation-Id``.
     """
 
     def __init__(self, app):
@@ -104,8 +104,7 @@ class IdempotencyMiddleware:
             if prior:
                 if prior["request_hash"] != request_hash:
                     return await _json(send, 409, {"detail": "This Idempotency-Key was used for a different request"})
-                state = ctx.settle(prior["operation_ids"], wait=0)
-                return await _replay(send, prior, state)
+                return await _replay(send, prior, SAVED)
         device = ctx.devices.authenticate(token.split(" ", 1)[1] if " " in token else None)
         request = request_context.RequestContext(key=key or f"req-{uuid.uuid4().hex}",
                                                  device_label=f"{device.name} ({device.role})" if device else None)
@@ -129,10 +128,7 @@ class IdempotencyMiddleware:
         finally:
             request_context.end(marker)
         response_body = b"".join(chunks)
-        state = None
-        if request.operation_ids:
-            import anyio
-            state = await anyio.to_thread.run_sync(ctx.settle, request.operation_ids)
+        state = SAVED if request.operation_ids else None
         response_headers = [(k, v) for k, v in started.get("headers", []) if k.lower() != b"content-length"]
         if state:
             response_headers += [(b"x-sync-state", state.encode()),

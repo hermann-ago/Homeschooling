@@ -1,8 +1,8 @@
 """Host configuration and local data locations.
 
 Everything the server keeps locally lives under ``%LOCALAPPDATA%\\Homeschooling``
-(outside Google Drive and OneDrive): cached snapshots, the pending-operation
-queue, cached PDFs/audio, paired devices and protected Google tokens.
+(outside Google Drive and OneDrive): the SQLite database, local backup copies,
+extraction caches and paired devices. Files live in the synced Drive folder.
 """
 from __future__ import annotations
 
@@ -12,9 +12,12 @@ import sys
 import threading
 from pathlib import Path
 
-DEFAULT_ROOT_FOLDER_ID = "1HnHCy3dOXlAMeQUkU8R9-lm8esx01hMR"  # verified Homeschooling folder
-APP_FOLDERS = ("Books", "Student Work", "Audio", "Annotations", "Tutor Content", "Backups")
 DEFAULT_PORT = 8000
+# The Homeschooling folder as Google Drive for desktop syncs it on the host.
+DRIVE_FOLDER_CANDIDATES = (
+    r"G:\My Drive\Casa, Família e Vida Prática\Homeschooling",
+    r"G:\Meu Drive\Casa, Família e Vida Prática\Homeschooling",
+)
 
 
 def data_dir() -> Path:
@@ -42,7 +45,11 @@ def _refuse_synced(path: Path) -> None:
 
 
 class HostConfig:
-    """Small JSON settings file; never contains credentials."""
+    """Small JSON settings file; never contains credentials.
+
+    ``drive_folder`` is the synced Homeschooling folder. It is detected on the
+    host when unset and can be changed in parent settings.
+    """
 
     def __init__(self, directory: Path | None = None):
         self.dir = Path(directory or data_dir())
@@ -50,11 +57,16 @@ class HostConfig:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = self.dir / "config.json"
         self._lock = threading.Lock()
-        self.values = {"root_folder_id": DEFAULT_ROOT_FOLDER_ID, "folders": {}, "spreadsheet_id": None,
-                       "port": DEFAULT_PORT, "allowed_hosts": [], "tts": {"voice": "en-US-Neural2-J", "rate": 0.9,
-                                                                         "project": "gen-lang-client-0088393168"}}
+        self.values = {"drive_folder": None, "port": DEFAULT_PORT, "allowed_hosts": [],
+                       "tts": {"voice": "en-US-Neural2-J", "rate": 0.9, "project": "gen-lang-client-0088393168"}}
         if self.path.exists():
             self.values.update(json.loads(self.path.read_text(encoding="utf-8")))
+        if os.getenv("HOMESCHOOLING_DRIVE_FOLDER"):
+            self.values["drive_folder"] = os.environ["HOMESCHOOLING_DRIVE_FOLDER"]
+        elif not self.values.get("drive_folder"):
+            found = next((c for c in DRIVE_FOLDER_CANDIDATES if Path(c).is_dir()), None)
+            if found:
+                self.values["drive_folder"] = found
 
     def get(self, key, default=None):
         return self.values.get(key, default)
@@ -71,9 +83,13 @@ class HostConfig:
         return self.dir / "secrets"
 
     @property
-    def store_dir(self) -> Path:
-        return self.dir / "store"
+    def database_path(self) -> Path:
+        return self.dir / "homeschooling.sqlite3"
 
     @property
     def cache_dir(self) -> Path:
         return self.dir / "cache"
+
+    @property
+    def backup_dir(self) -> Path:
+        return self.dir / "backups"

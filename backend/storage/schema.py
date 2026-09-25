@@ -1,8 +1,9 @@
-"""Tabs of the Homeschooling Database workbook.
+"""Tables of the Homeschooling database (SQLite on the home server).
 
-Every tab starts with ``id``, ``revision`` and ``updated_at``. Values are held
-in memory as Python types and written to Sheets as plain text so that a parent
-can read the workbook and so that round trips are exact.
+Every table starts with ``id``, ``revision`` and ``updated_at``. Values are held
+in memory as Python types. Files (books, handwriting, audio, photos) live in the
+synced Google Drive folder; tables store their paths relative to that folder.
+``tab`` is the readable name used for the daily Excel copy.
 """
 from __future__ import annotations
 
@@ -12,7 +13,6 @@ from datetime import date, datetime, timezone
 
 SCHEMA_VERSION = 1
 SYSTEM_COLUMNS = ("id", "revision", "updated_at")
-MAX_INLINE_JSON = 40_000  # Sheets cells hold 50,000 characters; keep headroom.
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ TABLES: dict[str, Table] = {t.name: t for t in [
     }, foreign_keys=(ForeignKey("child_id", "children"),), required=("child_id", "name"),
         defaults={"weight": 1.0, "slot_type": "A"}),
     _t("documents", "Documents", {
-        "drive_file_id": "str", "original_filename": "str", "size_bytes": "int", "page_count": "int",
+        "file_path": "str", "original_filename": "str", "size_bytes": "int", "page_count": "int",
         "sha256": "str", "status": "str", "source": "str", "legacy_blob_path": "str", "created_at": "datetime",
     }, required=("original_filename", "page_count"), defaults={"status": "ready"}),
     _t("topics", "Topics", {
@@ -89,12 +89,12 @@ TABLES: dict[str, Table] = {t.name: t for t in [
         required=("parent_topic_id", "insert_topic_id"), defaults={"position": 0}),
     _t("enrichment", "Enrichment", {
         "topic_id": "int", "page_start": "int", "page_end": "int", "content_type": "str",
-        "content_file_id": "str", "content_sha256": "str", "created_at": "datetime",
+        "content_path": "str", "content_sha256": "str", "created_at": "datetime",
     }, foreign_keys=(ForeignKey("topic_id", "topics"),), required=("topic_id", "content_type"),
         unique=(("topic_id", "page_start", "page_end", "content_type"),)),
     _t("settings", "Settings", {"value": "str"}, id_type="str"),
     _t("annotations", "Annotation References", {
-        "child_id": "int", "document_id": "int", "page_number": "int", "file_id": "str", "sha256": "str",
+        "child_id": "int", "document_id": "int", "page_number": "int", "file_path": "str", "sha256": "str",
         "stroke_count": "int", "created_at": "datetime",
     }, foreign_keys=(ForeignKey("child_id", "children"), ForeignKey("document_id", "documents")),
         required=("child_id", "document_id", "page_number"), unique=(("child_id", "document_id", "page_number"),)),
@@ -125,7 +125,7 @@ TABLES: dict[str, Table] = {t.name: t for t in [
         "session_id": "str", "child_id": "int", "topic_id": "int", "chapter": "int", "question_ref": "str",
         "question_text": "str", "first_answer": "str", "reading_certainty": "str", "first_result": "str",
         "help_given": "str", "revised_answer": "str", "after_help_result": "str", "independence": "str",
-        "recheck_date": "date", "evidence_file_ids": "json", "source_note": "str", "tutor_created": "bool",
+        "recheck_date": "date", "evidence_paths": "json", "source_note": "str", "tutor_created": "bool",
         "amends_attempt_id": "str", "created_at": "datetime",
     }, id_type="str", foreign_keys=(ForeignKey("session_id", "tutor_sessions", "restrict"),
                                     ForeignKey("child_id", "children"), ForeignKey("topic_id", "topics", "restrict")),
@@ -151,13 +151,13 @@ TABLES: dict[str, Table] = {t.name: t for t in [
     _t("passages", "Passages", {
         "topic_id": "int", "document_id": "int", "document_sha256": "str", "pdf_start": "int", "pdf_end": "int",
         "start_at": "str", "stop_before": "str", "extraction_version": "str", "status": "str",
-        "passage_file_id": "str", "passage_sha256": "str", "sentence_count": "int", "character_count": "int",
+        "passage_path": "str", "passage_sha256": "str", "sentence_count": "int", "character_count": "int",
         "review_notes": "str", "reviewed_at": "datetime", "source": "str",
     }, id_type="str", foreign_keys=(ForeignKey("topic_id", "topics"), ForeignKey("document_id", "documents")),
         required=("topic_id", "document_id", "status")),
     _t("audio_tracks", "Audio", {
         "topic_id": "int", "passage_sha256": "str", "provider": "str", "voice": "str", "speaking_rate": "float",
-        "manifest_file_id": "str", "status": "str", "characters": "int", "sentence_count": "int",
+        "manifest_path": "str", "status": "str", "characters": "int", "sentence_count": "int",
         "timing": "str", "note": "str", "created_at": "datetime",
     }, id_type="str", foreign_keys=(ForeignKey("topic_id", "topics"),), required=("topic_id", "provider", "status")),
     _t("question_maps", "Question Map", {
@@ -171,17 +171,15 @@ TABLES: dict[str, Table] = {t.name: t for t in [
     }, id_type="str", teacher_only=True, foreign_keys=(ForeignKey("subject_id", "subjects"),),
         required=("subject_id", "chapter", "question_start", "question_end")),
     _t("evidence_files", "Student Work", {
-        "child_id": "int", "session_id": "str", "file_id": "str", "sha256": "str", "filename": "str",
+        "child_id": "int", "session_id": "str", "file_path": "str", "sha256": "str", "filename": "str",
         "mime_type": "str", "note": "str", "created_at": "datetime",
     }, id_type="str", foreign_keys=(ForeignKey("child_id", "children"), ForeignKey("session_id", "tutor_sessions", nullable=True)),
-        required=("child_id", "file_id")),
+        required=("child_id", "file_path")),
     _t("operation_receipts", "Operation Receipts", {
         "payload_sha256": "str", "kind": "str", "device": "str", "summary": "str", "created_at": "datetime",
     }, id_type="str"),
 ]}
 
-OVERVIEW_TAB = "Overview"
-META_TAB = "_meta"
 
 
 # ── Value conversion ─────────────────────────────────────────────────────────
@@ -243,10 +241,7 @@ def to_cell(kind: str, value) -> str:
     if kind == "date":
         return value.isoformat()
     if kind == "json":
-        text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        if len(text) > MAX_INLINE_JSON:
-            raise ValueError("JSON value is too large for a sheet cell; store it as a Drive file")
-        return text
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     if kind == "float":
         return repr(float(value))
     return str(value)

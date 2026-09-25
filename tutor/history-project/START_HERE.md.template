@@ -1,6 +1,6 @@
 # Lucas's history tutor
 
-Say "Start today's lesson". The tutor calls the Homeschooling MCP tools (learner {child_id}, subject {subject_id}), resumes any unfinished lesson, opens the app's reader and records progress in the Homeschooling Database workbook in Google Drive.
+Say "Start today's lesson". The tutor calls the Homeschooling MCP tools (learner {child_id}, subject {subject_id}), resumes any unfinished lesson, opens the app's reader and records progress in the Homeschooling database on the home server.
 
 The home server must be running on the family computer (`Start Homeschooling.cmd`). If the tutor cannot reach it, start it there; nothing needs to be installed in this folder.
 

@@ -1,18 +1,71 @@
 """Shared pieces for the one-time migration tools.
 
-Imports are staged: they write through the same store (and the same Sheets
-verification) as the app, with deterministic operation IDs, so re-running a
+Imports are staged: they write through the same store as the app, each batch
+in one SQLite transaction with a deterministic operation ID, so re-running a
 step after an interruption never duplicates rows. Conflicting evidence is
 reported, never overwritten.
+
+A dry run works on a copy of the database and a scratch folder: files the
+import would add to the Drive folder go to a temporary directory instead, so
+neither the database nor Google Drive changes.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from storage import DuplicateOperation
+from storage import DriveFolder, DuplicateOperation, FileUnavailable, Store
+from storage.files import APP_FOLDERS, OutsideBoundary, safe_name, sha256_bytes
+
+
+class ScratchFolder(DriveFolder):
+    """The real Drive folder for reading; new files go to a temporary directory."""
+
+    def __init__(self, root, scratch: Path):
+        super().__init__(root)
+        self.scratch = Path(scratch)
+        self.written: dict[str, Path] = {}
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def require(self):
+        if self.root is None or not self.root.is_dir():
+            raise FileUnavailable("The Homeschooling Drive folder is not available on this computer")
+
+    def write_new(self, folder: str, name: str, data: bytes) -> tuple[str, str, bool]:
+        if folder not in APP_FOLDERS:
+            raise OutsideBoundary(f"Unknown app folder {folder}")
+        relative = f"{folder}/{safe_name(name)}"
+        path = self.scratch / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        self.written[relative] = path
+        return relative, sha256_bytes(data), False
+
+    def read(self, relative: str, sha256: str | None = None) -> bytes:
+        if relative in self.written:
+            return self.written[relative].read_bytes()
+        return super().read(relative, sha256)
+
+
+def dry_run_store(context) -> Store:
+    """A throwaway copy of the live database whose file writes go to a scratch folder."""
+    scratch = Path(tempfile.mkdtemp(prefix="homeschooling-dry-run-"))
+    database = scratch / "dry-run.sqlite3"
+    if Path(context.config.database_path).exists():
+        source = sqlite3.connect(context.config.database_path)
+        target = sqlite3.connect(database)
+        with target:
+            source.backup(target)
+        source.close()
+        target.close()
+    return Store(database, ScratchFolder(context.files.root, scratch / "files")).load()
 
 
 def sha256_file(path: Path) -> str:

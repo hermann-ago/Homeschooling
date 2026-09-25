@@ -17,17 +17,21 @@ class Harness:
         from app_context import AppContext
         from config import HostConfig
         from main import create_app
-        from storage import FakeDrive, FakeSheets
-        from storage.workbook import bootstrap
-
-        self.sheets = FakeSheets()
-        bootstrap(self.sheets)
-        self.drive = FakeDrive()
+        self.drive = tmp_path / "Drive" / "Homeschooling"
+        self.drive.mkdir(parents=True)
         self.config = HostConfig(tmp_path / "host")
-        self.ctx = AppContext(self.config, sheets=self.sheets, drive=self.drive, start_worker=False)
+        self.config.update(drive_folder=str(self.drive))
+        self.ctx = AppContext(self.config, start_worker=False)
         self.app = create_app(self.ctx)
         self.client = TestClient(self.app)
         self.tokens = {role: self.ctx.devices.issue(f"test {role}", role) for role in ("parent", "learner", "tutor")}
+
+    def add_file(self, data: bytes, relative: str) -> str:
+        """Put a file into the test Drive folder, as Drive for desktop would."""
+        path = self.drive / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return relative
 
     def headers(self, role="parent", key=None):
         headers = {"Authorization": f"Bearer {self.tokens[role]}"}
@@ -39,11 +43,11 @@ class Harness:
         return self.client.request(method, path, headers=self.headers(role, key), **kwargs)
 
     def restart(self):
-        """Simulate a server restart with the same local data and workbook."""
+        """Simulate a server restart with the same database and Drive folder."""
         from app_context import AppContext
         from main import create_app
         from fastapi.testclient import TestClient
-        self.ctx = AppContext(self.config, sheets=self.sheets, drive=self.drive, start_worker=False)
+        self.ctx = AppContext(self.config, start_worker=False)
         self.app = create_app(self.ctx)
         self.client = TestClient(self.app)
 

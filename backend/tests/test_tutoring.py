@@ -18,12 +18,12 @@ PAGES = [
 
 def seed_history(harness):
     pdf = make_pdf(PAGES)
-    drive_id = harness.drive.add_file(pdf, "Story of the World V.2.pdf", file_id="bookFileId0001")
+    book_path = harness.add_file(pdf, "Books/Story of the World V.2.pdf")
     store = harness.ctx.store
     with store.transaction() as tx:
         lucas = tx.insert("children", {"name": "Lucas"})
         history = tx.insert("subjects", {"child_id": lucas["id"], "name": "History"})
-        book = tx.insert("documents", {"drive_file_id": drive_id, "original_filename": "Story of the World V.2.pdf",
+        book = tx.insert("documents", {"file_path": book_path, "original_filename": "Story of the World V.2.pdf",
                                        "size_bytes": len(pdf), "page_count": 3,
                                        "sha256": hashlib.sha256(pdf).hexdigest(), "source": "drive"})
         rabbi = tx.insert("topics", {"subject_id": history["id"], "title": "The Clever Rabbi of Cordova",
@@ -56,7 +56,6 @@ def seed_history(harness):
                                   "status": "open", "next_prompt": "What did the man who spoke up do next?",
                                   "observations": [{"prompt": "What did he do with the tribes?",
                                                     "first_response": "he made all of them join together"}]})
-    store.flush()
     return {"lucas": lucas, "history": history, "genghis": genghis, "conquest": conquest, "rabbi": rabbi,
             "book": book}
 

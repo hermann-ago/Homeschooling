@@ -3,8 +3,9 @@
     python -m migration.import_history --source "G:\\My Drive\\Casa, Família e Vida Prática\\Homeschooling\\Lucas - History" [--dry-run]
 
 The source folder is only read; nothing in it is changed (the originals stay
-until migration is verified). Books, evidence photos and audio already live
-beneath the Homeschooling Drive folder and are referenced by Drive file ID.
+until migration is verified). The textbook, the tests, evidence photos and
+audio are copied into the app's Drive folders (Books, Student Work, Audio), so
+the History folder can be archived later without breaking any record.
 
 * Topics are merged by source document and passage (page range), never by
   title alone. Ambiguous matches are reported, not overwritten.
@@ -24,7 +25,6 @@ import hashlib
 import json
 import re
 import sqlite3
-import tempfile
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
@@ -33,9 +33,6 @@ from tutoring.service import RESULTS
 
 from .common import Report, sha256_file, staged
 
-TEXTBOOK_FILE_ID = "1jX_ifE9DFGivsDeXCdOm8i5EsqgTiP_T"
-TESTS_FILE_ID = "1uADWREJP5bZoNeDxE0599TQIfXKCzpzo"
-HISTORY_FOLDER_ID = "1IBtNKH42GAuLZh4koZunwt_epRR5kXcH"
 RECOVERED_DATE = date(2026, 9, 24)
 HEADERS = {"Topic ID": "topics", "Chapter": "chapters", "Session ID": "sessions", "Answer ID": "answers",
            "Review ID": "reviews"}
@@ -105,30 +102,18 @@ def read_tracker(path: Path) -> dict:
     return {"profile": profile, **tables}
 
 
-class DriveIndex:
-    """Relative path (inside the History folder) → Drive file ID."""
+MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".heic": "image/heic",
+        ".pdf": "application/pdf", ".mp3": "audio/mpeg", ".wav": "audio/wav"}
 
-    def __init__(self, mapping: dict[str, str]):
-        self.mapping = {k.replace("\\", "/"): v for k, v in mapping.items()}
 
-    @classmethod
-    def from_drive(cls, drive, folder_id: str = HISTORY_FOLDER_ID, wanted_prefixes=("evidence", "assets")):
-        mapping = {}
-
-        def walk(folder, prefix):
-            for item in drive.list_children(folder):
-                path = f"{prefix}{item['name']}"
-                if item["mimeType"] == "application/vnd.google-apps.folder":
-                    if not prefix and item["name"] not in wanted_prefixes:
-                        continue
-                    walk(item["id"], path + "/")
-                else:
-                    mapping[path] = item["id"]
-        walk(folder_id, "")
-        return cls(mapping)
-
-    def resolve(self, relative: str) -> str | None:
-        return self.mapping.get(relative.strip().replace("\\", "/"))
+def copy_source_file(tx, source: Path, relative: str, folder: str, prefix: str = "") -> tuple[str, str] | None:
+    """Copy one file from the History folder into an app folder; None when it is missing."""
+    relative = relative.strip().replace("\\", "/")
+    path = (source / relative).resolve()
+    if source.resolve() not in path.parents or not path.is_file():
+        return None
+    return tx.add_blob(path.read_bytes(), folder, f"{prefix}{path.name}",
+                       MIME.get(path.suffix.lower(), "application/octet-stream"))
 
 
 def legacy_passage_hash(voice: str, rate: float, passage: str) -> str:
@@ -138,9 +123,7 @@ def legacy_passage_hash(voice: str, rate: float, passage: str) -> str:
 
 # ── import ───────────────────────────────────────────────────────────────────
 
-def import_history(store, source: Path, drive_index: DriveIndex, report: Report, *,
-                   textbook_file_id: str = TEXTBOOK_FILE_ID, tests_file_id: str = TESTS_FILE_ID,
-                   create_unmatched: bool = False) -> Report:
+def import_history(store, source: Path, report: Report, *, create_unmatched: bool = False) -> Report:
     source = Path(source)
     config = json.loads((source / "tutor.json").read_text(encoding="utf-8"))
     curriculum = json.loads((source / "subject" / "curriculum.json").read_text(encoding="utf-8"))
@@ -179,15 +162,18 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
         subject = subjects[0] if subjects else tx.insert("subjects", {"child_id": child["id"],
                                                                       "name": config.get("subject", "History")})
         docs = {}
-        for key, file_id, sha, path in (("textbook", textbook_file_id, textbook_sha, textbook_path),
-                                        ("tests", tests_file_id, tests_sha, tests_path)):
-            existing = next((d for d in tx.all("documents") if d["drive_file_id"] == file_id or d["sha256"] == sha), None)
-            if existing and existing["sha256"] not in (None, sha):
-                report.conflict("book_checksum", f"{path.name} differs from the linked document {existing['id']}")
-            docs[key] = existing or tx.insert("documents", {
-                "drive_file_id": file_id, "original_filename": path.name if path.suffix else path.name + ".pdf",
-                "size_bytes": path.stat().st_size, "page_count": len(PdfReader(path).pages), "sha256": sha,
-                "source": "drive"})
+        for key, sha, path in (("textbook", textbook_sha, textbook_path), ("tests", tests_sha, tests_path)):
+            existing = next((d for d in tx.all("documents") if d["sha256"] == sha), None)
+            if existing:
+                docs[key] = existing
+                continue
+            name = path.name if path.suffix.lower() == ".pdf" else path.name + ".pdf"
+            relative, copied = tx.add_blob(path.read_bytes(), "Books", name, "application/pdf")
+            if copied != sha:
+                report.conflict("book_checksum", f"{path.name} changed while it was being copied")
+            docs[key] = tx.insert("documents", {
+                "file_path": relative, "original_filename": name, "size_bytes": path.stat().st_size,
+                "page_count": len(PdfReader(path).pages), "sha256": sha, "source": "history"})
         ids.update(child=child["id"], subject=subject["id"], textbook=docs["textbook"]["id"], tests=docs["tests"]["id"])
     staged(store, "import-history-setup", "History learner, subject and books", setup, report)
     if not ids:  # resumed run: look the records up again
@@ -379,15 +365,17 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
                 photo = photo.strip()
                 if not photo:
                     continue
-                file_id = drive_index.resolve(photo)
-                if not file_id:
-                    report.conflict("evidence_missing", f"Photo {photo} was not found in Drive")
+                copied = copy_source_file(tx, source, photo, "Student Work", f"{_text(row['Session ID'])}-")
+                if not copied:
+                    report.conflict("evidence_missing", f"Photo {photo} was not found in the History folder")
                     continue
-                photo_ids[photo] = file_id
+                photo_ids[photo] = copied[0]
                 tx.insert("evidence_files", {"id": f"{_text(row['Session ID'])}-{Path(photo).name}",
                                              "child_id": ids["child"], "session_id": _text(row["Session ID"]),
-                                             "file_id": file_id, "filename": Path(photo).name,
-                                             "mime_type": "image/jpeg", "note": f"Migrated from {photo}"})
+                                             "file_path": copied[0], "sha256": copied[1],
+                                             "filename": Path(photo).name,
+                                             "mime_type": MIME.get(Path(photo).suffix.lower(), "image/jpeg"),
+                                             "note": f"Migrated from {photo}"})
         imported_sessions = {s["id"] for s in tx.all("tutor_sessions")}
         for row in tracker.get("answers", []):
             if not known("Answer ID", row, _text(row.get("Topic ID"))) or \
@@ -411,7 +399,7 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
                 "help_given": help_given, "revised_answer": revised, "after_help_result": after,
                 "independence": "with_help" if assisted else ("independent" if result == "Correct" else "not_assessed"),
                 "recheck_date": _date(row.get("Recheck date")),
-                "evidence_file_ids": [photo_ids[photo]] if photo in photo_ids else None,
+                "evidence_paths": [photo_ids[photo]] if photo in photo_ids else None,
                 "source_note": _text(row.get("Source / key / tutor note"))})
         for row in tracker.get("reviews", []):
             if not _text(row.get("Review ID")) or not known("Review ID", row, _text(row.get("Topic ID"))):
@@ -526,13 +514,14 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
                 continue
             tracks, missing = [], []
             for track in manifest["tracks"]:
-                file_id = drive_index.resolve(track["src"])
-                if not file_id:
+                copied = copy_source_file(tx, source, track["src"], "Audio")
+                if not copied:
                     missing.append(track["src"])
-                tracks.append({"file_id": file_id, "startSentence": track["startSentence"],
+                    continue
+                tracks.append({"path": copied[0], "sha256": copied[1], "startSentence": track["startSentence"],
                                "sentenceStarts": track["sentenceStarts"]})
             if missing:
-                report.conflict("audio_missing", f"{path.name}: tracks missing in Drive: {missing}")
+                report.conflict("audio_missing", f"{path.name}: tracks missing in the History folder: {missing}")
                 continue
             synchronized = bool(match) and manifest["sentenceCount"] == len(verified[match]["sentences"])
             new_manifest = {"version": 2, "migratedFrom": path.name, "provider": manifest["provider"],
@@ -541,12 +530,12 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
                             "passageHash": passages.passage_sha256(verified[match]["passage"]) if synchronized
                             else f"legacy:{manifest['passageHash']}",
                             "generatedAt": manifest.get("generatedAt"), "tracks": tracks}
-            manifest_id, _ = tx.add_blob(json.dumps(new_manifest).encode(), "Audio",
-                                         f"migrated-{path.name}", "application/json")
+            manifest_path, _ = tx.add_blob(json.dumps(new_manifest).encode(), "Audio",
+                                           f"migrated-{path.name}", "application/json")
             tx.insert("audio_tracks", {
                 "id": f"history:{path.stem}", "topic_id": topic_ids[key], "provider": "google-neural2",
                 "voice": manifest["voice"], "speaking_rate": manifest["speakingRate"],
-                "passage_sha256": new_manifest["passageHash"], "manifest_file_id": manifest_id,
+                "passage_sha256": new_manifest["passageHash"], "manifest_path": manifest_path,
                 "status": "ready" if synchronized else "legacy", "characters": manifest.get("characterCount"),
                 "sentence_count": manifest["sentenceCount"],
                 "timing": "provider-timepoints (migrated)" if synchronized else None,
@@ -554,16 +543,17 @@ def import_history(store, source: Path, drive_index: DriveIndex, report: Report,
                                                   "highlighting"})
         eleven = sorted(reading.glob("robin-hood-elevenlabs-part-*.mp3")) if reading.exists() else []
         if eleven:
-            parts = [{"file_id": drive_index.resolve(f"assets/reading/{p.name}"), "mime": "audio/mpeg"} for p in eleven]
-            if any(not p["file_id"] for p in parts):
-                report.conflict("audio_missing", "ElevenLabs Robin Hood parts are missing in Drive")
-            else:
-                manifest_id, _ = tx.add_blob(json.dumps({"version": 2, "provider": "ElevenLabs", "tracks": parts,
+            parts = []
+            for part in eleven:
+                path, sha = copy_source_file(tx, source, f"assets/reading/{part.name}", "Audio")
+                parts.append({"path": path, "sha256": sha, "mime": "audio/mpeg"})
+            if parts:
+                manifest_path, _ = tx.add_blob(json.dumps({"version": 2, "provider": "ElevenLabs", "tracks": parts,
                                                          "note": "Preserved legacy audio; never regenerate"}).encode(),
                                              "Audio", "migrated-robin-hood-elevenlabs-manifest.json", "application/json")
                 tx.insert("audio_tracks", {
                     "id": "history:robin-hood-elevenlabs", "topic_id": topic_ids["C19-T03"], "provider": "elevenlabs",
-                    "voice": "ElevenLabs (Robin Hood)", "manifest_file_id": manifest_id, "status": "legacy",
+                    "voice": "ElevenLabs (Robin Hood)", "manifest_path": manifest_path, "status": "legacy",
                     "note": "Preserved legacy ElevenLabs audio without verified timings; never regenerated"})
         previews = list(reading.glob("gemini-*.wav")) if reading.exists() else []
         if previews:
@@ -587,26 +577,16 @@ def _topic_from_label(label: str) -> str | None:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--source", required=True, type=Path, help="The Lucas - History folder (read only)")
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="Import into a throwaway copy; change nothing")
     parser.add_argument("--create-unmatched", action="store_true")
     args = parser.parse_args(argv)
     report = Report("import-history" + ("-dry-run" if args.dry_run else ""))
     from app_context import AppContext
+    from .common import dry_run_store
     context = AppContext(start_worker=False)
-    if context.drive is None:
-        raise SystemExit("Connect Google on the host first; evidence and audio are referenced by Drive file ID")
-    index = DriveIndex.from_drive(context.drive)
-    if args.dry_run:
-        import copy
-        from storage import Store
-        store = Store(Path(tempfile.mkdtemp()) / "dry-run").load()
-        store._base = copy.deepcopy(context.store._base)
-        store._rebuild()
-    else:
-        store = context.store
-    import_history(store, args.source, index, report, create_unmatched=args.create_unmatched)
-    if not args.dry_run:
-        report.notes.append(f"Sync after import: {store.flush(max_ops=100_000)['state']}")
+    context.files.require()
+    store = dry_run_store(context) if args.dry_run else context.store
+    import_history(store, args.source, report, create_unmatched=args.create_unmatched)
     path = report.write(context.config.dir / "migration-reports")
     print(json.dumps(report.as_dict(), indent=2, default=str)[:4000])
     print(f"Report: {path}")

@@ -27,7 +27,7 @@ export const subjectsApi = {
     form.append('file', file, file.name);
     return fetchApi(`/subjects/${subjectId}/documents`, { method: 'POST', body: form });
   },
-  linkDriveBook: (subjectId, driveFileId) => fetchApi(`/subjects/${subjectId}/documents/from-drive`, {
-    method: 'POST', body: JSON.stringify({ drive_file_id: driveFileId }),
+  linkDriveBook: (subjectId, path) => fetchApi(`/subjects/${subjectId}/documents/from-drive`, {
+    method: 'POST', body: JSON.stringify({ path }),
   }),
 };

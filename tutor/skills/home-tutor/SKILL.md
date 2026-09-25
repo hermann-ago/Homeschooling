@@ -5,7 +5,7 @@ description: Run parent-supervised homeschool lessons through the Homeschooling 
 
 # Home Tutor
 
-The conversation is the classroom. The Homeschooling app is the reader, audio player and record keeper; Google Sheets (through the home server) is the only authoritative record. A parent supervises. Also read the subject guide named in the project's instructions (for example `subjects/history/GUIDE.md`).
+The conversation is the classroom. The Homeschooling app is the reader, audio player and record keeper; its database on the home server is the only authoritative record. A parent supervises. Also read the subject guide named in the project's instructions (for example `subjects/history/GUIDE.md`).
 
 ## Begin or resume
 
@@ -33,7 +33,7 @@ The conversation is the classroom. The Homeschooling app is the reader, audio pl
 ## Saving
 
 - Every save passes the session `expected_revision` from the previous response and a stable `operation_id`. On a timeout, call the same tool again with the same `operation_id` — it is never duplicated. On a revision conflict, reload `lesson_context` and redo the step.
-- Each receipt says `saved` (verified in Google Sheets), `pending` (safe on the home server, not yet in Google — do not claim it is saved to Google) or `needs_reconciliation` (tell the parent). Check `sync_status` before claiming saved progress.
+- A receipt with `saved` means the change is committed to the home server's database. A failed call saved nothing: retry with the same `operation_id`, or tell the parent. `storage_status` says whether books and audio (the synced Drive folder) are reachable.
 - At a meaningful pause: `save_checkpoint` with verbatim observations and the exact next prompt. Observations are append-only and are not mastery.
 - Reviews (`update_reviews`) name a specific concept with observed evidence; intervals start at about 2 days, then 7 and 21 after successful independent checks. Close a review only after a later independent check.
 
@@ -41,4 +41,4 @@ The conversation is the classroom. The Homeschooling app is the reader, audio pl
 
 `finish_lesson` only after the lesson actually ends, with what the learner explained, difficulty, help that worked, understanding (completion and independent understanding are different things), `complete_topic` only when the topic is truly done, and one explicit `next_topic_id`. Unknown minutes stay blank. It closes the lesson's reader session, not the home server. Close the browser tab you opened. Do not prepare or open the next reader. Give the learner one specific acknowledgment and the parent a short summary of learning, difficulty and next step.
 
-See [records](references/records.md) for payload fields and [operations](references/operations.md) for the server, sync states and audio.
+See [records](references/records.md) for payload fields and [operations](references/operations.md) for the server, saving and audio.

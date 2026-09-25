@@ -1,4 +1,4 @@
-"""Shared helpers for routes backed by the Sheets store."""
+"""Shared helpers for routes backed by the store."""
 from __future__ import annotations
 
 from fastapi import HTTPException

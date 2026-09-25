@@ -9,46 +9,47 @@ from tests.test_tutoring import seed_history
 REPO = Path(__file__).resolve().parents[2]
 
 
-def test_cached_reading_and_pending_work_survive_an_outage(harness):
+def test_reading_and_work_continue_without_internet(harness):
+    """The server needs no internet: the database is local and Drive files are on disk."""
     s = seed_history(harness)
     started = harness.call("POST", "/api/tutor/sessions/start", role="tutor", key="outage-start",
                            json={"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"]}).json()
     params = {"learner": s["lucas"]["id"], "topic": s["genghis"]["id"], "session": started["session_id"]}
-    # Review the passage so the reader serves the verified copy stored in Drive.
     draft = harness.call("GET", "/api/tutor/context", role="tutor", params={
         "child_id": s["lucas"]["id"], "subject_id": s["history"]["id"], "phase": "reading"}).json()["reading"]
     harness.call("POST", f"/api/tutor/passages/{s['genghis']['id']}/review", role="tutor", json={
         "reviewed_pdf_pages": [2, 3], "notes": "Checked both pages", "passage_sha256": draft["passage_sha256"]})
-    harness.call("POST", "/api/sync/now")
     first = harness.call("GET", "/api/tutor/reader", role="learner", params=params).json()
     assert first["passage"]["status"] == "verified"
-    pdf = harness.call("GET", f"/api/documents/{s['book']['id']}/content", role="learner")
-    # The internet goes down: Drive and Sheets are both unreachable.
-    harness.drive.faults.extend(["offline"] * 20)
-    harness.sheets.fail_next(*["offline"] * 3)
-    assert harness.call("GET", "/api/tutor/reader", role="learner", params=params).json()["passage"] == first["passage"]
-    assert harness.call("GET", f"/api/documents/{s['book']['id']}/content", role="learner").content == pdf.content
-    path = f"/api/annotations/children/{s['lucas']['id']}/documents/{s['book']['id']}/pages/2"
-    stroke = {"id": str(uuid4()), "color": "#111827", "width": 0.004, "points": [[0.1, 0.1], [0.2, 0.2]]}
-    saved = harness.call("PUT", path, role="learner", key="offline-ink", json={"base_revision": 0, "strokes": [stroke]})
-    assert saved.status_code == 200 and saved.headers["x-sync-state"] == "pending"
-    checkpoint = harness.call("POST", f"/api/tutor/sessions/{started['session_id']}/checkpoint", role="tutor",
-                              key="offline-cp", json={
-                                  "expected_revision": started["revision"], "phase": "discussion",
-                                  "next_prompt": "What did the man who spoke up do next?",
-                                  "observations": [{"prompt": "What did he do with the tribes?",
-                                                    "first_response": "he made all of them join together"}]})
-    assert checkpoint.headers["x-sync-state"] == "pending"
-    harness.restart()  # the host restarts before the internet returns
-    harness.drive.faults.clear()
-    harness.sheets.faults.clear()
-    harness.call("POST", "/api/sync/now")
-    harness.call("POST", "/api/sync/now")
+    import socket
+    real_connect = socket.socket.connect
+
+    def offline(*args, **kwargs):
+        raise OSError("network is down")
+    socket.socket.connect = offline
+    try:
+        assert harness.call("GET", "/api/tutor/reader", role="learner", params=params).json()["passage"] == first["passage"]
+        assert harness.call("GET", f"/api/documents/{s['book']['id']}/content", role="learner").status_code == 200
+        path = f"/api/annotations/children/{s['lucas']['id']}/documents/{s['book']['id']}/pages/2"
+        stroke = {"id": str(uuid4()), "color": "#111827", "width": 0.004, "points": [[0.1, 0.1], [0.2, 0.2]]}
+        saved = harness.call("PUT", path, role="learner", key="offline-ink",
+                             json={"base_revision": 0, "strokes": [stroke]})
+        assert saved.status_code == 200 and saved.headers["x-sync-state"] == "saved"
+        checkpoint = harness.call("POST", f"/api/tutor/sessions/{started['session_id']}/checkpoint", role="tutor",
+                                  key="offline-cp", json={
+                                      "expected_revision": started["revision"], "phase": "discussion",
+                                      "next_prompt": "What did the man who spoke up do next?",
+                                      "observations": [{"prompt": "What did he do with the tribes?",
+                                                        "first_response": "he made all of them join together"}]})
+        assert checkpoint.headers["x-sync-state"] == "saved"
+    finally:
+        socket.socket.connect = real_connect
+    harness.restart()
     for operation in ("offline-ink", "offline-cp"):
         assert harness.call("GET", f"/api/sync/operations/{operation}").json()["state"] == "saved"
-    receipts = [r[0] for r in harness.sheets.rows("Operation Receipts")[1:]]
+    receipts = [r["id"] for r in harness.ctx.store.all("operation_receipts")]
     assert receipts.count("offline-ink") == 1 and receipts.count("offline-cp") == 1
-    assert len(harness.sheets.rows("Annotation References")) == 2
+    assert len(harness.ctx.store.all("annotations")) == 1
 
 
 def test_runtime_has_no_vercel_or_supabase_dependencies():
@@ -87,13 +88,13 @@ def test_complete_lesson_without_hosted_configuration(harness):
                                 "understanding": "With help", "complete_topic": True})
     assert finish.status_code == 200 and finish.headers["x-sync-state"] == "saved"
     assert harness.ctx.store.get("topics", s["genghis"]["id"])["understanding"] == "With help"
-    assert harness.call("GET", "/api/sync/status").json()["state"] == "saved"
+    assert harness.call("GET", "/api/storage/status").json()["state"] == "saved"
 
 
-def test_drive_only_files_are_cached_for_offline_use_across_restarts(harness):
-    file_id = harness.drive.add_file(b'{"version": 2, "tracks": []}', "manifest.json", folder="Audio",
-                                     mime_type="application/json")
-    assert harness.ctx.file_bytes(file_id) == b'{"version": 2, "tracks": []}'
+def test_missing_drive_folder_is_reported_not_fatal(harness, tmp_path):
+    harness.config.update(drive_folder=str(tmp_path / "unplugged"))
     harness.restart()
-    harness.drive.faults.extend(["offline"] * 5)
-    assert harness.ctx.file_bytes(file_id) == b'{"version": 2, "tracks": []}'
+    status = harness.call("GET", "/api/storage/status").json()
+    assert status["drive_folder_available"] is False
+    assert harness.call("GET", "/api/children").status_code == 200  # the database still works
+    assert harness.call("GET", "/api/documents/drive/books").status_code == 503

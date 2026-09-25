@@ -1,7 +1,7 @@
 import json
 
 from security.network import allowed_host, is_private
-from storage import PENDING, SAVED
+from storage import SAVED
 
 
 def test_pairing_requires_host_approval_and_issues_role_token(harness):
@@ -27,22 +27,20 @@ def test_pairing_requires_host_approval_and_issues_role_token(harness):
 def test_unpaired_and_learner_devices_are_limited(harness):
     assert harness.client.get("/api/children").status_code == 401
     assert harness.call("POST", "/api/children", role="learner", json={"name": "X"}).status_code == 403
-    assert harness.call("POST", "/api/maintenance/begin", role="learner").status_code == 403
+    assert harness.call("POST", "/api/storage/backup", role="learner").status_code == 403
     assert harness.call("GET", "/api/tutor/learners", role="learner").status_code == 403
     assert harness.call("GET", "/api/tutor/learners", role="tutor").status_code == 200
-    assert harness.call("POST", "/api/maintenance/begin", role="tutor").status_code == 403
+    assert harness.call("POST", "/api/storage/backup", role="tutor").status_code == 403
+    assert harness.call("POST", "/api/storage/drive-folder", role="learner", json={"path": "/tmp"}).status_code == 403
 
 
-def test_browsers_never_receive_google_credentials(harness, tmp_path):
-    secrets_dir = harness.config.secrets_dir
-    harness.ctx.auth.save_client({"installed": {"client_id": "abc.apps.googleusercontent.com",
-                                                "client_secret": "desktop-secret"}})
+def test_no_google_credentials_are_needed_or_exposed(harness):
     from security.secrets import write_secret
-    write_secret(secrets_dir / "google-token.bin", json.dumps({"refresh_token": "refresh-secret"}).encode())
-    for path in ("/api/google/status", "/api/sync/status", "/api/session", "/api/devices"):
+    write_secret(harness.config.secrets_dir / "tutor-agent.bin", b"agent-secret")
+    for path in ("/api/storage/status", "/api/session", "/api/devices"):
         body = harness.call("GET", path).text
-        assert "refresh-secret" not in body and "desktop-secret" not in body
-    assert harness.call("GET", "/api/google/status").json()["connected"] is True
+        assert "agent-secret" not in body and "client_secret" not in body
+    assert not list(harness.config.dir.rglob("google-token*"))
 
 
 def test_private_network_rules():
@@ -73,43 +71,22 @@ def test_retried_request_returns_original_response_without_duplicates(harness):
     assert reused.status_code == 409
 
 
-def test_outage_keeps_work_pending_and_saves_once_after_restart(harness):
-    harness.sheets.fail_next("offline")
-    r = harness.call("POST", "/api/children", key="offline-1", json={"name": "Lucas"})
-    assert r.status_code == 201 and r.headers["x-sync-state"] == PENDING
-    status = harness.call("GET", "/api/sync/status").json()
-    assert status["state"] == PENDING and status["online"] is False
-    harness.sheets.fail_next("offline")
+def test_saved_work_survives_restart_and_replays_once(harness):
+    r = harness.call("POST", "/api/children", key="restart-1", json={"name": "Lucas"})
+    assert r.status_code == 201 and r.headers["x-sync-state"] == SAVED
     harness.restart()
     assert harness.call("GET", "/api/children").json()[0]["name"] == "Lucas"
-    harness.call("POST", "/api/sync/now")
-    assert harness.call("GET", "/api/sync/operations/offline-1").json()["state"] == SAVED
-    assert len(harness.sheets.rows("Children")) == 2  # header + exactly one child
-    replay = harness.call("POST", "/api/children", key="offline-1", json={"name": "Lucas"})
+    assert harness.call("GET", "/api/sync/operations/restart-1").json()["state"] == SAVED
+    replay = harness.call("POST", "/api/children", key="restart-1", json={"name": "Lucas"})
     assert replay.headers["x-sync-state"] == SAVED and len(harness.ctx.store.all("children")) == 1
 
 
-def test_google_authorization_failure_asks_for_reconnect_and_keeps_work(harness):
-    harness.sheets.fail_next("auth")
-    r = harness.call("POST", "/api/children", key="auth-1", json={"name": "Lucas"})
-    assert r.status_code == 201 and r.headers["x-sync-state"] == PENDING
-    status = harness.call("GET", "/api/sync/status").json()
-    assert status["auth_required"] is True and status["pending"] == 1
-    assert harness.call("GET", "/api/google/status").json()["authorization_required"] is True
-    harness.call("POST", "/api/sync/now")  # parent reconnected; the same operation is saved once
-    assert harness.call("GET", "/api/sync/operations/auth-1").json()["state"] == SAVED
-    assert harness.call("GET", "/api/sync/status").json()["auth_required"] is False
-
-
-def test_concurrent_edit_is_a_recoverable_conflict(harness):
-    child = harness.call("POST", "/api/children", json={"name": "Lucas"}).json()
-    harness.ctx.store.flush()
-    harness.sheets.edit_cell("Children", 1, 1, "5")  # edited in Sheets outside maintenance mode
-    r = harness.call("PUT", f"/api/children/{child['id']}", key="edit-1", json={"nickname": "Luke"})
-    assert r.headers["x-sync-state"] == "needs_reconciliation"
-    unsettled = harness.call("GET", "/api/sync/unsettled").json()
-    assert unsettled[0]["id"] == "edit-1" and "edited in Google Sheets" in unsettled[0]["last_error"]
-    retry = harness.call("POST", "/api/sync/reconcile/edit-1/retry").json()
-    assert retry["needs_reconciliation"] == 1  # still conflicting: nothing is overwritten silently
-    harness.call("POST", "/api/sync/reconcile/edit-1/discard")
-    assert harness.call("GET", "/api/sync/status").json()["state"] == SAVED
+def test_parent_can_back_up_and_export_from_settings(harness):
+    harness.call("POST", "/api/children", json={"name": "Lucas"})
+    backup = harness.call("POST", "/api/storage/backup").json()
+    assert backup["counts"]["children"] == 1
+    assert (harness.drive / "Backups" / backup["name"]).exists()
+    export = harness.call("POST", "/api/storage/export").json()
+    assert (harness.drive / export["path"]).exists()
+    status = harness.call("GET", "/api/storage/status").json()
+    assert status["last_backup"] == backup["name"] and status["drive_folder_available"] is True

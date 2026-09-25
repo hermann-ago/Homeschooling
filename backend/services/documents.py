@@ -1,4 +1,4 @@
-"""PDF inspection and document records for books kept in Google Drive."""
+"""PDF inspection and document records for books in the synced Homeschooling folder."""
 from __future__ import annotations
 
 import hashlib
@@ -27,22 +27,21 @@ def find_by_checksum(db, sha256: str) -> dict | None:
 
 
 def add_uploaded_document(tx, data: bytes, filename: str, page_count: int) -> dict:
-    """Keep the bytes locally and queue the Drive upload; reuse an identical book."""
+    """Save the book into Books (Drive for desktop uploads it); reuse an identical book."""
     sha = hashlib.sha256(data).hexdigest()
     existing = find_by_checksum(tx, sha)
     if existing:
         return existing
-    file_id, sha = tx.add_blob(data, "Books", filename, "application/pdf")
-    return tx.insert("documents", {"drive_file_id": file_id, "original_filename": filename, "size_bytes": len(data),
+    path, sha = tx.add_blob(data, "Books", filename, "application/pdf")
+    return tx.insert("documents", {"file_path": path, "original_filename": filename, "size_bytes": len(data),
                                    "page_count": page_count, "sha256": sha, "source": "uploaded"})
 
 
-def add_drive_document(tx, metadata: dict, page_count: int, sha256: str) -> dict:
-    """Reference an existing book beneath the Homeschooling folder by file ID (no copy)."""
-    existing = next((d for d in tx.all("documents") if d["drive_file_id"] == metadata["id"]), None) \
+def add_drive_document(tx, path: str, name: str, size: int, page_count: int, sha256: str) -> dict:
+    """Reference a book already in the Homeschooling folder by its relative path (no copy)."""
+    existing = next((d for d in tx.all("documents") if d["file_path"] == path), None) \
         or find_by_checksum(tx, sha256)
     if existing:
         return existing
-    return tx.insert("documents", {"drive_file_id": metadata["id"], "original_filename": metadata["name"],
-                                   "size_bytes": int(metadata.get("size") or 0), "page_count": page_count,
-                                   "sha256": sha256, "source": "drive"})
+    return tx.insert("documents", {"file_path": path, "original_filename": name, "size_bytes": size,
+                                   "page_count": page_count, "sha256": sha256, "source": "drive"})

@@ -15,8 +15,7 @@ from dependencies import IdempotencyMiddleware, context, set_context
 from routers import annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, \
     system, time_windows, tutor
 from security.network import PrivateNetworkMiddleware
-from storage import DuplicateOperation, RevisionConflict, StoreError
-from storage.gateway import AuthorizationRequired, GoogleUnavailable, OutsideBoundary
+from storage import DuplicateOperation, FileUnavailable, OutsideBoundary, RevisionConflict, StoreError
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -39,12 +38,12 @@ def create_app(app_context=None) -> FastAPI:
         if app_context is None:
             from app_context import AppContext
             set_context(AppContext())
+            context().announce()
         _keep_host_awake(True)
         try:
             yield
         finally:
             _keep_host_awake(False)
-            context().store.flush(max_ops=10_000)
             context().shutdown()
 
     if app_context is not None:
@@ -81,12 +80,8 @@ def create_app(app_context=None) -> FastAPI:
     async def store_error(request: Request, exc: StoreError):
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
-    @app.exception_handler(AuthorizationRequired)
-    async def auth_required(request: Request, exc: AuthorizationRequired):
-        return JSONResponse(status_code=503, content={"detail": str(exc), "reconnect_google": True})
-
-    @app.exception_handler(GoogleUnavailable)
-    async def google_unavailable(request: Request, exc: GoogleUnavailable):
+    @app.exception_handler(FileUnavailable)
+    async def file_unavailable(request: Request, exc: FileUnavailable):
         return JSONResponse(status_code=503, content={"detail": str(exc)})
 
     @app.exception_handler(OutsideBoundary)

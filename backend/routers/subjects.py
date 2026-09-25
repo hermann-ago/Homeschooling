@@ -2,7 +2,7 @@ import hashlib
 from datetime import date, datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -12,7 +12,7 @@ from schemas import AIAnalysisResult, SubjectCreate, SubjectResponse, SubjectUpd
 from services.ai_analyzer import analyze_curriculum
 from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
 from services.documents import MAX_PDF_BYTES, add_drive_document, add_uploaded_document, inspect_pdf
-from storage.gateway import OutsideBoundary
+from storage import FileUnavailable, OutsideBoundary
 from utils import get_or_404
 
 router = APIRouter()
@@ -224,28 +224,29 @@ def _finish_upload(subject_id, data, filename, page_count, analysis):
 
 
 class DriveBookRequest(BaseModel):
-    drive_file_id: str = Field(..., min_length=10, max_length=200, pattern=r"^[A-Za-z0-9_-]+$")
+    path: str = Field(..., min_length=5, max_length=400)
 
 
 @router.post("/{subject_id}/documents/from-drive", response_model=AIAnalysisResult,
              dependencies=[Depends(require_parent)])
 def link_drive_document(subject_id: int, payload: DriveBookRequest):
-    """Use a book already beneath the Homeschooling folder, referenced by Drive file ID."""
+    """Use a book already in the Homeschooling folder, referenced by its relative path."""
     _subject(subject_id)
     ctx = context()
-    if ctx.drive is None:
-        raise HTTPException(status_code=503, detail="Connect Google Drive first")
     try:
-        metadata = ctx.drive.metadata(payload.drive_file_id)
-        data = ctx.drive.download(payload.drive_file_id)
+        data = ctx.files.read(payload.path)
     except OutsideBoundary as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
-    if metadata.get("mimeType") != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
+    except FileUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    name = payload.path.replace("\\", "/").rsplit("/", 1)[-1]
+    try:
+        page_count, toc_text = inspect_pdf(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted") from exc
     sha = hashlib.sha256(data).hexdigest()
-    ctx.store.blobs.put(data)
-    page_count, toc_text = inspect_pdf(data)
     analysis = _analyse(toc_text, page_count)
-    with write("documents.link", f"Linked Drive book {metadata['name']}") as tx:
-        document = add_drive_document(tx, metadata, page_count, sha)
-        return _create_topics(tx, subject_id, document, analysis, metadata["name"])
+    with write("documents.link", f"Linked Drive book {name}") as tx:
+        document = add_drive_document(tx, ctx.files.relative(ctx.files.resolve(payload.path)), name,
+                                      len(data), page_count, sha)
+        return _create_topics(tx, subject_id, document, analysis, name)

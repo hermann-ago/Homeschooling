@@ -137,7 +137,7 @@ def load(ctx, topic: dict) -> dict:
         current = (row["document_sha256"] == document["sha256"] and row["pdf_start"] == pdf_start
                    and row["pdf_end"] == pdf_end and (row["start_at"] or None) == (topic.get("start_at") or None)
                    and (row["stop_before"] or None) == (topic.get("stop_before") or None))
-        content = json.loads(ctx.file_bytes(row["passage_file_id"], None))
+        content = json.loads(ctx.file_bytes(row["passage_path"], None))
         if current and passage_sha256(content["passage"]) == row["passage_sha256"]:
             return student_package(topic, document, content, VERIFIED, [], row)
         # The book or boundaries changed since review: fall through to a fresh draft.
@@ -150,7 +150,7 @@ def load(ctx, topic: dict) -> dict:
     if path.exists():
         draft = json.loads(path.read_text(encoding="utf-8"))
     else:
-        pdf = ctx.file_bytes(document["drive_file_id"], document["sha256"])
+        pdf = ctx.file_bytes(document["file_path"], document["sha256"])
         draft = extract(pdf, pdf_start, pdf_end, topic.get("start_at"), topic.get("stop_before"))
         draft.pop("page_texts", None)
         draft["sentences"] = split_sentences(draft["passage"])
@@ -163,7 +163,7 @@ def load(ctx, topic: dict) -> dict:
 def record_review(tx, topic: dict, document: dict, passage: str, reviewed_pages: list[int], notes: str,
                   images: list[dict] | None = None, sentences: list[dict] | None = None, source: str = "review",
                   reviewed_at=None) -> dict:
-    """Store a reviewed passage in Drive and index it; the tutor asserts it checked every page."""
+    """Save a reviewed passage in the Drive folder and index it; the tutor asserts it checked every page."""
     pdf_start, pdf_end = pdf_range(topic)
     missing = sorted(set(range(pdf_start, pdf_end + 1)) - set(reviewed_pages))
     if missing:
@@ -178,12 +178,12 @@ def record_review(tx, topic: dict, document: dict, passage: str, reviewed_pages:
     }
     body = json.dumps(content, ensure_ascii=False, sort_keys=True).encode("utf-8")
     name = f"passage-{topic.get('source_key') or topic['id']}-{content['passage_sha256'][:12]}.json"
-    file_id, _ = tx.add_blob(body, "Tutor Content", name, "application/json")
+    path, _ = tx.add_blob(body, "Tutor Content", name, "application/json")
     row_id = f"{topic['id']}:{content['passage_sha256'][:16]}:{document['sha256'][:12]}"
     values = {"topic_id": topic["id"], "document_id": document["id"], "document_sha256": document["sha256"],
               "pdf_start": pdf_start, "pdf_end": pdf_end, "start_at": topic.get("start_at"),
               "stop_before": topic.get("stop_before"), "extraction_version": EXTRACTION_VERSION, "status": VERIFIED,
-              "passage_file_id": file_id, "passage_sha256": content["passage_sha256"],
+              "passage_path": path, "passage_sha256": content["passage_sha256"],
               "sentence_count": len(content["sentences"]), "character_count": len(passage), "review_notes": notes,
               "reviewed_at": reviewed_at or datetime.now(timezone.utc).replace(microsecond=0), "source": source}
     if tx.get("passages", row_id):

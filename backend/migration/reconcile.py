@@ -1,10 +1,11 @@
-"""Compare the staged workbook with the migration sources and report differences.
+"""Compare the migrated database with the migration sources and report differences.
 
     python -m migration.reconcile --export <export folder> [--history <Lucas - History folder>]
 
-Checks record counts and IDs, relationships, book hashes (Drive's SHA-256 when
-available), annotation revisions and stroke content, and representative learner
-records from the History workbook. Differences are reported; nothing is changed.
+Checks record counts and IDs, relationships, the files in the Drive folder
+(every referenced file exists and matches its checksum), annotation revisions
+and stroke content, and representative learner records from the History
+workbook. Differences are reported; nothing is changed.
 """
 from __future__ import annotations
 
@@ -32,17 +33,45 @@ def check_relationships(store, report: Report):
                     report.conflict("relationship", f"{spec.tab} {row['id']}: {fk.column} {value} is missing")
 
 
-def reconcile_hosted(store, export: Path, report: Report, drive=None) -> Report:
+def check_files(store, report: Report):
+    """Every file the database points at exists in the Drive folder with its recorded checksum."""
+    from storage.files import sha256_path
+    files = store.files
+    if files is None:
+        return
+    references = [("documents", "file_path", "sha256"), ("annotations", "file_path", "sha256"),
+                  ("enrichment", "content_path", "content_sha256"), ("evidence_files", "file_path", "sha256"),
+                  ("passages", "passage_path", None), ("audio_tracks", "manifest_path", None)]
+    checked = 0
+    for table, column, checksum in references:
+        for row in store.all(table):
+            if not row.get(column):
+                continue
+            checked += 1
+            try:
+                if getattr(files, "written", {}).get(row[column]):
+                    continue  # a dry run's scratch copy
+                path = files.resolve(row[column])
+                if not path.is_file():
+                    report.conflict("file_missing", f"{table} {row['id']}: {row[column]} is missing")
+                elif checksum and row.get(checksum) and sha256_path(path) != row[checksum]:
+                    report.conflict("file_checksum", f"{table} {row['id']}: {row[column]} differs from its checksum")
+            except Exception as error:  # an unreadable file is a finding, not a crash
+                report.conflict("file_unreadable", f"{table} {row['id']}: {error}")
+    report.count("files", referenced=checked)
+
+
+def reconcile_hosted(store, export: Path, report: Report) -> Report:
     manifest = json.loads((export / "manifest.json").read_text(encoding="utf-8"))
     for source, table in SOURCE_TO_TABLE.items():
         expected = set(manifest["tables"].get(source, {}).get("ids", []))
         actual = {r["id"] for r in store.all(table)}
         missing, extra = sorted(expected - actual), sorted(actual - expected)
-        report.count(table, source=len(expected), workbook=len(actual & expected))
+        report.count(table, source=len(expected), database=len(actual & expected))
         if missing:
-            report.conflict("missing_rows", f"{table}: {len(missing)} source rows are not in the workbook", ids=missing[:50])
-        if extra and table not in ("topics", "documents"):  # History import may add topics and books
-            report.warnings.append(f"{table}: {len(extra)} rows exist only in the workbook")
+            report.conflict("missing_rows", f"{table}: {len(missing)} source rows are not in the database", ids=missing[:50])
+        if extra and table not in ("topics", "documents", "children", "subjects"):  # History import adds some
+            report.warnings.append(f"{table}: {len(extra)} rows exist only in the database")
     settings = json.loads((export / "tables" / "app_settings.json").read_text(encoding="utf-8"))
     for row in settings:
         current = store.get("settings", row["key"])
@@ -56,14 +85,8 @@ def reconcile_hosted(store, export: Path, report: Report, drive=None) -> Report:
         book = manifest.get("books", {}).get(str(document_id), {})
         expected_sha = book.get("sha256") or source.get("sha256")
         if row["sha256"] != expected_sha:
-            report.conflict("book_hash", f"Document {document_id} checksum differs", workbook=row["sha256"],
+            report.conflict("book_hash", f"Document {document_id} checksum differs", database=row["sha256"],
                             source=expected_sha)
-        if drive is not None and row["drive_file_id"] and not row["drive_file_id"].startswith("pending:"):
-            drive_sha = drive.metadata(row["drive_file_id"]).get("sha256Checksum")
-            if drive_sha and drive_sha != row["sha256"]:
-                report.conflict("book_hash", f"Document {document_id}: Drive copy differs from the recorded checksum")
-        elif row["drive_file_id"] and row["drive_file_id"].startswith("pending:"):
-            report.warnings.append(f"Document {document_id} has not been uploaded to Drive yet")
     import hashlib
     annotations = json.loads((export / "tables" / "pdf_page_annotations.json").read_text(encoding="utf-8"))
     for source in annotations:
@@ -92,6 +115,7 @@ def reconcile_hosted(store, export: Path, report: Report, drive=None) -> Report:
                     if str(left)[:19] != str(value)[:19]:
                         report.conflict("sample_value", f"{table} {sample['id']}.{column}: {left!r} ≠ {value!r}")
     check_relationships(store, report)
+    check_files(store, report)
     return report
 
 
@@ -104,7 +128,7 @@ def reconcile_history(store, source: Path, report: Report) -> Report:
     for kind, table, key in checks:
         rows = [r for r in tracker.get(kind, []) if r.get(key)]
         present = [r for r in rows if store.get(table, str(r[key]).strip())]
-        report.count(f"history_{kind}", source=len(rows), workbook=len(present))
+        report.count(f"history_{kind}", source=len(rows), database=len(present))
         if len(present) != len(rows):
             report.conflict("history_missing", f"{len(rows) - len(present)} {kind} are missing")
     for row in tracker.get("answers", []):
@@ -118,7 +142,7 @@ def reconcile_history(store, source: Path, report: Report) -> Report:
     stored_completed = {k for k, t in history_topics.items() if t["completed"]}
     if completed != stored_completed:
         report.conflict("history_completion", "Completed topics differ",
-                        tracker=sorted(completed), workbook=sorted(stored_completed))
+                        tracker=sorted(completed), database=sorted(stored_completed))
     genghis = [s for s in store.all("tutor_sessions") if s["id"].endswith("C21-T01-recovered")]
     if not genghis or genghis[0]["status"] != "unfinished":
         report.conflict("genghis", "The recovered Genghis discussion is not an unfinished session")
@@ -129,6 +153,7 @@ def reconcile_history(store, source: Path, report: Report) -> Report:
         if history_topics.get("C21-T01", {}).get("completed"):
             report.conflict("genghis", "C21-T01 must not be complete")
     check_relationships(store, report)
+    check_files(store, report)
     return report
 
 
@@ -140,11 +165,8 @@ def main(argv=None):
     from app_context import AppContext
     context = AppContext(start_worker=False)
     report = Report("reconcile")
-    status = context.store.status()
-    if status["state"] != "saved":
-        report.conflict("sync", f"The workbook is not fully saved ({status['state']}); flush before reconciling")
     if args.export:
-        reconcile_hosted(context.store, args.export, report, context.drive)
+        reconcile_hosted(context.store, args.export, report)
     if args.history:
         reconcile_history(context.store, args.history, report)
     path = report.write(context.config.dir / "migration-reports")

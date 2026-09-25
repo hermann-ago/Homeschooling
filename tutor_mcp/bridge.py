@@ -2,8 +2,8 @@
 
 Desktop AI clients (Codex, Claude Desktop, …) start this script and talk MCP
 over stdin/stdout. Every tool calls the home server's HTTP API with a
-tutor-role device credential; the bridge never writes to Google Sheets and
-never sees Google credentials.
+tutor-role device credential; the bridge never opens the database or the
+Drive folder itself and never sees any Google credential.
 
 Configuration (environment variables):
   HOMESCHOOLING_URL          home server address (default http://127.0.0.1:8000)
@@ -13,7 +13,6 @@ Configuration (environment variables):
 """
 from __future__ import annotations
 
-import base64
 import json
 import mimetypes
 import os
@@ -137,11 +136,8 @@ class HomeServer:
             return {"result": payload, "receipt": {
                 "operation_id": key, "sync_state": lowered.get("x-sync-state", "saved"),
                 "replayed": lowered.get("x-idempotent-replay") == "true",
-                "meaning": {"saved": "verified in the Google Sheets database",
-                            "pending": "safe on the home server; not yet confirmed in Google Sheets. Do not claim "
-                                       "it is saved to Google yet",
-                            "needs_reconciliation": "a parent must reconcile a conflict before this is saved"
-                            }.get(lowered.get("x-sync-state", "saved"))}}
+                "meaning": {"saved": "committed to the Homeschooling database on the home server"
+                            }.get(lowered.get("x-sync-state", "saved"), "not saved; check the error")}}
         return payload
 
 
@@ -231,7 +227,8 @@ TOOLS = {
                         _schema({"child_id": INT, "key": STR, "value": {}, "confirmed_by": STR,
                                  "operation_id": OPERATION}, ("child_id", "key", "value", "confirmed_by",
                                                               "operation_id")), None),
-    "sync_status": ("Google Sheets sync state: saved / pending / needs_reconciliation.", _schema({}), None),
+    "storage_status": ("Whether the database and the synced Drive folder (books, audio) are available.",
+                       _schema({}), None),
 }
 
 
@@ -284,8 +281,8 @@ def run_tool(server: HomeServer, name: str, args: dict):
             "topic_id": args["topic_id"], "dry_run": args.get("dry_run", True), "voice": args.get("voice")})
     if name == "save_preference":
         return server.call("POST", "/api/tutor/preferences", key=op, json_body=body)
-    if name == "sync_status":
-        return server.call("GET", "/api/sync/status")
+    if name == "storage_status":
+        return server.call("GET", "/api/storage/status")
     raise KeyError(name)
 
 

@@ -15,21 +15,9 @@ export const systemApi = {
   denyPairing: (requestId) => fetchApi(`/pairing/deny/${requestId}`, { method: 'POST' }),
   devices: () => fetchApi('/devices'),
   revokeDevice: (id) => fetchApi(`/devices/${id}`, { method: 'DELETE' }),
-  googleStatus: () => fetchApi('/google/status'),
-  uploadGoogleClient: (file) => {
-    const form = new FormData();
-    form.append('file', file);
-    return fetchApi('/google/client', { method: 'POST', body: form });
-  },
-  connectGoogle: () => fetchApi('/google/connect', { method: 'POST' }),
-  setupGoogle: () => fetchApi('/google/setup', { method: 'POST' }),
-  disconnectGoogle: () => fetchApi('/google/disconnect', { method: 'POST' }),
-  syncStatus: () => fetchApi('/sync/status'),
-  syncNow: () => fetchApi('/sync/now', { method: 'POST' }),
-  unsettled: () => fetchApi('/sync/unsettled'),
-  retryOperation: (id) => fetchApi(`/sync/reconcile/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
-  discardOperation: (id) => fetchApi(`/sync/reconcile/${encodeURIComponent(id)}/discard`, { method: 'POST' }),
-  beginMaintenance: () => fetchApi('/maintenance/begin', { method: 'POST' }),
-  endMaintenance: () => fetchApi('/maintenance/end', { method: 'POST' }),
+  storageStatus: () => fetchApi('/storage/status'),
+  setDriveFolder: (path) => fetchApi('/storage/drive-folder', { method: 'POST', body: JSON.stringify({ path }) }),
+  backupNow: () => fetchApi('/storage/backup', { method: 'POST' }),
+  exportNow: () => fetchApi('/storage/export', { method: 'POST' }),
   narrationUsage: () => fetchApi('/tutor/usage'),
 };

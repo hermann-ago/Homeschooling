@@ -150,8 +150,7 @@ class TutorService:
             "due_reviews": [self._review_view(r) for r in reviews if r["status"] == "Open"
                             and r["next_due"] and r["next_due"] <= today],
             "open_reviews": sum(1 for r in reviews if r["status"] == "Open"),
-            "sync": {k: v for k, v in self.store.status().items()
-                     if k in ("state", "pending", "needs_reconciliation", "maintenance", "online", "auth_required")},
+            "storage": {k: v for k, v in self.store.status().items() if k in ("state", "drive_folder_available")},
             "reminders": ["Resume the saved next prompt before anything new." if session else
                           "Begin with a short welcome and at most one recall question.",
                           "Checkpoints and open readers are not completion or mastery."],
@@ -358,7 +357,7 @@ class TutorService:
                 "first_answer": item.get("first_answer"), "reading_certainty": _clean(item.get("reading_certainty"), 40),
                 "first_result": first_result, "help_given": help_given, "revised_answer": revised,
                 "after_help_result": _clean(item.get("after_help_result"), 40), "independence": independence,
-                "recheck_date": item.get("recheck_date"), "evidence_file_ids": item.get("evidence_file_ids"),
+                "recheck_date": item.get("recheck_date"), "evidence_paths": item.get("evidence_paths"),
                 "source_note": _clean(item.get("source_note")), "tutor_created": bool(item.get("tutor_created")),
                 "amends_attempt_id": amends}))
         return {"session_id": session_id, "attempts": [a["id"] for a in saved]}
@@ -426,10 +425,10 @@ class TutorService:
         if not mime_type.startswith("image/") and mime_type != "application/pdf":
             raise TutorError("Attach a photo or PDF of the learner's work")
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", filename)[:80] or "work.jpg"
-        file_id, sha = tx.add_blob(data, "Student Work", f"{session_id}-{safe}", mime_type)
+        path, sha = tx.add_blob(data, "Student Work", f"{session_id}-{safe}", mime_type)
         number = len(tx.find("evidence_files", session_id=session_id)) + 1
         row = tx.insert("evidence_files", {"id": f"{session_id}-E{number}", "child_id": session["child_id"],
-                                           "session_id": session_id, "file_id": file_id, "sha256": sha,
+                                           "session_id": session_id, "file_path": path, "sha256": sha,
                                            "filename": safe, "mime_type": mime_type, "note": _clean(note)})
         return {"session_id": session_id, "evidence_id": row["id"]}
 
@@ -535,9 +534,9 @@ class TutorService:
         for row in self.store.find("audio_tracks", topic_id=topic["id"]):
             synchronized = False
             reason = row["note"] or ""
-            if row["status"] == "ready" and row["timing"] and row["manifest_file_id"]:
+            if row["status"] == "ready" and row["timing"] and row["manifest_path"]:
                 try:
-                    manifest = json.loads(self.ctx.file_bytes(row["manifest_file_id"], None))
+                    manifest = json.loads(self.ctx.file_bytes(row["manifest_path"], None))
                     synchronized, reason = audio_mod.validate_manifest(manifest, package["passage_sha256"],
                                                                        len(package["sentences"]))
                 except Exception as error:  # an unreadable manifest must not hide the reader

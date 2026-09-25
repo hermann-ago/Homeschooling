@@ -78,7 +78,7 @@ const Curriculum = ({ activeChildId }) => {
     setDrivePickerFor(null);
     setIsUploading(subjectId);
     try {
-      await subjectsApi.linkDriveBook(subjectId, book.id);
+      await subjectsApi.linkDriveBook(subjectId, book.path);
       await loadTopics(subjectId);
       alert(`${book.name} is linked and its curriculum was created.`);
     } catch (error) {

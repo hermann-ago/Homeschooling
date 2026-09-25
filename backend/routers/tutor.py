@@ -277,9 +277,9 @@ def reader_state(session_id: str):
 
 def _manifest(track_id: str) -> dict:
     row = get_or_404(store(), "audio_tracks", track_id, "Audio track")
-    if not row["manifest_file_id"]:
+    if not row["manifest_path"]:
         raise HTTPException(status_code=404, detail="This track has no audio files")
-    return json.loads(context().file_bytes(row["manifest_file_id"], None))
+    return json.loads(context().file_bytes(row["manifest_path"], None))
 
 
 @router.get("/audio/{track_id}/manifest", dependencies=[Depends(require_member)])
@@ -296,7 +296,7 @@ def audio_part(track_id: str, index: int):
     tracks = _manifest(track_id).get("tracks", [])
     if not 0 <= index < len(tracks):
         raise HTTPException(status_code=404, detail="No such audio part")
-    data = context().file_bytes(tracks[index]["file_id"], tracks[index].get("sha256"))
+    data = context().file_bytes(tracks[index]["path"], tracks[index].get("sha256"))
     return Response(content=data, media_type=tracks[index].get("mime", "audio/mpeg"),
                     headers={"Cache-Control": "private, max-age=86400"})
 

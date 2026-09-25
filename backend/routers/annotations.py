@@ -1,5 +1,5 @@
-"""Per-page PDF handwriting. Strokes live in Drive ``Annotations`` as JSON files;
-the Annotation References tab holds the file ID, checksum and revision."""
+"""Per-page PDF handwriting. Strokes live in the Drive folder's ``Annotations`` as
+JSON files; the annotations table holds the file path, checksum and revision."""
 import hashlib
 import json
 
@@ -9,7 +9,7 @@ from app_context import request_operation as write
 from dependencies import context, require_member, store
 from schemas.annotations import AnnotationPageResponse, AnnotationPageUpdate
 from storage import RevisionConflict
-from storage.gateway import GoogleUnavailable
+from storage import FileUnavailable
 
 router = APIRouter(prefix="/annotations", tags=["PDF Annotations"], dependencies=[Depends(require_member)])
 MAX_REQUEST_BYTES = 1_048_576
@@ -33,10 +33,9 @@ def _response(row: dict | None, child_id, document_id, page_number) -> Annotatio
         return AnnotationPageResponse(child_id=child_id, document_id=document_id, page_number=page_number,
                                       strokes=[], revision=0, updated_at=None)
     try:
-        strokes = json.loads(context().file_bytes(row["file_id"], row["sha256"]))["strokes"]
-    except GoogleUnavailable as exc:
-        raise HTTPException(status_code=503, detail="Handwriting for this page is not cached and Google "
-                                                    "Drive is unreachable") from exc
+        strokes = json.loads(context().file_bytes(row["file_path"], row["sha256"]))["strokes"]
+    except FileUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"Handwriting for this page cannot be opened: {exc}") from exc
     return AnnotationPageResponse(child_id=child_id, document_id=document_id, page_number=page_number,
                                   strokes=strokes, revision=row["revision"], updated_at=row["updated_at"])
 
@@ -71,10 +70,10 @@ def save_page_annotations(child_id: int, document_id: int, page_number: int, pay
         raise HTTPException(status_code=409, detail="Annotation revision is no longer available")
     try:
         with write("annotations.save", f"Handwriting on page {page_number}") as tx:
-            # Each saved version is its own content-addressed Drive file, so earlier revisions remain.
+            # Each saved version is its own content-addressed file, so earlier revisions remain.
             name = f"annotations-child{child_id}-doc{document_id}-p{page_number}-{hashlib.sha256(body).hexdigest()[:12]}.json"
-            file_id, sha = tx.add_blob(body, "Annotations", name, "application/json")
-            values = {"file_id": file_id, "sha256": sha, "stroke_count": len(strokes)}
+            path, sha = tx.add_blob(body, "Annotations", name, "application/json")
+            values = {"file_path": path, "sha256": sha, "stroke_count": len(strokes)}
             if existing:
                 tx.update("annotations", existing["id"], values, expected_revision=payload.base_revision)
             else:

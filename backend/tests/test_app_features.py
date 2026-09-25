@@ -1,4 +1,4 @@
-"""Existing app behaviour on the Sheets store: scheduling, completion, annotations."""
+"""Existing app behaviour on the SQLite store: scheduling, completion, annotations, books."""
 import hashlib
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
@@ -11,14 +11,13 @@ from tests.pdf_fixture import make_pdf
 def seed(harness, pages=12):
     ctx = harness.ctx
     pdf = make_pdf([[f"Page {n}"] for n in range(1, pages + 1)])
-    drive_id = harness.drive.add_file(pdf, "language-arts.pdf")
+    book_path = harness.add_file(pdf, "Books/language-arts.pdf")
     with ctx.store.transaction() as tx:
         child = tx.insert("children", {"name": "Mila", "color": "#E986B4"})
         subject = tx.insert("subjects", {"child_id": child["id"], "name": "Language Arts"})
-        document = tx.insert("documents", {"drive_file_id": drive_id, "original_filename": "language-arts.pdf",
+        document = tx.insert("documents", {"file_path": book_path, "original_filename": "language-arts.pdf",
                                            "size_bytes": len(pdf), "page_count": pages,
                                            "sha256": hashlib.sha256(pdf).hexdigest(), "source": "drive"})
-    ctx.store.flush()
     return child, subject, document
 
 
@@ -90,13 +89,12 @@ def test_schedule_recalculation_is_one_atomic_operation(harness):
         for n in range(1, 4):
             tx.insert("topics", {"subject_id": subject["id"], "title": f"Lesson {n}", "page_start": n,
                                  "page_end": n, "chapter_order": n})
-    harness.ctx.store.flush()
-    before = len(harness.sheets.rows("Operation Receipts"))
+    before = len(harness.ctx.store.all("operation_receipts"))
     r = harness.call("POST", f"/api/schedule/recalculate/{child['id']}", key="recalc-1")
     assert r.status_code == 200 and r.json()["slots_created"] == 3
     assert r.headers["x-sync-state"] == "saved"
-    assert len(harness.sheets.rows("Operation Receipts")) == before + 1
-    assert len(harness.sheets.rows("Schedules")) == 4
+    assert len(harness.ctx.store.all("operation_receipts")) == before + 1  # one transaction
+    assert len(harness.ctx.store.all("scheduled_slots")) == 3
 
 
 def test_checklist_completion_marks_topic_and_undo_restores(harness):
@@ -131,12 +129,12 @@ def test_annotations_create_update_conflict_and_drive_storage(harness):
     conflict = harness.call("PUT", path, role="learner", json={"base_revision": 1, "strokes": [stroke()]})
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["current"]["revision"] == 2
-    # Strokes live in Drive; Sheets only holds the reference.
-    row = harness.sheets.rows("Annotation References")[1]
-    assert row[6] in harness.drive.files and harness.drive.files[row[6]]["folder"] == "Annotations"
-    assert all("points" not in cell for cell in row)
-    # Earlier revisions remain as their own Drive files.
-    assert sum(1 for f in harness.drive.files.values() if f["folder"] == "Annotations") == 2
+    # Strokes live in the Drive folder; the database only holds the reference.
+    row = harness.ctx.store.all("annotations")[0]
+    assert row["file_path"].startswith("Annotations/") and (harness.drive / row["file_path"]).is_file()
+    assert "points" not in str(row)
+    # Earlier revisions remain as their own files.
+    assert len(list((harness.drive / "Annotations").glob("*.json"))) == 2
 
 
 def test_annotation_page_bounds_and_size(harness):
@@ -148,19 +146,34 @@ def test_annotation_page_bounds_and_size(harness):
     assert too_many.status_code == 422
 
 
-def test_pdf_is_proxied_from_drive_and_cached(harness):
+def test_pdf_is_served_from_the_drive_folder(harness):
     _, _, document = seed(harness)
     r = harness.call("GET", f"/api/documents/{document['id']}/content", role="learner")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
-    harness.drive.faults.append("offline")  # a cached book still opens offline
-    again = harness.call("GET", f"/api/documents/{document['id']}/content", role="learner")
-    assert again.status_code == 200 and again.content == r.content
+    # A book that is missing (or not yet downloaded while offline) gives a clear 503, not a crash.
+    (harness.drive / document["file_path"]).unlink()
+    missing = harness.call("GET", f"/api/documents/{document['id']}/content", role="learner")
+    assert missing.status_code == 503 and "missing" in missing.json()["detail"]
+
+
+def test_drive_folder_books_are_listed_and_linked_by_path(harness, monkeypatch):
+    import routers.subjects
+    monkeypatch.setattr(routers.subjects, "analyze_curriculum", lambda text, pages: {
+        "topics": [{"title": "Chapter 1", "page_start": 1, "page_end": 2}], "language": "en"})
+    child, subject, _ = seed(harness)
+    harness.add_file(make_pdf([["Chapter 1"], ["Chapter 2"]]), "Science/Book.pdf")
+    books = harness.call("GET", "/api/documents/drive/books").json()
+    assert {b["path"]: b["linked"] for b in books} == {"Books/language-arts.pdf": True, "Science/Book.pdf": False}
+    assert harness.call("GET", "/api/documents/drive/books", role="learner").status_code == 403
+    r = harness.call("POST", f"/api/subjects/{subject['id']}/documents/from-drive", json={"path": "Science/Book.pdf"})
+    assert r.status_code == 200, r.text
+    linked = [d for d in harness.ctx.store.all("documents") if d["file_path"] == "Science/Book.pdf"]
+    assert len(linked) == 1 and linked[0]["page_count"] == 2
 
 
 def test_drive_files_outside_root_are_refused(harness):
     child, subject, _ = seed(harness)
-    outside = harness.drive.add_file(make_pdf([["Private"]]), "tax.pdf", file_id="outsideFile12345")
-    harness.drive.files[outside]["inside_root"] = False
-    r = harness.call("POST", f"/api/subjects/{subject['id']}/documents/from-drive",
-                     json={"drive_file_id": outside})
-    assert r.status_code == 403
+    (harness.drive.parent / "tax.pdf").write_bytes(make_pdf([["Private"]]))
+    for path in ("../tax.pdf", str(harness.drive.parent / "tax.pdf")):
+        r = harness.call("POST", f"/api/subjects/{subject['id']}/documents/from-drive", json={"path": path})
+        assert r.status_code == 403, path

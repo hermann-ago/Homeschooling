@@ -10,7 +10,7 @@ Behavior:
 - Fills available days until all topics are scheduled
 
 All reads and writes go through one store transaction, so a recalculation is
-saved to Google Sheets as a single atomic batch.
+saved to the database as a single transaction.
 """
 from datetime import date, timedelta
 

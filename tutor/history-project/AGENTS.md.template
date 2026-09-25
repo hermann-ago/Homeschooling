@@ -1,6 +1,6 @@
 # Home history tutor for Lucas
 
-This project now uses the integrated Homeschooling tutor. The conversation is the classroom; the Homeschooling app on the family computer is the reader, audio player and record keeper, and the **Homeschooling Database** Google Sheets workbook is the only authoritative record.
+This project now uses the integrated Homeschooling tutor. The conversation is the classroom; the Homeschooling app on the family computer is the reader, audio player and record keeper, and its database on the home server is the only authoritative record.
 
 - Learner: Lucas (child_id {child_id}). Subject: History (subject_id {subject_id}). English.
 - Use the `home-tutor` skill and the `homeschooling` MCP tools. Follow the skill for teaching, reading, grading, checkpoints and closeout, and `subjects/history/GUIDE.md` in the Homeschooling repository for History sources and grading rules.

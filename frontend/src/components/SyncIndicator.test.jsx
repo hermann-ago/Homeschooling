@@ -3,26 +3,26 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ syncStatus: vi.fn() }));
+const api = vi.hoisted(() => ({ storageStatus: vi.fn() }));
 vi.mock('../api/system', () => ({ systemApi: api }));
 
 import SyncIndicator from './SyncIndicator';
 
 describe('SyncIndicator', () => {
-  it('distinguishes saved, pending and reconciliation states', async () => {
-    api.syncStatus.mockResolvedValueOnce({ state: 'pending', pending: 2, online: false, connected: true });
+  it('shows saved work and warns when the Drive folder is unavailable', async () => {
+    api.storageStatus.mockResolvedValueOnce({ state: 'saved', drive_folder_available: true });
     const { unmount } = render(<SyncIndicator />);
-    expect(await screen.findByText('Pending sync')).toBeTruthy();
-    expect(screen.getByText('2 changes waiting (offline)')).toBeTruthy();
+    expect(await screen.findByText('Saved on the home server')).toBeTruthy();
+    expect(screen.queryByText(/Drive folder unavailable/)).toBeNull();
     unmount();
-    api.syncStatus.mockResolvedValueOnce({ state: 'needs_reconciliation', needs_reconciliation: 1, connected: true });
+    api.storageStatus.mockResolvedValueOnce({ state: 'saved', drive_folder_available: false });
     render(<SyncIndicator />);
-    expect(await screen.findByText('Needs reconciliation')).toBeTruthy();
+    expect(await screen.findByText('Drive folder unavailable: books and audio may not open')).toBeTruthy();
   });
 
-  it('asks for a Google reconnect when authorization expired', async () => {
-    api.syncStatus.mockResolvedValueOnce({ state: 'pending', pending: 1, auth_required: true, connected: true });
+  it('says when the home server cannot be reached', async () => {
+    api.storageStatus.mockRejectedValueOnce(new Error('offline'));
     render(<SyncIndicator />);
-    expect(await screen.findByText('A parent must reconnect Google on the host computer')).toBeTruthy();
+    expect(await screen.findByText('Home server unreachable')).toBeTruthy();
   });
 });

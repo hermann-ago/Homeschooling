@@ -229,16 +229,16 @@ def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, en
         starts = [marks[f"s{index}"] for index in range(first, first + count)]
         audio = base64.b64decode(response["audioContent"])
         name = f"narration-{key[:24]}-google-neural2-part-{part}.mp3"
-        file_id, sha = tx.add_blob(audio, "Audio", name, "audio/mpeg")
+        path, sha = tx.add_blob(audio, "Audio", name, "audio/mpeg")
         ledger.mark(month, request_id, "completed")
-        tracks.append({"file_id": file_id, "sha256": sha, "startSentence": first, "sentenceStarts": starts})
+        tracks.append({"path": path, "sha256": sha, "startSentence": first, "sentenceStarts": starts})
     manifest = {"version": 2, "cacheKey": key, "provider": "Google Cloud Text-to-Speech", "voice": voice,
                 "speakingRate": rate, "characterCount": characters, "sentenceCount": len(sentences),
                 "passageHash": passage["passage_sha256"], "generatedAt": _now(), "tracks": tracks}
-    manifest_id, _ = tx.add_blob(json.dumps(manifest).encode(), "Audio", f"narration-{key[:24]}-manifest.json",
+    manifest_path, _ = tx.add_blob(json.dumps(manifest).encode(), "Audio", f"narration-{key[:24]}-manifest.json",
                                  "application/json")
     values = {"topic_id": topic["id"], "passage_sha256": passage["passage_sha256"], "provider": "google-neural2",
-              "voice": voice, "speaking_rate": rate, "manifest_file_id": manifest_id, "status": "ready",
+              "voice": voice, "speaking_rate": rate, "manifest_path": manifest_path, "status": "ready",
               "characters": characters, "sentence_count": len(sentences), "timing": "provider-timepoints"}
     if existing:
         tx.update("audio_tracks", key, values)

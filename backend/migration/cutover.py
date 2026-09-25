@@ -3,8 +3,8 @@
     python -m migration.cutover check
     python -m migration.cutover history-instructions --source "<Lucas - History folder>" [--apply]
 
-``check`` refuses cutover while anything is pending or unreconciled, or when
-the newest reconciliation report has conflicts. ``history-instructions`` shows
+``check`` refuses cutover until the newest reconciliation report is clean and
+a verified backup newer than it exists in the Drive folder. ``history-instructions`` shows
 (or with --apply writes) new AGENTS.md / START_HERE.md for the History project,
 first copying the originals to backups/pre-integrated-tutor/ in that folder.
 """
@@ -19,24 +19,33 @@ from pathlib import Path
 TEMPLATES = Path(__file__).resolve().parents[2] / "tutor" / "history-project"
 
 
-def readiness(store, reports_dir: Path) -> dict:
-    status = store.status()
+def readiness(store, reports_dir: Path, backup_dir: Path | None = None) -> dict:
     reports = sorted(reports_dir.glob("reconcile-*.json")) if reports_dir.exists() else []
     latest = json.loads(reports[-1].read_text(encoding="utf-8")) if reports else None
-    backups = sorted((reports_dir.parent / "backups").glob("*.json")) if (reports_dir.parent / "backups").exists() else []
+    from storage.backups import latest_backup
+    backup = latest_backup(store, backup_dir)
     blockers = []
-    if status["state"] != "saved":
-        blockers.append(f"Sync state is {status['state']}")
-    if status["maintenance"]:
-        blockers.append("Maintenance mode is on")
+    if store.files is None or not store.files.available:
+        blockers.append("The Homeschooling Drive folder is not available")
     if not latest:
         blockers.append("No reconciliation report yet")
     elif latest["conflicts"]:
         blockers.append(f"Latest reconciliation has {len(latest['conflicts'])} conflicts")
-    if not backups:
-        blockers.append("No backup of the migrated workbook yet")
+    if not backup:
+        blockers.append("No backup of the migrated database yet")
+    elif latest and backup[len("homeschooling-"):-len(".sqlite3")] < _stamp(latest.get("finished_at")):
+        blockers.append("The newest backup is older than the reconciliation; back up again")
     return {"ready": not blockers, "blockers": blockers, "latest_reconcile": reports[-1].name if reports else None,
-            "latest_backup": backups[-1].name if backups else None}
+            "latest_backup": backup}
+
+
+def _stamp(iso: str | None) -> str:
+    """ISO time → the backup file stamp format (YYYYMMDDTHHMMSSZ) for comparison."""
+    if not iso:
+        return ""
+    from datetime import datetime, timezone
+    moment = datetime.fromisoformat(iso).astimezone(timezone.utc)
+    return moment.strftime("%Y%m%dT%H%M%SZ")
 
 
 def render(child_id: int, subject_id: int, receipt: str) -> dict[str, str]:
@@ -69,7 +78,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     from app_context import AppContext
     context = AppContext(start_worker=False)
-    check = readiness(context.store, context.config.dir / "migration-reports")
+    check = readiness(context.store, context.config.dir / "migration-reports", context.config.backup_dir)
     if args.command == "check":
         print(json.dumps(check, indent=2))
         return 0 if check["ready"] else 1

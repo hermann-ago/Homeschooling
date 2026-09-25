@@ -7,24 +7,30 @@ function clean(error) {
   return (error?.message || String(error)).replace(/^\/[^:]+: /, '');
 }
 
-/** Parent controls for Google, synchronisation, spreadsheet maintenance and devices. */
+function backupTime(name) {
+  const match = /homeschooling-(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z/.exec(name || '');
+  if (!match) return name;
+  const [, y, mo, d, h, mi, s] = match;
+  return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)).toLocaleString();
+}
+
+/** Parent controls for the Drive folder, backups, narration usage and devices. */
 export default function HomeServerSettings() {
   const device = useDevice();
-  const [google, setGoogle] = useState(null);
-  const [sync, setSync] = useState(null);
-  const [unsettled, setUnsettled] = useState([]);
+  const [storage, setStorage] = useState(null);
+  const [folderPath, setFolderPath] = useState('');
   const [devices, setDevices] = useState([]);
   const [usage, setUsage] = useState(null);
   const [message, setMessage] = useState('');
-  const [problems, setProblems] = useState([]);
   const isParent = device?.device?.role === 'parent';
   const isHost = Boolean(device?.host);
 
   const load = useCallback(() => {
-    systemApi.googleStatus().then(setGoogle).catch(() => {});
-    systemApi.syncStatus().then(setSync).catch(() => {});
+    systemApi.storageStatus().then((next) => {
+      setStorage(next);
+      setFolderPath((current) => current || next.drive_folder || '');
+    }).catch(() => {});
     if (isParent) {
-      systemApi.unsettled().then(setUnsettled).catch(() => {});
       systemApi.devices().then(setDevices).catch(() => {});
       systemApi.narrationUsage().then(setUsage).catch(() => {});
     }
@@ -47,97 +53,48 @@ export default function HomeServerSettings() {
     }
   };
 
-  const connect = async () => {
-    const result = await run(() => systemApi.connectGoogle());
-    if (result?.authorization_url) window.location.assign(result.authorization_url);
-  };
-
-  const endMaintenance = async () => {
-    const result = await run(() => systemApi.endMaintenance());
-    if (result && !result.resumed) setProblems(result.problems || []);
-    else if (result) {
-      setProblems([]);
-      setMessage(`Changes resumed. ${result.edited_rows || 0} edited rows were recorded.`);
-    }
-  };
-
   return (
     <section className="bg-surface rounded-2xl border border-border p-6 space-y-6">
       <div>
         <h2 className="text-lg font-bold">Home server</h2>
-        <p className="text-sm text-text-secondary">Google Drive holds books and files; the Homeschooling Database workbook is the family's record.</p>
+        <p className="text-sm text-text-secondary">The family's records are kept in a database on the host computer. Books, handwriting, audio and backups are files in the Homeschooling folder that Google Drive for desktop keeps in sync.</p>
       </div>
 
       <div className="space-y-2">
-        <h3 className="font-semibold">Google connection</h3>
-        {google && (
+        <h3 className="font-semibold">Homeschooling Drive folder</h3>
+        {storage && (
           <ul className="text-sm text-text-secondary">
-            <li>Status: {google.connected ? (google.authorization_required ? 'Reconnect needed' : 'Connected') : 'Not connected'}</li>
-            <li>Homeschooling folder: <a className="underline" target="_blank" rel="noreferrer" href={`https://drive.google.com/drive/folders/${google.root_folder_id}`}>open in Drive</a></li>
-            {google.spreadsheet_id && <li>Database: <a className="underline" target="_blank" rel="noreferrer" href={`https://docs.google.com/spreadsheets/d/${google.spreadsheet_id}`}>Homeschooling Database</a></li>}
+            <li>Folder: <span className="font-mono text-xs break-all">{storage.drive_folder || 'not set'}</span></li>
+            <li>Status: {storage.drive_folder_available ? 'Available' : 'Not available — is Google Drive for desktop running and signed in?'}</li>
+            <li>Database: <span className="font-mono text-xs break-all">{storage.database}</span></li>
           </ul>
         )}
         {isHost ? (
-          <div className="flex flex-wrap gap-2 text-sm">
-            <label className="rounded border px-3 py-2 cursor-pointer">Add Desktop OAuth client file
-              <input type="file" accept="application/json" className="hidden"
-                onChange={(e) => e.target.files[0] && run(() => systemApi.uploadGoogleClient(e.target.files[0]), 'OAuth client saved on this computer.')} />
-            </label>
-            <button type="button" onClick={connect} disabled={!google?.client_configured} className="rounded bg-accent text-white px-3 py-2 disabled:opacity-50">
-              {google?.connected ? 'Reconnect Google' : 'Connect Google'}
-            </button>
-            {google?.connected && (
-              <>
-                <button type="button" onClick={() => run(() => systemApi.setupGoogle(), 'Folders and workbook are ready.')} className="rounded border px-3 py-2">Check folders and workbook</button>
-                <button type="button" onClick={() => window.confirm('Disconnect Google on this computer? Work stays queued until you reconnect.') && run(() => systemApi.disconnectGoogle(), 'Disconnected.')} className="rounded px-3 py-2 text-red-700">Disconnect</button>
-              </>
-            )}
-          </div>
+          <form className="flex flex-wrap gap-2 text-sm" onSubmit={(e) => {
+            e.preventDefault();
+            run(() => systemApi.setDriveFolder(folderPath.trim()), 'Drive folder saved.');
+          }}>
+            <input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} aria-label="Drive folder path"
+              placeholder="G:\My Drive\…\Homeschooling" className="flex-1 min-w-[16rem] rounded border p-2 font-mono text-xs" />
+            <button type="submit" className="rounded border px-3 py-2">Use this folder</button>
+          </form>
         ) : (
-          <p className="text-sm text-text-secondary">Google authorization happens only on the host computer. Other devices never receive Google credentials.</p>
+          <p className="text-sm text-text-secondary">The folder can be changed only on the host computer.</p>
         )}
-        {isHost && (
-          <p className="text-xs text-text-secondary">
-            Google asks for two permissions: read-only Drive access, used only to find existing books inside the Homeschooling folder (Google's permission itself is wider — the app refuses files outside that folder), and access to files this app creates (the workbook, uploaded books, handwriting, audio, backups).
-          </p>
-        )}
+        <p className="text-xs text-text-secondary">For lessons without internet, right-click the Homeschooling folder in File Explorer and choose Offline access → Available offline.</p>
       </div>
 
       <div className="space-y-2">
-        <h3 className="font-semibold">Sync</h3>
-        {sync && (
-          <p className="text-sm">
-            {sync.state === 'saved' && 'Everything is saved to Google.'}
-            {sync.state === 'pending' && `${sync.pending} change(s) are safe on this server and waiting for Google.`}
-            {sync.state === 'needs_reconciliation' && `${sync.needs_reconciliation} change(s) conflict with the spreadsheet.`}
-            {sync.last_error && <span className="block text-xs text-text-secondary">Last problem: {sync.last_error}</span>}
-          </p>
-        )}
-        <button type="button" onClick={() => run(() => systemApi.syncNow(), 'Sync attempted.')} className="rounded border px-3 py-2 text-sm">Sync now</button>
-        {unsettled.filter((op) => op.status === 'needs_reconciliation').map((op) => (
-          <div key={op.id} className="rounded border border-red-200 bg-red-50 p-3 text-sm">
-            <p className="font-medium">{op.summary}</p>
-            <p className="text-xs">{op.last_error}</p>
-            <p className="text-xs text-text-secondary">Changes: {op.changes.map((c) => `${c.action} ${c.table} ${c.id}`).join(', ')}</p>
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => run(() => systemApi.retryOperation(op.id), 'Retried against the current spreadsheet.')} className="rounded border bg-white px-3 py-1">Reload and retry</button>
-              <button type="button" onClick={() => window.confirm('Set this change aside? It stays in the local archive for review.') && run(() => systemApi.discardOperation(op.id), 'Change set aside (kept in the archive).')} className="rounded px-3 py-1 text-red-700">Set aside</button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="font-semibold">Edit the spreadsheet by hand</h3>
-        <p className="text-sm text-text-secondary">Turn on maintenance mode before editing cells directly. The app pauses changes, then checks the whole workbook and reloads it before resuming.</p>
-        {sync?.maintenance ? (
-          <button type="button" onClick={endMaintenance} className="rounded bg-accent text-white px-3 py-2 text-sm">I finished editing — check and resume</button>
-        ) : (
-          <button type="button" onClick={() => run(() => systemApi.beginMaintenance(), 'Changes are paused. Edit the workbook, then return here.')} className="rounded border px-3 py-2 text-sm">Start maintenance mode</button>
-        )}
-        {problems.length > 0 && (
-          <ul className="text-xs text-red-700 list-disc pl-5">{problems.map((p) => <li key={p}>{p}</li>)}</ul>
-        )}
+        <h3 className="font-semibold">Backups</h3>
+        <p className="text-sm text-text-secondary">
+          A verified copy of the database goes to the folder's Backups every day and when the server stops (the newest 30 are kept).
+          {storage?.last_backup ? ` Latest: ${backupTime(storage.last_backup)}.` : ' No backup yet.'}
+        </p>
+        <div className="flex flex-wrap gap-2 text-sm">
+          <button type="button" onClick={() => run(() => systemApi.backupNow(), (r) => `Backup saved: ${r.name}`)} className="rounded border px-3 py-2">Back up now</button>
+          <button type="button" onClick={() => run(() => systemApi.exportNow(), (r) => (r.path ? `Excel copy written: ${r.path}` : 'The Drive folder is not available.'))} className="rounded border px-3 py-2">Write the Excel copy</button>
+        </div>
+        <p className="text-xs text-text-secondary">The Excel copy is for reading only and leaves out answer keys; make changes in the app.</p>
       </div>
 
       {usage && (

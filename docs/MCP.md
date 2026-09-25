@@ -1,6 +1,6 @@
 # Connecting a desktop AI tutor (MCP)
 
-`tutor_mcp/bridge.py` is a stdio MCP server that uses only the Python standard library. It calls the home server over HTTP with a **tutor** credential. It never writes to Google Sheets directly and never sees Google credentials.
+`tutor_mcp/bridge.py` is a stdio MCP server that uses only the Python standard library. It calls the home server over HTTP with a **tutor** credential. It never opens the database or the Drive folder itself and never sees any Google credential.
 
 ## 1. Pair the bridge (on the host computer, with the server running)
 
@@ -54,6 +54,6 @@ Copy or link `tutor/skills/home-tutor` into the client's skills folder, and poin
 | `review_passage` | Records a page-by-page review of an extracted passage |
 | `narration` | Estimate (the default) or generate one narrator within the shared monthly guard |
 | `save_preference` | A confirmed learner or parent preference |
-| `sync_status` | Saved, pending or needs-reconciliation state |
+| `storage_status` | Whether the database and the synced Drive folder (books, audio) are available |
 
-Every mutation needs a stable `operation_id`, and session mutations also need the `expected_revision` from the previous response. Each result includes a receipt with `sync_state`. If a call times out, repeat it with the same `operation_id`. The server returns the original result and never creates a duplicate.
+Every mutation needs a stable `operation_id`, and session mutations also need the `expected_revision` from the previous response. Each result includes a receipt; `sync_state: saved` means the change is committed to the home server's database. If a call times out, repeat it with the same `operation_id`. The server returns the original result and never creates a duplicate.

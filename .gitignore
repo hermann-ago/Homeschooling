@@ -17,10 +17,12 @@ venv/
 env/
 
 # ─── Database ────────────────────────────────────────────────────────────────
-# The live database should NEVER be committed.
-# To set up a fresh DB, run: alembic upgrade head
+# The live database lives in %LOCALAPPDATA%\Homeschooling and must NEVER be committed.
 backend/homeschool.db
 backend/*.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
 
 # ─── Uploaded files ──────────────────────────────────────────────────────────
 # User-uploaded PDFs — not source code, can be large

@@ -180,7 +180,8 @@ def stop(config: HostConfig):
     try:
         result = _request(f"http://127.0.0.1:{record['port']}/api/host/shutdown",
                           {"instance_token": record["instance_token"]}, timeout=30)
-        print(f"Stopping; Google Sheets sync state: {result.get('sync')}.")
+        print("Stopping; every saved change is already in the database." if result.get("stopping") else
+              f"Stop request answered: {result}")
     except (urllib.error.URLError, OSError) as error:
         print(f"Graceful stop was not acknowledged ({error}); stopping the recorded process.")
     try:
@@ -189,7 +190,7 @@ def stop(config: HostConfig):
         process.terminate()  # the verified process we started, never a port lookup
         process.wait(timeout=10)
     record_path(config).unlink(missing_ok=True)
-    print("The home server has stopped. Pending changes, if any, stay queued for the next start.")
+    print("The home server has stopped. A backup was written to the Drive folder's Backups.")
     return 0
 
 

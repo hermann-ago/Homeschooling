@@ -4,10 +4,10 @@ A browser asks to pair and shows a short code. A parent approves the matching
 code on the host computer. The device then receives a random token; only its
 SHA-256 is stored here. Roles:
 
-* ``parent`` – everything, including Google connection, pairing and maintenance.
+* ``parent`` – everything, including pairing, the Drive folder and backups.
 * ``learner`` – lessons, reading, annotations and checklists; no teacher-only data.
 * ``tutor`` – an AI agent's MCP bridge: tutoring context, including teacher-only
-  evidence, and tutoring records; no Google, pairing or maintenance controls.
+  evidence, and tutoring records; no pairing, folder or backup controls.
 """
 from __future__ import annotations
 

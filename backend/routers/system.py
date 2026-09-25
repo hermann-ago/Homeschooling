@@ -1,19 +1,15 @@
-"""Pairing, Google connection, synchronisation and host controls."""
+"""Pairing, storage status, backups and host controls."""
 from __future__ import annotations
 
-import json
-import os
 import signal
 import threading
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from dependencies import context, current_device, require_host, require_member, require_parent
 from security.devices import Device
 from security.network import is_loopback
-from storage.gateway import AuthorizationRequired, GoogleUnavailable
 
 router = APIRouter()
 
@@ -106,69 +102,12 @@ def revoke_device(device_id: str):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-# ── Google connection (host computer only) ──────────────────────────────────
+# ── Storage: database, Drive folder, backups ────────────────────────────────
 
-@router.get("/google/status", dependencies=[Depends(require_member)])
-def google_status():
-    return context().google_status()
-
-
-@router.post("/google/client", dependencies=[Depends(require_parent), Depends(require_host)])
-async def google_client(file: UploadFile):
-    try:
-        context().auth.save_client(json.loads(await file.read(65_536)))
-    except (ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return context().google_status()
-
-
-@router.post("/google/connect", dependencies=[Depends(require_parent), Depends(require_host)])
-def google_connect(request: Request):
-    """Begin Google authorization in the host computer's browser (loopback redirect)."""
-    port = request.url.port or context().config.get("port")
-    try:
-        url = context().auth.start(f"http://127.0.0.1:{port}/api/google/oauth/callback")
-    except AuthorizationRequired as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"authorization_url": url}
-
-
-@router.get("/google/oauth/callback", dependencies=[Depends(require_host)], response_class=HTMLResponse)
-def google_callback(state: str = Query(...), code: str | None = Query(None), error: str | None = Query(None)):
-    if error or not code:
-        return HTMLResponse(f"<p>Google authorization was not completed ({error or 'no code'}).</p>", status_code=400)
-    try:
-        context().auth.finish(state, code)
-        context().setup_google()
-    except (AuthorizationRequired, GoogleUnavailable, PermissionError, ValueError) as exc:
-        return HTMLResponse(f"<p>Google authorization failed: {exc}</p><p><a href='/settings'>Back</a></p>",
-                            status_code=400)
-    return RedirectResponse("/settings?google=connected")
-
-
-@router.post("/google/setup", dependencies=[Depends(require_parent), Depends(require_host)])
-def google_setup():
-    try:
-        return context().setup_google()
-    except AuthorizationRequired as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-
-@router.post("/google/disconnect", dependencies=[Depends(require_parent), Depends(require_host)])
-def google_disconnect():
-    context().disconnect_google()
-    return context().google_status()
-
-
-# ── Synchronisation and maintenance ─────────────────────────────────────────
-
-@router.get("/sync/status", dependencies=[Depends(require_member)])
-def sync_status():
-    status = context().store.status()
-    return {k: status[k] for k in ("state", "pending", "needs_reconciliation", "maintenance", "online",
-                                   "auth_required", "last_saved_at", "last_error", "connected")}
+@router.get("/storage/status", dependencies=[Depends(require_member)])
+def storage_status():
+    """Where data lives and whether the synced Drive folder is reachable."""
+    return context().status()
 
 
 @router.get("/sync/operations/{operation_id}", dependencies=[Depends(require_member)])
@@ -176,35 +115,27 @@ def operation(operation_id: str):
     return {"operation_id": operation_id, "state": context().store.operation_state(operation_id) or "unknown"}
 
 
-@router.post("/sync/now", dependencies=[Depends(require_member)])
-def sync_now():
-    return context().store.flush()
+class DriveFolderRequest(BaseModel):
+    path: str = Field(..., min_length=3, max_length=400)
 
 
-@router.get("/sync/unsettled", dependencies=[Depends(require_parent)])
-def unsettled():
-    return context().store.unsettled()
+@router.post("/storage/drive-folder", dependencies=[Depends(require_parent), Depends(require_host)])
+def set_drive_folder(payload: DriveFolderRequest):
+    """Point the server at the synced Homeschooling folder (host computer only)."""
+    try:
+        return context().set_drive_folder(payload.path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/sync/reconcile/{operation_id}/retry", dependencies=[Depends(require_parent)])
-def reconcile_retry(operation_id: str):
-    return context().store.retry(operation_id)
+@router.post("/storage/backup", dependencies=[Depends(require_parent)])
+def backup_now():
+    return context().backup_now()
 
 
-@router.post("/sync/reconcile/{operation_id}/discard", dependencies=[Depends(require_parent)])
-def reconcile_discard(operation_id: str):
-    """Set aside a conflicting change. It stays on disk under queue/discarded for review."""
-    return context().store.discard(operation_id)
-
-
-@router.post("/maintenance/begin", dependencies=[Depends(require_parent)])
-def maintenance_begin():
-    return context().store.begin_maintenance()
-
-
-@router.post("/maintenance/end", dependencies=[Depends(require_parent)])
-def maintenance_end():
-    return context().store.end_maintenance()
+@router.post("/storage/export", dependencies=[Depends(require_parent)])
+def export_now():
+    return {"path": context().export_now()}
 
 
 # ── Host process control ────────────────────────────────────────────────────
@@ -218,7 +149,6 @@ def shutdown(payload: ShutdownRequest):
     """Graceful stop requested by the launcher that recorded this exact instance."""
     if payload.instance_token != context().instance_token:
         raise HTTPException(status_code=403, detail="Not this server instance")
-    context().store.flush(max_ops=10_000)
     # raise_signal runs uvicorn's own handler, so shutdown is graceful on Windows too.
     threading.Timer(0.5, lambda: signal.raise_signal(signal.SIGINT)).start()
-    return {"stopping": True, "sync": context().store.status()["state"]}
+    return {"stopping": True}
