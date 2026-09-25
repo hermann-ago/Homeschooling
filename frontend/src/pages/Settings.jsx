@@ -4,6 +4,7 @@ import { calendarApi } from '../api/calendar';
 import { timeWindowsApi } from '../api/timeWindows';
 import { User, Clock, Calendar as CalendarIcon, Save, X, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
+import HomeServerSettings from '../components/HomeServerSettings';
 
 const Settings = () => {
   const [children, setChildren] = useState([]);
@@ -47,6 +48,8 @@ const Settings = () => {
         <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-2">Settings</h1>
         <p className="text-text-secondary text-sm sm:text-base">Manage family profiles and app-wide configuration.</p>
       </header>
+
+      <HomeServerSettings />
 
       <section>
         <div className="flex items-center mb-6 border-b border-border pb-2">

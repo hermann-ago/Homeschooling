@@ -63,9 +63,9 @@ export default function AIEnrichmentPanel({
     setLoadingTool(toolKey);
     setActiveTool(toolKey);
     try {
-      if (!documentId) throw new Error('This topic has no hosted document.');
+      if (!documentId) throw new Error('This topic has no linked book.');
       const document = await getDocument(documentId);
-      const pdfData = await getDocumentData(document.blob_path, document.size_bytes);
+      const pdfData = await getDocumentData(document.id, document.size_bytes);
       const sourceText = await extractPdfPages(pdfData, pageStart, pageEnd, pdfPageOffset);
       if (!sourceText) throw new Error('No selectable text was found in these pages. Scanned pages need OCR first.');
       const res = await canvasApi.generateAIContent({

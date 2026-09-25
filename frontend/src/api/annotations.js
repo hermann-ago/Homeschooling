@@ -1,4 +1,4 @@
-import { getAuthHeaders } from './client';
+import { request } from './client';
 
 
 export class AnnotationConflictError extends Error {
@@ -11,20 +11,9 @@ export class AnnotationConflictError extends Error {
 
 
 async function annotationRequest(path, options = {}) {
-  const authHeaders = await getAuthHeaders();
-  const response = await fetch(`/api/annotations${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-      ...options.headers,
-    },
-  });
+  const response = await request(`/annotations${path}`, options);
 
   const body = await response.json().catch(() => ({}));
-  if (response.status === 401) {
-    window.dispatchEvent(new Event('auth:expired'));
-  }
   if (response.status === 409 && body.detail?.current) {
     throw new AnnotationConflictError(
       body.detail.message || 'Annotations changed on another device',

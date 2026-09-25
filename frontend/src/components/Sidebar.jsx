@@ -12,9 +12,11 @@ import {
   X,
   LogOut
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { useDevice } from './deviceContext';
+import SyncIndicator from './SyncIndicator';
 
 const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpen, onClose }) => {
+  const device = useDevice();
 
   const navItems = [
     { to: '/', icon: CheckSquare, label: 'Today' },
@@ -146,9 +148,11 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
           </div>
         </div>
       )}
-      <div className="p-4 border-t border-border">
-        <button onClick={() => supabase?.auth.signOut()} className="w-full flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
-          <LogOut className="w-4 h-4" /> Sign out
+      <div className="p-4 border-t border-border space-y-3">
+        <SyncIndicator />
+        <p className="text-xs text-text-secondary">{device?.device?.name} · {device?.device?.role}</p>
+        <button onClick={() => { if (window.confirm('Forget this device? It will need a new pairing code.')) device?.forget(); }} className="w-full flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary">
+          <LogOut className="w-4 h-4" /> Forget this device
         </button>
       </div>
     </>

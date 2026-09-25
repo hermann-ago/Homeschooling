@@ -35,3 +35,10 @@
     display: none !important;
   }
 }
+
+/* Read-along highlight on the original PDF page's text layer. */
+.react-pdf__Page__textContent mark.readalong-mark {
+  background: rgba(250, 204, 21, 0.45);
+  color: transparent;
+  border-radius: 2px;
+}

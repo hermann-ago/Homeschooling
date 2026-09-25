@@ -8,6 +8,7 @@ import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
 import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
 import { toPhysicalPage } from './pdfAnnotations/annotationGeometry';
+import { highlightItemIndices } from '../utils/readAlong';
 
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -16,7 +17,12 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 
-const PageViewer = ({ slot, childId, onClose }) => {
+function escapeHtml(text) {
+  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+
+const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requestedPage = null, boundaryNote = null, hideClose = false }) => {
   const start = slot?.page_from || 1;
   const end = slot?.page_to || start;
   const offset = slot?.pdf_page_offset || 0;
@@ -31,6 +37,7 @@ const PageViewer = ({ slot, childId, onClose }) => {
   const [strokeWidth, setStrokeWidth] = useState(0.005);
   const [zoom, setZoom] = useState(100);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [textItems, setTextItems] = useState([]);
   const viewportRef = useRef(null);
   const pageSurfaceRef = useRef(null);
 
@@ -68,7 +75,7 @@ const PageViewer = ({ slot, childId, onClose }) => {
     setTool('hand');
     getDocument(slot.document_id)
       .then(async (nextDocument) => {
-        const nextData = await getDocumentData(nextDocument.blob_path, nextDocument.size_bytes);
+        const nextData = await getDocumentData(nextDocument.id, nextDocument.size_bytes);
         if (active) {
           setDocumentInfo(nextDocument);
           setPdfData(nextData);
@@ -86,6 +93,23 @@ const PageViewer = ({ slot, childId, onClose }) => {
     pageNumber: page,
     enabled: Boolean(childId && slot?.document_id && pdfData),
   });
+
+  const highlighted = useMemo(
+    () => highlightItemIndices(textItems, highlightSentence),
+    [textItems, highlightSentence],
+  );
+  const renderText = useMemo(() => {
+    if (!highlighted.size) return undefined;
+    return ({ str, itemIndex }) => (highlighted.has(itemIndex)
+      ? `<mark class="readalong-mark">${escapeHtml(str)}</mark>`
+      : escapeHtml(str));
+  }, [highlighted]);
+
+  useEffect(() => {
+    if (!requestedPage || requestedPage === page || !pdfData) return;
+    if (requestedPage < physicalStart || requestedPage > physicalEnd) return;
+    annotation.flush().then(() => setPage(requestedPage));
+  }, [requestedPage]);
 
   const pdfFile = useMemo(
     () => (pdfData ? { data: pdfData.slice() } : null),
@@ -124,10 +148,16 @@ const PageViewer = ({ slot, childId, onClose }) => {
           <h3 className="font-bold text-sm truncate">{slot.subject_name}</h3>
           <p className="text-xs text-text-secondary truncate">{slot.topic_title || `Assigned pages ${start}-${end}`}</p>
         </div>
-        <button type="button" aria-label="Close PDF viewer" onClick={closeViewer} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-200 flex-shrink-0">
-          <X className="w-5 h-5" />
-        </button>
+        {!hideClose && (
+          <button type="button" aria-label="Close PDF viewer" onClick={closeViewer} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-200 flex-shrink-0">
+            <X className="w-5 h-5" />
+          </button>
+        )}
       </div>
+
+      {boundaryNote && (
+        <div className="px-3 py-2 bg-sky-50 border-b border-sky-200 text-xs text-sky-900" data-testid="boundary-note">{boundaryNote}</div>
+      )}
 
       {annotation.conflict && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex flex-wrap items-center gap-2">
@@ -187,6 +217,8 @@ const PageViewer = ({ slot, childId, onClose }) => {
                   width={renderWidth}
                   renderTextLayer
                   renderAnnotationLayer
+                  customTextRenderer={renderText}
+                  onGetTextSuccess={({ items }) => setTextItems(items)}
                   loading={<div className="bg-white p-8 text-sm text-text-secondary">Rendering page...</div>}
                 />
                 {childId && (

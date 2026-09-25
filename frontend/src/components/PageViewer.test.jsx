@@ -57,7 +57,7 @@ describe('PageViewer sizing', () => {
     viewerMocks.pageRender.mockClear();
     viewerMocks.getDocument.mockReset().mockResolvedValue({
       id: 9,
-      blob_path: 'private/book.pdf',
+      
       size_bytes: 100,
       page_count: 300,
     });

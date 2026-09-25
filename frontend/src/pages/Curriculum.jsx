@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { subjectsApi } from '../api/subjects';
-import { UploadCloud, FileText, ChevronDown, ChevronRight, Edit3, Loader2, BookOpen, CheckCircle2, Circle, Trash2, Star, Book, X } from 'lucide-react';
+import { UploadCloud, FileText, ChevronDown, ChevronRight, Edit3, Loader2, BookOpen, CheckCircle2, Circle, Trash2, Star, Book, X, FolderOpen } from 'lucide-react';
+import DriveBookPicker from '../components/DriveBookPicker';
 import ResponsivePageViewerPanel from '../components/ResponsivePageViewerPanel';
 import clsx from 'clsx';
 import { format } from 'date-fns';
@@ -12,6 +13,7 @@ const Curriculum = ({ activeChildId }) => {
   const [selectedBook, setSelectedBook] = useState({}); // { subjectId: pdf_filename }
   const [selectedTopicForViewer, setSelectedTopicForViewer] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [drivePickerFor, setDrivePickerFor] = useState(null);
   const [editingSubject, setEditingSubject] = useState(null);
   const [chaptersCount, setChaptersCount] = useState(1);
   const [generating, setGenerating] = useState(false);
@@ -69,6 +71,20 @@ const Curriculum = ({ activeChildId }) => {
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDrivePick = async (subjectId, book) => {
+    setDrivePickerFor(null);
+    setIsUploading(subjectId);
+    try {
+      await subjectsApi.linkDriveBook(subjectId, book.id);
+      await loadTopics(subjectId);
+      alert(`${book.name} is linked and its curriculum was created.`);
+    } catch (error) {
+      alert(`Linking failed: ${error.message}`);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -154,6 +170,9 @@ const Curriculum = ({ activeChildId }) => {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
+        {drivePickerFor && (
+          <DriveBookPicker onClose={() => setDrivePickerFor(null)} onPick={(book) => handleDrivePick(drivePickerFor, book)} />
+        )}
         <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-w-0 transition-all duration-300">
         <header className="mb-6 sm:mb-10 flex flex-col sm:flex-row justify-between sm:items-end gap-4">
         <div>
@@ -247,7 +266,17 @@ const Curriculum = ({ activeChildId }) => {
                     <div className="w-full md:w-64 lg:w-72 border-b md:border-b-0 md:border-r border-border bg-white flex flex-col">
                       <div className="px-4 py-3 border-b border-border bg-gray-50/50 flex justify-between items-center">
                         <h4 className="font-semibold text-text-primary text-sm uppercase tracking-wider">Books ({books.length})</h4>
-                        <div>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            title="Use a book already in Google Drive"
+                            aria-label="Use a book already in Google Drive"
+                            onClick={() => setDrivePickerFor(subject.id)}
+                            disabled={isUploading === subject.id}
+                            className="flex items-center justify-center p-1.5 rounded-md text-sm border bg-white text-text-secondary border-border hover:border-accent hover:text-accent shadow-sm"
+                          >
+                            <FolderOpen className="w-4 h-4" />
+                          </button>
                           <input 
                             type="file" 
                             id={`pdf-upload-${subject.id}`} 

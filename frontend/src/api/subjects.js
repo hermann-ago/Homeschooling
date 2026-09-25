@@ -1,6 +1,4 @@
-import { upload } from '@vercel/blob/client';
-import { fetchApi, getAuthHeaders } from './client';
-import { inspectPdf } from '../utils/pdf';
+import { fetchApi } from './client';
 
 export const subjectsApi = {
   getByChildId: (childId) => fetchApi(`/subjects/by-child/${childId}`),
@@ -25,24 +23,11 @@ export const subjectsApi = {
       throw new Error('Please select a PDF file.');
     }
     if (file.size > 262144000) throw new Error('PDFs are limited to 250 MiB.');
-    const { pageCount, tocText } = await inspectPdf(file);
-    if (!tocText) throw new Error('No selectable text was found in the first 15 pages. Scanned PDFs need OCR first.');
-    const headers = await getAuthHeaders();
-    const blob = await upload(`documents/${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`, file, {
-      access: 'private',
-      handleUploadUrl: '/api/blob/upload',
-      clientPayload: JSON.stringify({ authorization: headers.Authorization }),
-      multipart: file.size > 8 * 1024 * 1024,
-    });
-    return fetchApi(`/subjects/${subjectId}/documents`, {
-      method: 'POST',
-      body: JSON.stringify({
-        blob_path: new URL(blob.url).pathname.slice(1),
-        original_filename: file.name,
-        size_bytes: file.size,
-        page_count: pageCount,
-        toc_text: tocText,
-      }),
-    });
-  }
+    const form = new FormData();
+    form.append('file', file, file.name);
+    return fetchApi(`/subjects/${subjectId}/documents`, { method: 'POST', body: form });
+  },
+  linkDriveBook: (subjectId, driveFileId) => fetchApi(`/subjects/${subjectId}/documents/from-drive`, {
+    method: 'POST', body: JSON.stringify({ drive_file_id: driveFileId }),
+  }),
 };
