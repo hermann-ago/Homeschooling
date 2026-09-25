@@ -1,0 +1,9 @@
+{
+  "name": "homeschooling-legacy-export",
+  "private": true,
+  "type": "module",
+  "description": "Only for exporting books from the previous Vercel Blob store before cutover.",
+  "dependencies": {
+    "@vercel/blob": "^2.4.0"
+  }
+}

@@ -191,8 +191,8 @@ def _parse_datetime(text: str) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def coerce(kind: str, value):
-    """Convert API/sheet input to the in-memory type for ``kind``."""
+def coerce(kind: str, value, from_cell: bool = False):
+    """Convert caller input (or, with ``from_cell``, sheet text) to the in-memory type for ``kind``."""
     if value is None or value == "":
         return None
     if kind == "int":
@@ -225,7 +225,7 @@ def coerce(kind: str, value):
             return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
         return _parse_datetime(str(value))
     if kind == "json":
-        if isinstance(value, str):
+        if from_cell:
             return json.loads(value)
         json.dumps(value)  # validate serialisable
         return value
@@ -273,7 +273,7 @@ def cells_to_row(table: Table, header: list[str], cells: list) -> dict:
         if column not in table.header:
             continue  # tolerate parent-added helper columns
         raw = cells[index] if index < len(cells) else ""
-        record[column] = coerce(column_kind(table, column), raw)
+        record[column] = coerce(column_kind(table, column), raw, from_cell=True)
     for column in table.header:
         record.setdefault(column, None)
     return record

@@ -151,6 +151,7 @@ class Transaction:
         self._order: list[tuple[str, object]] = []
         self._blobs: dict[str, dict] = {}
         self._touched: set[tuple[str, object]] = set()
+        self._preserved: dict[tuple[str, object], tuple[int | None, datetime | None]] = {}
         self.result = None
 
     # ── reads that see staged changes ────────────────────────────────────────
@@ -182,7 +183,9 @@ class Transaction:
             self._order.append(key)
         self._staged[key] = value
 
-    def insert(self, table: str, values: dict) -> dict:
+    def insert(self, table: str, values: dict, *, revision: int | None = None,
+               updated_at: datetime | None = None) -> dict:
+        """Insert a row. Migration may keep the source revision and update time."""
         spec = TABLES[table]
         record = {c: None for c in spec.header}
         record.update(normalise(spec, values))
@@ -197,6 +200,8 @@ class Transaction:
         self._check_required(spec, record)
         self._check_foreign_keys(spec, record)
         self._stage(table, record["id"], record)
+        if revision is not None or updated_at is not None:
+            self._preserved[(table, record["id"])] = (revision, updated_at)
         return dict(record)
 
     def update(self, table: str, record_id, changes: dict, expected_revision: int | None = None) -> dict:
@@ -289,7 +294,8 @@ class Transaction:
             if original is None and new is None:
                 continue
             if original is None:
-                row = {**new, "revision": 1, "updated_at": now}
+                revision, updated_at = self._preserved.get((table, record_id), (None, None))
+                row = {**new, "revision": revision or 1, "updated_at": updated_at or now}
                 result.append({"table": table, "action": "insert", "id": record_id, "base_revision": None,
                                "row": row_to_cells(spec, row)})
             elif new is None:
@@ -733,7 +739,7 @@ class Store:
                     ids.pop()
                     tab["revisions"].pop()
                 ids.append(change["id"])
-                tab["revisions"].append(1)
+                tab["revisions"].append(int(change["row"][1]))
                 requests.append({"appendCells": {"sheetId": sheet_ids[spec.tab], "fields": "userEnteredValue",
                                                  "rows": [self._cells(change["row"])]}})
                 continue
