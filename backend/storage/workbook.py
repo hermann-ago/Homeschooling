@@ -23,7 +23,11 @@ def bootstrap(sheets) -> list[str]:
     sheets.batch_update([{"addSheet": {"properties": {"title": t, "gridProperties": {"frozenRowCount": 1}}}}
                          for t in missing])
     titles = sheets.metadata()
-    requests = []
+    # Plain-text cells: dates or numbers typed during maintenance stay exactly as typed.
+    requests = [{"repeatCell": {"range": {"sheetId": titles[t]},
+                                "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"}}},
+                                "fields": "userEnteredFormat.numberFormat"}}
+                for t in missing if t not in (OVERVIEW_TAB,)]
     for spec in TABLES.values():
         if spec.tab in missing:
             requests.append({"updateCells": {"start": {"sheetId": titles[spec.tab], "rowIndex": 0, "columnIndex": 0},

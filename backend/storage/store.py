@@ -341,6 +341,9 @@ class Store:
     def load(self):
         with self._lock:
             self._load_queue()
+            snapshot = self._snapshot_path()
+            if snapshot.exists():  # local cache index survives even when Sheets is reachable
+                self._file_ids.update(json.loads(snapshot.read_text(encoding="utf-8")).get("file_ids", {}))
             loaded = False
             if self.sheets is not None:
                 try:
@@ -555,6 +558,17 @@ class Store:
     def known_file_id(self, sha: str) -> str | None:
         with self._lock:
             return self._file_ids.get(sha)
+
+    def known_sha(self, file_id: str) -> str | None:
+        with self._lock:
+            return next((sha for sha, known in self._file_ids.items() if known == file_id), None)
+
+    def remember_file(self, sha: str, file_id: str):
+        """Index a downloaded Drive file so it can be served from the local cache while offline."""
+        with self._lock:
+            if self._file_ids.get(sha) != file_id:
+                self._file_ids[sha] = file_id
+                self._save_snapshot()
 
     def _allocate_id(self, table: str) -> int:
         with self._lock:

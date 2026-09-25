@@ -14,7 +14,14 @@ def test_cached_reading_and_pending_work_survive_an_outage(harness):
     started = harness.call("POST", "/api/tutor/sessions/start", role="tutor", key="outage-start",
                            json={"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"]}).json()
     params = {"learner": s["lucas"]["id"], "topic": s["genghis"]["id"], "session": started["session_id"]}
+    # Review the passage so the reader serves the verified copy stored in Drive.
+    draft = harness.call("GET", "/api/tutor/context", role="tutor", params={
+        "child_id": s["lucas"]["id"], "subject_id": s["history"]["id"], "phase": "reading"}).json()["reading"]
+    harness.call("POST", f"/api/tutor/passages/{s['genghis']['id']}/review", role="tutor", json={
+        "reviewed_pdf_pages": [2, 3], "notes": "Checked both pages", "passage_sha256": draft["passage_sha256"]})
+    harness.call("POST", "/api/sync/now")
     first = harness.call("GET", "/api/tutor/reader", role="learner", params=params).json()
+    assert first["passage"]["status"] == "verified"
     pdf = harness.call("GET", f"/api/documents/{s['book']['id']}/content", role="learner")
     # The internet goes down: Drive and Sheets are both unreachable.
     harness.drive.faults.extend(["offline"] * 20)
@@ -81,3 +88,12 @@ def test_complete_lesson_without_hosted_configuration(harness):
     assert finish.status_code == 200 and finish.headers["x-sync-state"] == "saved"
     assert harness.ctx.store.get("topics", s["genghis"]["id"])["understanding"] == "With help"
     assert harness.call("GET", "/api/sync/status").json()["state"] == "saved"
+
+
+def test_drive_only_files_are_cached_for_offline_use_across_restarts(harness):
+    file_id = harness.drive.add_file(b'{"version": 2, "tracks": []}', "manifest.json", folder="Audio",
+                                     mime_type="application/json")
+    assert harness.ctx.file_bytes(file_id) == b'{"version": 2, "tracks": []}'
+    harness.restart()
+    harness.drive.faults.extend(["offline"] * 5)
+    assert harness.ctx.file_bytes(file_id) == b'{"version": 2, "tracks": []}'

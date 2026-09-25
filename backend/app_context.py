@@ -195,8 +195,9 @@ class AppContext:
     def file_bytes(self, file_id: str | None, sha256: str | None = None) -> bytes:
         """Return a Drive file, preferring the verified local copy."""
         store = self.store
-        if sha256:
-            data = store.blobs.get(sha256)
+        cached_sha = sha256 or (store.known_sha(file_id) if file_id else None)
+        if cached_sha:
+            data = store.blobs.get(cached_sha)
             if data is not None:
                 return data
         if not file_id:
@@ -213,6 +214,7 @@ class AppContext:
         if sha256 and digest != sha256:
             raise ValueError("The Drive copy does not match its recorded checksum")
         store.blobs.put(data)
+        store.remember_file(digest, file_id)
         return data
 
     def shutdown(self):

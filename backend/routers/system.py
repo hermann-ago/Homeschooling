@@ -219,5 +219,6 @@ def shutdown(payload: ShutdownRequest):
     if payload.instance_token != context().instance_token:
         raise HTTPException(status_code=403, detail="Not this server instance")
     context().store.flush(max_ops=10_000)
-    threading.Timer(0.5, lambda: os.kill(os.getpid(), signal.SIGINT)).start()
+    # raise_signal runs uvicorn's own handler, so shutdown is graceful on Windows too.
+    threading.Timer(0.5, lambda: signal.raise_signal(signal.SIGINT)).start()
     return {"stopping": True, "sync": context().store.status()["state"]}
