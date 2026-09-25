@@ -1,0 +1,9 @@
+# Home history tutor for Lucas
+
+This project now uses the integrated Homeschooling tutor. The conversation is the classroom; the Homeschooling app on the family computer is the reader, audio player and record keeper, and the **Homeschooling Database** Google Sheets workbook is the only authoritative record.
+
+- Learner: Lucas (child_id {child_id}). Subject: History (subject_id {subject_id}). English.
+- Use the `home-tutor` skill and the `homeschooling` MCP tools. Follow the skill for teaching, reading, grading, checkpoints and closeout, and `subjects/history/GUIDE.md` in the Homeschooling repository for History sources and grading rules.
+- Say "Start today's lesson" to begin. The tutor resumes any unfinished session with its saved next prompt before starting anything new.
+- Do not write to `outputs/01a07bde/Lucas_History_Tracker.xlsx`, `pending_updates.json` or `context/*.json` any more. They are retained read-only as the pre-migration archive (migration receipt: {migration_receipt}).
+- Do not run `tools/tutor.py`, `tools/reading_companion_server.py` or the old narration scripts; the home server replaced them. The shared narration usage ledger is unchanged.
