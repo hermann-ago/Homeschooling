@@ -1,51 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
 
-from database import get_db
-from models import TimeWindow, Child
+from fastapi import APIRouter, Depends
+
+from app_context import request_operation as write
+from dependencies import require_member, require_parent, store
 from schemas import TimeWindowCreate, TimeWindowResponse
-from auth import get_owned_child, require_family_user
+from utils import get_or_404
 
 router = APIRouter()
 
 
 # Time windows are nested under children in the API but managed in Settings
-@router.get("/by-child/{child_id}", response_model=List[TimeWindowResponse])
-def list_time_windows(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-    return (
-        db.query(TimeWindow)
-        .filter(TimeWindow.child_id == child_id)
-        .order_by(TimeWindow.weekday, TimeWindow.start_time)
-        .all()
-    )
+@router.get("/by-child/{child_id}", response_model=List[TimeWindowResponse], dependencies=[Depends(require_member)])
+def list_time_windows(child_id: int):
+    get_or_404(store(), "children", child_id, "Child")
+    return sorted(store().find("time_windows", child_id=child_id), key=lambda w: (w["weekday"], w["start_time"]))
 
 
-@router.post("", response_model=TimeWindowResponse, status_code=201)
-def create_time_window(tw: TimeWindowCreate, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, tw.child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-    db_tw = TimeWindow(**tw.model_dump())
-    db.add(db_tw)
-    db.commit()
-    db.refresh(db_tw)
-    return db_tw
+@router.post("", response_model=TimeWindowResponse, status_code=201, dependencies=[Depends(require_parent)])
+def create_time_window(tw: TimeWindowCreate):
+    get_or_404(store(), "children", tw.child_id, "Child")
+    with write("time_windows.create") as tx:
+        return tx.insert("time_windows", tw.model_dump())
 
 
-@router.delete("/{tw_id}", status_code=204)
-def delete_time_window(tw_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    tw = (
-        db.query(TimeWindow)
-        .join(Child, TimeWindow.child_id == Child.id)
-        .filter(TimeWindow.id == tw_id, Child.owner_id == user_id)
-        .first()
-    )
-    if not tw:
-        raise HTTPException(status_code=404, detail="Time window not found")
-    db.delete(tw)
-    db.commit()
+@router.delete("/{tw_id}", status_code=204, dependencies=[Depends(require_parent)])
+def delete_time_window(tw_id: int):
+    get_or_404(store(), "time_windows", tw_id, "Time window")
+    with write("time_windows.delete") as tx:
+        tx.delete("time_windows", tw_id)
     return None

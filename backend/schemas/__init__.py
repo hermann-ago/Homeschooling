@@ -1,6 +1,6 @@
 from .children import ChildCreate, ChildUpdate, ChildResponse
 from .subjects import SubjectCreate, SubjectUpdate, SubjectResponse
-from .topics import TopicCreate, TopicUpdate, TopicResponse, TopicListUpdate, AIAnalysisResult, DocumentFinalizeRequest
+from .topics import TopicCreate, TopicUpdate, TopicResponse, TopicListUpdate, AIAnalysisResult
 from .slots import (
     TimeWindowCreate, TimeWindowResponse, 
     BlockedDayCreate, BlockedDayResponse,

@@ -1,0 +1,4 @@
+# Only for the one-time export from the previous hosted system and History import.
+-r requirements.txt
+openpyxl==3.1.5
+psycopg[binary]==3.2.10

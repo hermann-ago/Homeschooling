@@ -14,12 +14,6 @@ All functions:
   3. Are bilingual-aware — prompts adapt based on the language argument.
   4. Return Python objects (dicts / strings), NOT raw JSON strings.
 
-PDF Extraction
---------------
-`extract_pages_text()` reads specific physical pages from a stored PDF
-using pdfplumber (already a project dependency). The caller must apply
-the pdf_page_offset before calling this function.
-
 Error Handling
 --------------
 All generation functions raise ValueError on Gemini API failure.
@@ -54,51 +48,6 @@ def _get_client() -> genai.Client:
             "Please add your API key in the Settings page."
         )
     return genai.Client(api_key=api_key)
-
-
-# ── PDF Text Extraction ───────────────────────────────────────────────────────
-
-def extract_pages_text(pdf_path: str, page_start: int, page_end: int, offset: int = 0) -> str:
-    """
-    Extract plain text from a physical page range in a PDF file.
-
-    Args:
-        pdf_path:   Relative path to the PDF (e.g. 'uploads/book.pdf').
-        page_start: Logical (TOC) page number — start of the section.
-        page_end:   Logical (TOC) page number — end of the section.
-        offset:     pdf_page_offset stored on the topic (maps TOC→physical pages).
-
-    Returns:
-        Concatenated text of the requested pages.
-
-    Raises:
-        FileNotFoundError: If the PDF does not exist.
-        ValueError: If the page range is invalid.
-    """
-    if not os.path.exists(pdf_path):
-        raise FileNotFoundError(f"PDF not found: {pdf_path}")
-
-    # Convert logical page numbers to 0-based physical indices
-    phys_start = max(0, (page_start + offset) - 1)
-    phys_end = (page_end + offset) - 1  # inclusive
-
-    text_parts = []
-    with pdfplumber.open(pdf_path) as pdf:
-        total = len(pdf.pages)
-        phys_end = min(phys_end, total - 1)
-
-        if phys_start > phys_end:
-            raise ValueError(
-                f"Invalid page range: physical [{phys_start+1}, {phys_end+1}] "
-                f"(logical {page_start}–{page_end}, offset {offset})"
-            )
-
-        for page in pdf.pages[phys_start : phys_end + 1]:
-            page_text = page.extract_text()
-            if page_text:
-                text_parts.append(page_text)
-
-    return "\n\n".join(text_parts)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

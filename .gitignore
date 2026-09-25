@@ -59,3 +59,4 @@ public/
 migration-manifest.json
 migration-sql*/
 migration-payload.json
+.tmp-localappdata/

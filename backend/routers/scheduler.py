@@ -1,51 +1,31 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, selectinload
-from typing import Optional
 from datetime import date
+from typing import Optional
 
-from database import get_db
-from models import Child, ScheduledSlot
-from schemas import ScheduledSlotResponse, ScheduleResult
+from fastapi import APIRouter, Depends, Query
+
+from app_context import request_operation as write
+from dependencies import require_member, require_parent, store
+from schemas import ScheduleResult, ScheduledSlotResponse
 from services.scheduler_engine import recalculate_schedule
-from utils import slot_to_response
-from auth import get_owned_child, require_family_user
+from utils import get_or_404, slots_response
 
 router = APIRouter()
 
 
-@router.post("/recalculate/{child_id}", response_model=ScheduleResult)
-def recalculate(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-    return recalculate_schedule(child_id, user_id, db)
+@router.post("/recalculate/{child_id}", response_model=ScheduleResult, dependencies=[Depends(require_parent)])
+def recalculate(child_id: int):
+    child = get_or_404(store(), "children", child_id, "Child")
+    with write("schedule.recalculate", f"Recalculated {child['name']}'s schedule") as tx:
+        result = recalculate_schedule(child_id, tx)
+    return result
 
 
-@router.get("/{child_id}", response_model=list[ScheduledSlotResponse])
-def get_schedule(
-    child_id: int,
-    start_date: Optional[date] = Query(None),
-    end_date: Optional[date] = Query(None),
-    user_id: str = Depends(require_family_user),
-    db: Session = Depends(get_db),
-):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-
-    query = (
-        db.query(ScheduledSlot)
-        .options(
-            selectinload(ScheduledSlot.subject),
-            selectinload(ScheduledSlot.topic),
-            selectinload(ScheduledSlot.completion),
-        )
-        .filter(ScheduledSlot.child_id == child_id)
-    )
+@router.get("/{child_id}", response_model=list[ScheduledSlotResponse], dependencies=[Depends(require_member)])
+def get_schedule(child_id: int, start_date: Optional[date] = Query(None), end_date: Optional[date] = Query(None)):
+    get_or_404(store(), "children", child_id, "Child")
+    slots = store().find("scheduled_slots", child_id=child_id)
     if start_date:
-        query = query.filter(ScheduledSlot.date >= start_date)
+        slots = [s for s in slots if s["date"] >= start_date]
     if end_date:
-        query = query.filter(ScheduledSlot.date <= end_date)
-
-    slots = query.order_by(ScheduledSlot.date, ScheduledSlot.time_start).all()
-    return [slot_to_response(s) for s in slots]
+        slots = [s for s in slots if s["date"] <= end_date]
+    return slots_response(store(), sorted(slots, key=lambda s: (s["date"], s["time_start"])))

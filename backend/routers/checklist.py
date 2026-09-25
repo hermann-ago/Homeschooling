@@ -1,154 +1,82 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, selectinload
-from typing import List
 from datetime import date, datetime, timedelta, timezone
+from typing import List
 
-from database import get_db
-from models import ScheduledSlot, Completion, Child, CurriculumTopic
-from schemas import ScheduledSlotResponse, CompletionResponse
-from utils import slot_to_response
-from auth import get_owned_child, require_family_user
-from services.completion_tracking import mark_topic_completed, mark_topic_incomplete
+from fastapi import APIRouter, Depends, HTTPException
 
-router = APIRouter()
+from app_context import request_operation as write
+from dependencies import require_member, store
+from schemas import CompletionResponse, ScheduledSlotResponse
+from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
+from utils import get_or_404, slots_response
+
+router = APIRouter(dependencies=[Depends(require_member)])
 
 
-def _owned_slot(db: Session, slot_id: int, user_id: str) -> ScheduledSlot | None:
-    return (
-        db.query(ScheduledSlot)
-        .join(Child, ScheduledSlot.child_id == Child.id)
-        .filter(ScheduledSlot.id == slot_id, Child.owner_id == user_id)
-        .first()
-    )
+def _child_slots(child_id: int):
+    get_or_404(store(), "children", child_id, "Child")
+    return store().find("scheduled_slots", child_id=child_id)
 
 
 @router.get("/{child_id}/today", response_model=List[ScheduledSlotResponse])
-def get_today_checklist(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-
+def get_today_checklist(child_id: int):
     today = date.today()
-    slots = (
-        db.query(ScheduledSlot)
-        .options(
-            selectinload(ScheduledSlot.subject),
-            selectinload(ScheduledSlot.topic),
-            selectinload(ScheduledSlot.completion),
-        )
-        .filter(ScheduledSlot.child_id == child_id, ScheduledSlot.date == today)
-        .order_by(ScheduledSlot.time_start)
-        .all()
-    )
-    return [slot_to_response(s) for s in slots]
+    slots = [s for s in _child_slots(child_id) if s["date"] == today]
+    return slots_response(store(), sorted(slots, key=lambda s: s["time_start"]))
 
 
 @router.get("/{child_id}/week", response_model=List[ScheduledSlotResponse])
-def get_week_checklist(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-
+def get_week_checklist(child_id: int):
     today = date.today()
-    # Get Monday of current week
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
-
-    slots = (
-        db.query(ScheduledSlot)
-        .options(
-            selectinload(ScheduledSlot.subject),
-            selectinload(ScheduledSlot.topic),
-            selectinload(ScheduledSlot.completion),
-        )
-        .filter(
-            ScheduledSlot.child_id == child_id,
-            ScheduledSlot.date >= week_start,
-            ScheduledSlot.date <= week_end,
-        )
-        .order_by(ScheduledSlot.date, ScheduledSlot.time_start)
-        .all()
-    )
-    return [slot_to_response(s) for s in slots]
+    slots = [s for s in _child_slots(child_id) if week_start <= s["date"] <= week_end]
+    return slots_response(store(), sorted(slots, key=lambda s: (s["date"], s["time_start"])))
 
 
 @router.post("/complete/{slot_id}", response_model=CompletionResponse, status_code=201)
-def complete_slot(slot_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    slot = _owned_slot(db, slot_id, user_id)
+def complete_slot(slot_id: int):
+    slot = store().get("scheduled_slots", slot_id)
     if not slot:
         raise HTTPException(status_code=404, detail="Scheduled slot not found")
-
-    # Check if already completed
-    existing = db.query(Completion).filter(Completion.slot_id == slot_id).first()
+    existing = store().first("completions", slot_id=slot_id)
     if existing:
         return existing
-
-    recorded_at = datetime.now(timezone.utc)
-    completion = Completion(
-        slot_id=slot_id,
-        completed_at=recorded_at.replace(tzinfo=None),
-    )
-    db.add(completion)
-    
-    # Sync with curriculum: If this slot has a topic, mark it as completed
-    if slot.topic_id:
-        topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
-        if topic:
-            mark_topic_completed(topic, recorded_at)
-
-    db.commit()
-    db.refresh(completion)
+    recorded_at = datetime.now(timezone.utc).replace(microsecond=0)
+    with write("checklist.complete") as tx:
+        completion = tx.insert("completions", {"slot_id": slot_id, "completed_at": recorded_at})
+        # Sync with curriculum: if this slot has a topic, mark it as completed
+        if slot["topic_id"]:
+            topic = tx.get("topics", slot["topic_id"])
+            if topic:
+                save_topic(tx, mark_topic_completed(topic, recorded_at))
     return completion
 
 
 @router.delete("/complete/{slot_id}", status_code=204)
-def uncomplete_slot(slot_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    slot = _owned_slot(db, slot_id, user_id)
-    if not slot:
+def uncomplete_slot(slot_id: int):
+    slot = store().get("scheduled_slots", slot_id)
+    completion = store().first("completions", slot_id=slot_id)
+    if not slot or not completion:
         raise HTTPException(status_code=404, detail="Completion not found")
-    completion = db.query(Completion).filter(Completion.slot_id == slot.id).first()
-    if not completion:
-        raise HTTPException(status_code=404, detail="Completion not found")
-    # Sync with curriculum: Before deleting, check if this was the last completed slot for the topic
-    slot = completion.slot
-    if slot and slot.topic_id:
-        # Check if any other slots for this topic are completed
-        other_completions = db.query(Completion).join(ScheduledSlot).filter(
-            ScheduledSlot.topic_id == slot.topic_id,
-            ScheduledSlot.id != slot.id
-        ).first()
-        if not other_completions:
-            topic = db.query(CurriculumTopic).filter(CurriculumTopic.id == slot.topic_id).first()
-            if topic:
-                mark_topic_incomplete(topic)
-
-    db.delete(completion)
-    db.commit()
+    with write("checklist.uncomplete") as tx:
+        if slot["topic_id"]:
+            # Keep the topic complete when another slot for it is still complete.
+            completed_ids = {c["slot_id"] for c in tx.all("completions")}
+            others = [s for s in tx.find("scheduled_slots", topic_id=slot["topic_id"])
+                      if s["id"] != slot_id and s["id"] in completed_ids]
+            if not others:
+                topic = tx.get("topics", slot["topic_id"])
+                if topic:
+                    save_topic(tx, mark_topic_incomplete(topic))
+        tx.delete("completions", completion["id"])
     return None
 
 
 @router.get("/{child_id}/missed", response_model=List[ScheduledSlotResponse])
-def get_missed_items(child_id: int, user_id: str = Depends(require_family_user), db: Session = Depends(get_db)):
-    child = get_owned_child(db, child_id, user_id)
-    if not child:
-        raise HTTPException(status_code=404, detail="Child not found")
-
+def get_missed_items(child_id: int):
     today = date.today()
-    # Find past slots without completions
-    slots = (
-        db.query(ScheduledSlot)
-        .options(
-            selectinload(ScheduledSlot.subject),
-            selectinload(ScheduledSlot.topic),
-            selectinload(ScheduledSlot.completion),
-        )
-        .outerjoin(Completion)
-        .filter(
-            ScheduledSlot.child_id == child_id,
-            ScheduledSlot.date < today,
-            Completion.id.is_(None),
-        )
-        .order_by(ScheduledSlot.date.desc(), ScheduledSlot.time_start)
-        .all()
-    )
-    return [slot_to_response(s) for s in slots]
+    completed = {c["slot_id"] for c in store().all("completions")}
+    slots = [s for s in _child_slots(child_id) if s["date"] < today and s["id"] not in completed]
+    slots.sort(key=lambda s: s["time_start"])
+    slots.sort(key=lambda s: s["date"], reverse=True)
+    return slots_response(store(), slots)

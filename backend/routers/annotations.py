@@ -1,157 +1,85 @@
-from datetime import datetime, timezone
+"""Per-page PDF handwriting. Strokes live in Drive ``Annotations`` as JSON files;
+the Annotation References tab holds the file ID, checksum and revision."""
+import hashlib
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
 
-from auth import require_family_user
-from database import get_db
-from models import Child, Document, PdfPageAnnotation
+from app_context import request_operation as write
+from dependencies import context, require_member, store
 from schemas.annotations import AnnotationPageResponse, AnnotationPageUpdate
+from storage import RevisionConflict
+from storage.gateway import GoogleUnavailable
 
-
-router = APIRouter(prefix="/annotations", tags=["PDF Annotations"])
+router = APIRouter(prefix="/annotations", tags=["PDF Annotations"], dependencies=[Depends(require_member)])
 MAX_REQUEST_BYTES = 1_048_576
 
 
-def _owned_context(
-    db: Session,
-    child_id: int,
-    document_id: int,
-    page_number: int,
-    user_id: str,
-) -> tuple[Child, Document]:
-    child = db.query(Child).filter(Child.id == child_id, Child.owner_id == user_id).first()
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.owner_id == user_id,
-    ).first()
+def _context_check(child_id: int, document_id: int, page_number: int) -> None:
+    child = store().get("children", child_id)
+    document = store().get("documents", document_id)
     if not child or not document:
         raise HTTPException(status_code=404, detail="Annotation page not found")
-    if page_number < 1 or page_number > document.page_count:
+    if page_number < 1 or page_number > document["page_count"]:
         raise HTTPException(status_code=422, detail="PDF page is outside this document")
-    return child, document
 
 
-def _empty_page(child_id: int, document_id: int, page_number: int) -> AnnotationPageResponse:
-    return AnnotationPageResponse(
-        child_id=child_id,
-        document_id=document_id,
-        page_number=page_number,
-        strokes=[],
-        revision=0,
-        updated_at=None,
-    )
+def _row(child_id, document_id, page_number):
+    return store().first("annotations", child_id=child_id, document_id=document_id, page_number=page_number)
 
 
-def _annotation_response(annotation: PdfPageAnnotation) -> AnnotationPageResponse:
-    return AnnotationPageResponse.model_validate(annotation)
+def _response(row: dict | None, child_id, document_id, page_number) -> AnnotationPageResponse:
+    if row is None:
+        return AnnotationPageResponse(child_id=child_id, document_id=document_id, page_number=page_number,
+                                      strokes=[], revision=0, updated_at=None)
+    try:
+        strokes = json.loads(context().file_bytes(row["file_id"], row["sha256"]))["strokes"]
+    except GoogleUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Handwriting for this page is not cached and Google "
+                                                    "Drive is unreachable") from exc
+    return AnnotationPageResponse(child_id=child_id, document_id=document_id, page_number=page_number,
+                                  strokes=strokes, revision=row["revision"], updated_at=row["updated_at"])
 
 
-def _conflict(annotation: PdfPageAnnotation):
-    raise HTTPException(
-        status_code=409,
-        detail={
-            "message": "Annotations changed on another device",
-            "current": _annotation_response(annotation).model_dump(mode="json"),
-        },
-    )
+def _conflict(row):
+    raise HTTPException(status_code=409, detail={
+        "message": "Annotations changed on another device",
+        "current": _response(row, row["child_id"], row["document_id"], row["page_number"]).model_dump(mode="json"),
+    })
 
 
-@router.get(
-    "/children/{child_id}/documents/{document_id}/pages/{page_number}",
-    response_model=AnnotationPageResponse,
-)
-def get_page_annotations(
-    child_id: int,
-    document_id: int,
-    page_number: int,
-    user_id: str = Depends(require_family_user),
-    db: Session = Depends(get_db),
-):
-    _owned_context(db, child_id, document_id, page_number, user_id)
-    annotation = db.query(PdfPageAnnotation).filter(
-        PdfPageAnnotation.owner_id == user_id,
-        PdfPageAnnotation.child_id == child_id,
-        PdfPageAnnotation.document_id == document_id,
-        PdfPageAnnotation.page_number == page_number,
-    ).first()
-    return _annotation_response(annotation) if annotation else _empty_page(
-        child_id, document_id, page_number
-    )
+@router.get("/children/{child_id}/documents/{document_id}/pages/{page_number}", response_model=AnnotationPageResponse)
+def get_page_annotations(child_id: int, document_id: int, page_number: int):
+    _context_check(child_id, document_id, page_number)
+    return _response(_row(child_id, document_id, page_number), child_id, document_id, page_number)
 
 
-@router.put(
-    "/children/{child_id}/documents/{document_id}/pages/{page_number}",
-    response_model=AnnotationPageResponse,
-)
-def save_page_annotations(
-    child_id: int,
-    document_id: int,
-    page_number: int,
-    payload: AnnotationPageUpdate,
-    request: Request,
-    user_id: str = Depends(require_family_user),
-    db: Session = Depends(get_db),
-):
+@router.put("/children/{child_id}/documents/{document_id}/pages/{page_number}", response_model=AnnotationPageResponse)
+def save_page_annotations(child_id: int, document_id: int, page_number: int, payload: AnnotationPageUpdate,
+                          request: Request):
     content_length = request.headers.get("content-length")
     if content_length and int(content_length) > MAX_REQUEST_BYTES:
         raise HTTPException(status_code=413, detail="Annotation payload cannot exceed 1 MiB")
-
-    _owned_context(db, child_id, document_id, page_number, user_id)
-    filters = (
-        PdfPageAnnotation.owner_id == user_id,
-        PdfPageAnnotation.child_id == child_id,
-        PdfPageAnnotation.document_id == document_id,
-        PdfPageAnnotation.page_number == page_number,
-    )
-    stroke_data = [stroke.model_dump(mode="json") for stroke in payload.strokes]
-    now = datetime.now(timezone.utc)
-
-    if payload.base_revision == 0:
-        existing = db.query(PdfPageAnnotation).filter(*filters).first()
-        if existing:
-            _conflict(existing)
-        annotation = PdfPageAnnotation(
-            owner_id=user_id,
-            child_id=child_id,
-            document_id=document_id,
-            page_number=page_number,
-            strokes=stroke_data,
-            revision=1,
-            created_at=now,
-            updated_at=now,
-        )
-        db.add(annotation)
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            existing = db.query(PdfPageAnnotation).filter(*filters).first()
-            if existing:
-                _conflict(existing)
-            raise
-        db.refresh(annotation)
-        return _annotation_response(annotation)
-
-    updated = db.query(PdfPageAnnotation).filter(
-        *filters,
-        PdfPageAnnotation.revision == payload.base_revision,
-    ).update(
-        {
-            PdfPageAnnotation.strokes: stroke_data,
-            PdfPageAnnotation.revision: payload.base_revision + 1,
-            PdfPageAnnotation.updated_at: now,
-        },
-        synchronize_session=False,
-    )
-    if updated != 1:
-        db.rollback()
-        existing = db.query(PdfPageAnnotation).filter(*filters).first()
-        if existing:
-            _conflict(existing)
+    _context_check(child_id, document_id, page_number)
+    strokes = [stroke.model_dump(mode="json") for stroke in payload.strokes]
+    body = json.dumps({"child_id": child_id, "document_id": document_id, "page_number": page_number,
+                       "strokes": strokes}, separators=(",", ":"), sort_keys=True).encode()
+    existing = _row(child_id, document_id, page_number)
+    if payload.base_revision == 0 and existing:
+        _conflict(existing)
+    if payload.base_revision and not existing:
         raise HTTPException(status_code=409, detail="Annotation revision is no longer available")
-
-    db.commit()
-    annotation = db.query(PdfPageAnnotation).filter(*filters).one()
-    return _annotation_response(annotation)
+    try:
+        with write("annotations.save", f"Handwriting on page {page_number}") as tx:
+            # Each saved version is its own content-addressed Drive file, so earlier revisions remain.
+            name = f"annotations-child{child_id}-doc{document_id}-p{page_number}-{hashlib.sha256(body).hexdigest()[:12]}.json"
+            file_id, sha = tx.add_blob(body, "Annotations", name, "application/json")
+            values = {"file_id": file_id, "sha256": sha, "stroke_count": len(strokes)}
+            if existing:
+                tx.update("annotations", existing["id"], values, expected_revision=payload.base_revision)
+            else:
+                tx.insert("annotations", {"child_id": child_id, "document_id": document_id,
+                                          "page_number": page_number, **values})
+    except RevisionConflict:
+        _conflict(_row(child_id, document_id, page_number))
+    return _response(_row(child_id, document_id, page_number), child_id, document_id, page_number)

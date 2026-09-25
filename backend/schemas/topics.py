@@ -43,11 +43,3 @@ class AIAnalysisResult(BaseModel):
     topics: List[TopicBase]
     pdf_filename: str
 
-
-class DocumentFinalizeRequest(BaseModel):
-    blob_path: str = Field(..., min_length=5, max_length=600)
-    original_filename: str = Field(..., min_length=1, max_length=255)
-    size_bytes: int = Field(..., gt=0, le=262_144_000)
-    page_count: int = Field(..., gt=0, le=20_000)
-    toc_text: str = Field(..., min_length=1, max_length=500_000)
-    sha256: Optional[str] = Field(None, pattern=r"^[a-fA-F0-9]{64}$")
