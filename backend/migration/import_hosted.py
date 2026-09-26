@@ -12,12 +12,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
+
+from storage.files import sha256_bytes
 
 from .common import Report, chunks, dry_run_store, parse_time, staged
 
 ENTITY_TABLES = ("children", "subjects", "documents", "topics", "time_windows", "blocked_days", "scheduled_slots",
                  "completions", "canvas_inserts", "enrichment", "settings", "annotations")
+
+
+def _uploaded_name(name: str | None) -> str:
+    """A file name without the upload prefix the old app added (32 hex characters and "_")."""
+    return re.sub(r"^[0-9a-f]{32}_", "", (name or "").strip()).lower()
 
 
 def _load(export: Path, table: str) -> list[dict]:
@@ -62,6 +70,15 @@ def import_export(store, export: Path, report: Report) -> Report:
                 report.conflict("book_checksum", f"Document {row['id']} bytes differ from its recorded checksum",
                                 recorded=row.get("sha256"), downloaded=book.get("sha256"))
             existing = files.find_by_checksum(sha, book.get("size") or row.get("size_bytes")) if sha else None
+            if not sha and not book:
+                # Older uploads recorded no checksum: accept a Drive copy with the same name and exact size.
+                name = _uploaded_name(row.get("original_filename"))
+                copy = next((f for f in files.list_pdfs() if f["size"] == row.get("size_bytes")
+                             and _uploaded_name(f["name"]) == name), None)
+                if copy:
+                    existing, sha = copy["path"], sha256_bytes(files.read(copy["path"]))
+                    report.notes.append(f"Document {row['id']} matched {copy['path']} by name and size "
+                                        "(no checksum was recorded)")
             if existing:
                 path, source = existing, "drive"
             elif book.get("file"):

@@ -94,6 +94,10 @@ The import brings in:
 
 Topics are merged with any existing History topics by **source document and page range**, never by title alone. An ambiguous overlap is reported and not created. Review it, then rerun with `--create-unmatched` if the new topics are wanted.
 
+If the app already holds the textbook as a different file (same page count, and at least 90% of the curriculum's topic titles on it), that document is treated as the **same book**: it keeps its ID and topics but now uses the History folder's copy, and topics on it are also matched by title (a combined tracker topic "A / B" by any part). The app's completions are kept; only those the tracker explicitly marks otherwise are reported. An app topic inside a combined tracker topic is kept and reported as a possible duplicate.
+
+Books the old app recorded without a checksum are linked to a PDF in the Drive folder with the same name and exact size.
+
 ### The unfinished lesson
 
 Lucas's Genghis Khan discussion is imported as an **unfinished** session:

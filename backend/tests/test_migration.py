@@ -54,6 +54,22 @@ def test_missing_book_is_copied_into_books(harness, tmp_path):
     assert sum(1 for d in store.all("documents") if d["sha256"] == history["book_sha"]) == 1
 
 
+def test_book_without_checksum_is_found_by_name_and_size(harness, tmp_path):
+    history = build_history_folder(harness.drive / "Lucas - History")
+    export = build_hosted_export(tmp_path / "export", history["book"])
+    documents = json.loads((export / "tables" / "documents.json").read_text())
+    documents[0].update(sha256=None, original_filename="0123456789abcdef0123456789abcdef_Old Upload.pdf")
+    (export / "tables" / "documents.json").write_text(json.dumps(documents))
+    manifest = json.loads((export / "manifest.json").read_text())
+    manifest["books"] = {}  # nothing downloaded
+    (export / "manifest.json").write_text(json.dumps(manifest))
+    harness.add_file(history["book"], "Books/old upload.pdf")
+    report = import_export(harness.ctx.store, export, Report("import-hosted"))
+    document = harness.ctx.store.get("documents", 3)
+    assert document["file_path"] == "Books/old upload.pdf" and document["sha256"] == history["book_sha"]
+    assert not [c for c in report.conflicts if c["kind"] == "book_missing"]
+
+
 def test_history_import_preserves_unfinished_genghis_and_evidence(harness, tmp_path):
     store, history, _, _, imported, source = migrate(harness, tmp_path)
     assert [c["kind"] for c in imported.conflicts] == [], imported.conflicts
@@ -83,6 +99,31 @@ def test_history_import_preserves_unfinished_genghis_and_evidence(harness, tmp_p
     assert store.get("question_maps", f"{genghis_topic['subject_id']}:21:3")["topic_id"] == 40
     report = reconcile_history(store, source, Report("reconcile"))
     assert not report.conflicts, report.conflicts
+
+
+def test_adopted_overlays_import_only_with_a_recorded_page_check(harness, tmp_path):
+    source = harness.drive / "Lucas - History"
+    history = build_history_folder(source)
+    harness.add_file(history["book"], "Books/Story of the World V.2.pdf")
+    reviewed = source / "teacher_resources" / "textbook" / "reviewed"
+    for key, pages, validation in (
+            ("C20-T01", [4, 4], {"status": "verified", "issues": [], "verified_against_pdf_pages": [4],
+                                 "verified_on": "2026-09-14"}),
+            ("C20-T02", [5, 5], {"status": "verified", "issues": []})):
+        passage = f"The passage for {key}."
+        (reviewed / f"{key}.json").write_text(json.dumps({
+            "schema_version": 2, "topic_id": key, "pdf_pages": pages, "passage": passage,
+            "passage_sha256": hashlib.sha256(passage.encode()).hexdigest(),
+            "sentences": [{"text": passage, "paragraphIndex": 0}], "validation": validation,
+            "provenance": {"pdf": history["book_sha"]},
+            "review": {"adopted_at": "2026-09-23T21:07:21+00:00", "basis": "Existing source-verified passage."}}))
+    report = import_history(harness.ctx.store, source, Report("import-history"))
+    by_key = {t["id"]: t["source_key"] for t in harness.ctx.store.all("topics")}
+    imported = {by_key[p["topic_id"]]: p for p in harness.ctx.store.all("passages")}
+    assert imported["C20-T01"]["reviewed_at"].isoformat() == "2026-09-14T00:00:00+00:00"
+    assert "C20-T02" not in imported
+    assert [c["detail"] for c in report.conflicts] == [
+        "C20-T02: no record that PDF pages [5] were checked — imported topic stays unreviewed"]
 
 
 def test_history_folder_is_never_modified(harness, tmp_path):
@@ -154,6 +195,41 @@ def test_conflicting_topics_are_reported_not_overwritten(harness, tmp_path):
     assert store.find("topics", title="Mongols (AI guess)")[0]["completed"] is True
 
 
+def test_app_copy_of_the_textbook_is_merged_as_the_same_book(harness, tmp_path):
+    """The app had the book as a different file: one History list results, keeping the app's
+    IDs and completions and taking the tracker's boundaries and the History folder's copy."""
+    from pypdf import PdfReader
+    source = harness.drive / "Lucas - History"
+    history = build_history_folder(source)
+    pages = len(PdfReader(source / "Story of the World V.2").pages)
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        lucas = tx.insert("children", {"name": "Lucas"})
+        subject = tx.insert("subjects", {"child_id": lucas["id"], "name": "History"})
+        book = tx.insert("documents", {"file_path": None, "page_count": pages, "sha256": "0" * 64,
+                                       "original_filename": "Story of the World V.pdf"})
+        app = {title: tx.insert("topics", {"subject_id": subject["id"], "title": title, "page_start": start,
+                                           "page_end": end, "pdf_page_offset": 2, "document_id": book["id"],
+                                           "completed": done})
+               for title, start, end, done in (
+                   ("Robin Hood", 1, 1, True), ("Robin Hood and the Butcher", 1, 1, True),
+                   ("The Scattering of the Jews", 2, 2, True), ("The Clever Rabbi of Cordova", 3, 3, False),
+                   ("Genghis Khan, Emperor of All Men", 4, 4, False), ("The Mongol Conquest of China", 5, 5, True),
+                   ("Index", 6, 7, False))}
+    report = import_history(store, source, Report("x"))
+    topics = store.find("topics", subject_id=subject["id"])
+    assert len(topics) == 7  # nothing duplicated
+    merged = store.get("documents", book["id"])
+    assert merged["sha256"] == history["book_sha"] and merged["file_path"].startswith("Books/")
+    genghis = store.get("topics", app["Genghis Khan, Emperor of All Men"]["id"])
+    assert genghis["source_key"] == "C21-T01" and (genghis["page_start"], genghis["page_end"]) == (4, 5)
+    assert store.get("topics", app["Robin Hood"]["id"])["source_key"] == "C19-T03"
+    assert store.get("topics", app["The Clever Rabbi of Cordova"]["id"])["completed"] is True
+    kinds = sorted(c["kind"] for c in report.conflicts)
+    assert kinds == ["topic_absorbed", "topic_completion"], report.conflicts  # the Butcher; C21-T02 is 'Planned'
+    assert not store.get("topics", app["Index"]["id"])["source_key"]
+
+
 def test_backup_is_verified_against_the_live_database(harness, tmp_path):
     store, *_ = migrate(harness, tmp_path)
     backup = create_backup(store, tmp_path / "backups")
@@ -171,8 +247,12 @@ def test_dry_run_changes_nothing(harness, tmp_path, monkeypatch, capsys):
     export = build_hosted_export(tmp_path / "export", history["book"])
     database = harness.config.database_path
 
+    for folder in harness.drive.iterdir():  # a fresh Drive folder, as on the host before first start
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+
     def snapshot():
-        files = {p.relative_to(harness.drive): p.stat().st_mtime_ns for p in harness.drive.rglob("*") if p.is_file()}
+        files = {p.relative_to(harness.drive): p.stat().st_mtime_ns for p in harness.drive.rglob("*")}
         rows = sqlite3.connect(database).execute("SELECT COUNT(*) FROM operation_receipts").fetchone()[0]
         return files, rows
     before = snapshot()

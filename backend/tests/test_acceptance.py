@@ -24,7 +24,10 @@ def test_reading_and_work_continue_without_internet(harness):
     import socket
     real_connect = socket.socket.connect
 
-    def offline(*args, **kwargs):
+    def offline(sock, address, *args, **kwargs):
+        # Loopback stays up: on Windows the event loop's self-pipe is a local socket pair.
+        if isinstance(address, tuple) and address[0] in ("127.0.0.1", "::1"):
+            return real_connect(sock, address, *args, **kwargs)
         raise OSError("network is down")
     socket.socket.connect = offline
     try:

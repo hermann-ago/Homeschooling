@@ -75,7 +75,7 @@ class AppContext:
         self.responses = ResponseCache(self.config.dir / "responses")
         self.instance_token = uuid.uuid4().hex
         self.files = DriveFolder(drive_folder or self.config.get("drive_folder"))
-        if self.files.available:
+        if self.files.available and start_worker:  # tools (e.g. the dry run) leave the Drive folder untouched
             self.files.ensure_folders()
         self.store = Store(self.config.database_path, self.files).load()
         self.last_export = None

@@ -84,7 +84,8 @@ def reconcile_hosted(store, export: Path, report: Report) -> Report:
             continue
         book = manifest.get("books", {}).get(str(document_id), {})
         expected_sha = book.get("sha256") or source.get("sha256")
-        if row["sha256"] != expected_sha:
+        # A History import may deliberately point the app's copy of the textbook at the History folder's copy.
+        if row["sha256"] != expected_sha and row.get("source") != "history":
             report.conflict("book_hash", f"Document {document_id} checksum differs", database=row["sha256"],
                             source=expected_sha)
     import hashlib
@@ -140,9 +141,11 @@ def reconcile_history(store, source: Path, report: Report) -> Report:
     completed = {str(r["Topic ID"]).strip() for r in tracker.get("topics", []) if r.get("Coverage") == "Completed"}
     history_topics = {t["source_key"]: t for t in store.all("topics") if t["source_key"]}
     stored_completed = {k for k, t in history_topics.items() if t["completed"]}
-    if completed != stored_completed:
-        report.conflict("history_completion", "Completed topics differ",
-                        tracker=sorted(completed), database=sorted(stored_completed))
+    # Every completion the tracker records must be present. The app may hold more (completions the
+    # tracker has no record of were kept, and the import reported them), so extra ones are not a conflict.
+    if completed - stored_completed:
+        report.conflict("history_completion", "Completed topics are missing",
+                        missing=sorted(completed - stored_completed))
     genghis = [s for s in store.all("tutor_sessions") if s["id"].endswith("C21-T01-recovered")]
     if not genghis or genghis[0]["status"] != "unfinished":
         report.conflict("genghis", "The recovered Genghis discussion is not an unfinished session")

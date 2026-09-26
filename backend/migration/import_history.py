@@ -46,6 +46,14 @@ PROFILE_KEYS = {
 
 # ── reading the source ───────────────────────────────────────────────────────
 
+def _title_key(title: str | None) -> str:
+    return re.sub(r"[^a-z0-9]", "", (title or "").lower())
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
 def _text(value):
     if value is None:
         return None
@@ -153,6 +161,24 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
     textbook_sha, tests_sha = sha256_file(textbook_path), sha256_file(tests_path)
     from pypdf import PdfReader
     ids: dict = {}
+    textbook_pages = len(PdfReader(textbook_path).pages)
+    curriculum_titles = {_title_key(part) for entry in curriculum["topics"] for part in entry["title"].split(" / ")}
+
+    def same_book(tx, subject_id):
+        """The app's copy of the textbook under another file: same page count, and at least
+        90% of the curriculum's topic titles already on it for this subject."""
+        by_document: dict = {}
+        for topic in tx.find("topics", subject_id=subject_id):
+            if topic.get("document_id"):
+                by_document.setdefault(topic["document_id"], []).append(topic)
+        for document_id, group in by_document.items():
+            document = tx.get("documents", document_id)
+            if not document or document["sha256"] == tests_sha or document.get("page_count") != textbook_pages:
+                continue
+            shared = len({_title_key(t["title"]) for t in group} & curriculum_titles)
+            if shared >= 0.9 * len(curriculum["topics"]):
+                return document, shared
+        return None, 0
 
     def setup(tx):
         child = children[0] if children else tx.insert("children", {"name": learner_name, "color": "#4A90D9"})
@@ -171,6 +197,18 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
             relative, copied = tx.add_blob(path.read_bytes(), "Books", name, "application/pdf")
             if copied != sha:
                 report.conflict("book_checksum", f"{path.name} changed while it was being copied")
+            twin, shared = same_book(tx, subject["id"]) if key == "textbook" else (None, 0)
+            if twin:
+                # One History book: the app's record keeps its ID and topics but now uses the
+                # History folder's copy, which the reviewed passages were checked against.
+                report.notes.append(
+                    f"Document {twin['id']} ({twin['original_filename']}) is the same book as {path.name}: "
+                    f"{textbook_pages} pages, {shared} of {len(curriculum_titles)} topic titles shared. "
+                    f"It now uses the History folder's copy (was sha256 {twin['sha256']}).")
+                docs[key] = tx.update("documents", twin["id"], {
+                    "file_path": relative, "original_filename": name, "size_bytes": path.stat().st_size,
+                    "sha256": sha, "source": "history"})
+                continue
             docs[key] = tx.insert("documents", {
                 "file_path": relative, "original_filename": name, "size_bytes": path.stat().st_size,
                 "page_count": len(PdfReader(path).pages), "sha256": sha, "source": "history"})
@@ -195,6 +233,21 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
 
     def topics(tx):
         existing = [t for t in tx.find("topics", subject_id=ids["subject"])]
+        # On the same book, a topic may also be recognised by its title (a combined tracker
+        # topic such as "A / B" by any of its parts) when exactly one app topic carries it.
+        by_title: dict = {}
+        for t in existing:
+            if not t["source_key"] and t["document_id"] == ids["textbook"]:
+                by_title.setdefault(_title_key(t["title"]), []).append(t)
+        taken: set = set()
+
+        def title_match(entry):
+            for part in entry["title"].split(" / "):
+                found = [c for c in by_title.get(_title_key(part), []) if c["id"] not in taken]
+                if len(found) == 1:
+                    return found[0]
+            return None
+
         planned = []
         for entry in curriculum["topics"]:
             key = entry["id"]
@@ -210,29 +263,46 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                 "evidence_session_id": _text(row.get("Evidence / session ID")),
                 "next_step": _text(row.get("Next teaching step")),
             }
-            completed = _text(row.get("Coverage")) == "Completed"
+            coverage = _text(row.get("Coverage"))
+            completed = coverage == "Completed"
             match = next((t for t in existing if t["source_key"] == key), None) or next(
                 (t for t in existing if not t["source_key"] and t["document_id"] == ids["textbook"]
-                 and t["page_start"] == entry["start"] and t["page_end"] == entry["end"]
-                 and (t["pdf_page_offset"] or 0) == offset), None)
-            planned.append((entry, values, completed, _date(row.get("Date completed")), match))
+                 and t["id"] not in taken and t["page_start"] == entry["start"] and t["page_end"] == entry["end"]
+                 and (t["pdf_page_offset"] or 0) == offset), None) or title_match(entry)
+            if match:
+                taken.add(match["id"])
+            planned.append((entry, values, completed, coverage, _date(row.get("Date completed")), match))
         matched = {m["id"] for *_, m in planned if m}
-        # Pass 1: exact matches by document and passage.
-        for entry, values, completed, day, match in planned:
+        # Pass 1: matches by document and passage (or title on the same book).
+        kept_unknown = 0
+        for entry, values, completed, coverage, day, match in planned:
             if not match:
                 continue
             if match["completed"] and not completed:
-                report.conflict("topic_completion", f"{entry['id']}: the app marks it complete but the History "
-                                "tracker does not; the app's completion was kept", topic_id=match["id"])
+                if coverage in (None, "Unknown"):  # the tracker has no record either way
+                    kept_unknown += 1
+                else:
+                    report.conflict("topic_completion", f"{entry['id']}: the app marks it complete but the History "
+                                    f"tracker says {coverage!r}; the app's completion was kept", topic_id=match["id"])
+            # Another app topic inside a combined tracker topic ("A / B") would repeat part of it.
+            for part in entry["title"].split(" / "):
+                for other in by_title.get(_title_key(part), []):
+                    if other["id"] not in matched and entry["start"] <= other["page_start"] <= entry["end"]:
+                        report.conflict("topic_absorbed", f"{entry['id']} ({entry['title']}) also covers app topic "
+                                        f"{other['id']} ({other['title']}); both were kept — remove one in the app "
+                                        "if it is a duplicate", topic_id=other["id"])
             changes = dict(values)
             if completed and not match["completed"]:
                 changes.update(completed=True, completed_at=_noon(day))
             tx.update("topics", match["id"], changes)
             topic_ids[entry["id"]] = match["id"]
         # Pass 2: create the rest unless they collide with unmatched app topics for the same book.
+        if kept_unknown:
+            report.notes.append(f"{kept_unknown} topics the app marks complete have no tracker record "
+                                "(Coverage 'Unknown'); the app's completion was kept")
         unmatched = [t for t in existing if t["id"] not in matched and not t["source_key"]
                      and t["document_id"] == ids["textbook"]]
-        for entry, values, completed, day, match in planned:
+        for entry, values, completed, coverage, day, match in planned:
             if match:
                 continue
             overlapping = [t["id"] for t in unmatched if t["page_start"] <= entry["end"] and t["page_end"] >= entry["start"]]
@@ -470,23 +540,31 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                 problems.append("passage text does not match its recorded hash")
             if list(passages.pdf_range(topic)) != list(overlay["pdf_pages"]):
                 problems.append(f"PDF pages {overlay['pdf_pages']} differ from the topic's {passages.pdf_range(topic)}")
-            if overlay.get("validation", {}).get("status") != "verified":
+            validation = overlay.get("validation", {})
+            if validation.get("status") != "verified":
                 problems.append("overlay is not marked verified")
+            review = overlay.get("review", {})
+            # Older overlays were "adopted" and record their page check under validation instead.
+            reviewed_pages = review.get("pdf_pages") or validation.get("verified_against_pdf_pages") or []
+            pdf_start, pdf_end = passages.pdf_range(topic)
+            unreviewed = sorted(set(range(pdf_start, pdf_end + 1)) - set(reviewed_pages))
+            if unreviewed:
+                problems.append(f"no record that PDF pages {unreviewed} were checked")
             if problems:
                 report.conflict("passage", f"{key}: " + "; ".join(problems) + " — imported topic stays unreviewed")
                 continue
-            review = overlay.get("review", {})
+            reviewed_at = review.get("reviewed_at") or validation.get("verified_on")
             images = [{**{k: image.get(k) for k in ("pdf_page", "classification", "alt", "caption", "crop",
                                                      "full_page_reason")},
                        "before_sentence": image.get("before_sentence"), "source_asset": image.get("asset")}
                       for image in overlay.get("selected_images", [])]
-            passages.record_review(tx, topic, textbook, overlay["passage"], review.get("pdf_pages", []),
-                                   review.get("notes") or "Reviewed in the History project", images,
+            passages.record_review(tx, topic, textbook, overlay["passage"], reviewed_pages,
+                                   review.get("notes") or review.get("basis") or "Reviewed in the History project",
+                                   images,
                                    [{"text": s["text"], "paragraphIndex": s.get("paragraphIndex", 0)}
                                     for s in overlay["sentences"]],
                                    source="history-reviewed-overlay",
-                                   reviewed_at=datetime.fromisoformat(review["reviewed_at"])
-                                   if review.get("reviewed_at") else None)
+                                   reviewed_at=_aware(datetime.fromisoformat(reviewed_at)) if reviewed_at else None)
         report.count("passages", source=len(overlays))
     staged(store, "import-history-passages", "Reviewed History passages", passage_rows, report)
     report.count("passages", imported=len([p for p in store.all("passages")
