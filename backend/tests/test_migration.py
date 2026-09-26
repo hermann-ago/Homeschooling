@@ -70,6 +70,23 @@ def test_book_without_checksum_is_found_by_name_and_size(harness, tmp_path):
     assert not [c for c in report.conflicts if c["kind"] == "book_missing"]
 
 
+def test_books_found_only_in_the_history_folder_are_copied_into_books(harness, tmp_path):
+    source = harness.drive / "Lucas - History"
+    history = build_history_folder(source)
+    tests_pdf = (source / "SOTW2_Tests.pdf").read_bytes()
+    export = build_hosted_export(tmp_path / "export", history["book"])
+    documents = json.loads((export / "tables" / "documents.json").read_text())
+    documents.append({**documents[0], "id": 4, "blob_path": "documents/tests.pdf", "original_filename": "SOTW2_Tests.pdf",
+                      "size_bytes": len(tests_pdf), "sha256": hashlib.sha256(tests_pdf).hexdigest()})
+    (export / "tables" / "documents.json").write_text(json.dumps(documents))
+    store = harness.ctx.store
+    import_export(store, export, Report("import-hosted"))
+    assert store.get("documents", 4)["file_path"] == "Lucas - History/SOTW2_Tests.pdf"
+    import_history(store, source, Report("import-history"))
+    moved = store.get("documents", 4)
+    assert moved["file_path"].startswith("Books/") and (harness.drive / moved["file_path"]).read_bytes() == tests_pdf
+
+
 def test_history_import_preserves_unfinished_genghis_and_evidence(harness, tmp_path):
     store, history, _, _, imported, source = migrate(harness, tmp_path)
     assert [c["kind"] for c in imported.conflicts] == [], imported.conflicts
@@ -228,6 +245,7 @@ def test_app_copy_of_the_textbook_is_merged_as_the_same_book(harness, tmp_path):
     kinds = sorted(c["kind"] for c in report.conflicts)
     assert kinds == ["topic_absorbed", "topic_completion"], report.conflicts  # the Butcher; C21-T02 is 'Planned'
     assert not store.get("topics", app["Index"]["id"])["source_key"]
+    assert {t["pdf_filename"] for t in topics if t["document_id"] == book["id"]} == {"Story of the World V.2.pdf"}
 
 
 def test_backup_is_verified_against_the_live_database(harness, tmp_path):

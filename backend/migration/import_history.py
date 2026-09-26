@@ -164,6 +164,13 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
     textbook_pages = len(PdfReader(textbook_path).pages)
     curriculum_titles = {_title_key(part) for entry in curriculum["topics"] for part in entry["title"].split(" / ")}
 
+    def in_history(relative: str) -> bool:
+        """Whether a Drive-folder path lies inside the History folder (which may be archived later)."""
+        try:
+            return store.files.resolve(relative).is_relative_to(source.resolve())
+        except (OSError, PermissionError, ValueError):
+            return False
+
     def same_book(tx, subject_id):
         """The app's copy of the textbook under another file: same page count, and at least
         90% of the curriculum's topic titles already on it for this subject."""
@@ -190,13 +197,16 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
         docs = {}
         for key, sha, path in (("textbook", textbook_sha, textbook_path), ("tests", tests_sha, tests_path)):
             existing = next((d for d in tx.all("documents") if d["sha256"] == sha), None)
-            if existing:
+            if existing and existing.get("file_path") and not in_history(existing["file_path"]):
                 docs[key] = existing
                 continue
             name = path.name if path.suffix.lower() == ".pdf" else path.name + ".pdf"
             relative, copied = tx.add_blob(path.read_bytes(), "Books", name, "application/pdf")
             if copied != sha:
                 report.conflict("book_checksum", f"{path.name} changed while it was being copied")
+            if existing:  # the app has this book, but without a file or only inside the History folder
+                docs[key] = tx.update("documents", existing["id"], {"file_path": relative})
+                continue
             twin, shared = same_book(tx, subject["id"]) if key == "textbook" else (None, 0)
             if twin:
                 # One History book: the app's record keeps its ID and topics but now uses the
@@ -297,6 +307,11 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
             tx.update("topics", match["id"], changes)
             topic_ids[entry["id"]] = match["id"]
         # Pass 2: create the rest unless they collide with unmatched app topics for the same book.
+        # The app groups a subject's books by file name: keep the book's other topics under the same name.
+        for t in existing:
+            if t["document_id"] == ids["textbook"] and t["id"] not in matched \
+                    and t["pdf_filename"] != curriculum["sources"]["text"]:
+                tx.update("topics", t["id"], {"pdf_filename": curriculum["sources"]["text"]})
         if kept_unknown:
             report.notes.append(f"{kept_unknown} topics the app marks complete have no tracker record "
                                 "(Coverage 'Unknown'); the app's completion was kept")
