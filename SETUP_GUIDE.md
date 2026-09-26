@@ -5,7 +5,7 @@ The home server runs on one Windows computer on the home network. Other devices 
 ## 1. Install
 
 1. Install [Git](https://git-scm.com/downloads), [Python 3.11+](https://www.python.org/downloads/) (tick "Add python.exe to PATH") and [Node.js LTS](https://nodejs.org/).
-2. Clone the code **outside Google Drive and OneDrive**:
+2. Clone the code **outside Google Drive**. A OneDrive-synced folder such as the Desktop works, because local data never lives next to the code:
    ```powershell
    git clone https://github.com/hermann-ago/Homeschooling "$env:USERPROFILE\source\Homeschooling"
    cd "$env:USERPROFILE\source\Homeschooling"
