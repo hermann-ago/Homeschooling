@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { X } from 'lucide-react';
 import { driveBooks } from '../api/documents';
+import { Button, Dialog, Field } from '../ui';
 
 /** Choose a PDF already in the synced Homeschooling folder; it is linked by its path, not copied. */
 export default function DriveBookPicker({ onPick, onClose }) {
@@ -14,32 +14,28 @@ export default function DriveBookPicker({ onPick, onClose }) {
 
   const shown = (books || []).filter((b) => b.path.toLowerCase().includes(filter.toLowerCase()));
   return (
-    <div className="fixed inset-0 z-50 bg-black/30 grid place-items-center p-4" role="dialog" aria-label="Books in Google Drive">
-      <div className="bg-surface rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between border-b p-4">
-          <h2 className="font-semibold">Books in the Homeschooling folder</h2>
-          <button type="button" onClick={onClose} aria-label="Close"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-4 space-y-3 overflow-y-auto">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name" className="w-full rounded-sm border p-2 text-sm" />
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          {!books && !error && <p className="text-sm text-text-secondary">Listing the folder…</p>}
-          {books && books.length === 0 && <p className="text-sm text-text-secondary">No PDFs in the Homeschooling folder yet.</p>}
-          <ul className="divide-y text-sm">
-            {shown.map((book) => (
-              <li key={book.path} className="py-2 flex items-center justify-between gap-2">
-                <span className="min-w-0">
-                  <span className="block truncate">{book.name}</span>
-                  <span className="block truncate text-xs text-text-secondary">{book.path}</span>
-                </span>
-                {book.linked ? <span className="text-xs text-text-secondary">Already linked</span> : (
-                  <button type="button" onClick={() => onPick(book)} className="rounded-sm bg-accent text-white px-3 py-1 text-xs">Use</button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
+    <Dialog open onClose={onClose} title="Books in the Homeschooling folder" width={560}
+      description="The book stays where it is in Google Drive; the app links to it."
+      footer={<Button onClick={onClose}>Cancel</Button>}>
+      <div className="flex flex-col gap-3">
+        <Field label="Filter" placeholder="Part of the name or folder" value={filter} onChange={(e) => setFilter(e.target.value)} autoFocus />
+        {error && <p className="text-sm text-problem">{error}</p>}
+        {!books && !error && <p className="text-sm text-muted">Listing the folder…</p>}
+        {books && books.length === 0 && <p className="text-sm text-muted">No PDFs in the Homeschooling folder yet.</p>}
+        <ul className="max-h-[50vh] overflow-y-auto divide-y divide-line-soft">
+          {shown.map((book) => (
+            <li key={book.path} className="py-2.5 flex items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block truncate text-[15px] font-semibold">{book.name}</span>
+                <span className="block truncate text-[13px] text-muted">{book.path}</span>
+              </span>
+              {book.linked
+                ? <span className="text-[13px] text-subtle whitespace-nowrap">Already linked</span>
+                : <Button size="sm" variant="primary" onClick={() => onPick(book)}>Use</Button>}
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
+    </Dialog>
   );
 }

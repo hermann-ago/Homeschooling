@@ -50,6 +50,7 @@ vi.mock('./pdfAnnotations/AnnotationLayer', () => ({ default: () => null }));
 vi.mock('./pdfAnnotations/AnnotationToolbar', () => ({ default: () => null }));
 
 import PageViewer from './PageViewer';
+import { FeedbackProvider } from '../ui/feedback';
 
 
 describe('PageViewer sizing', () => {
@@ -85,7 +86,7 @@ describe('PageViewer sizing', () => {
   });
 
   it('keeps a stable page width when resize notifications repeat', async () => {
-    render(<PageViewer
+    render(<FeedbackProvider><PageViewer
       childId={2}
       slot={{
         document_id: 9,
@@ -95,8 +96,7 @@ describe('PageViewer sizing', () => {
         subject_name: 'Language Arts',
         topic_title: 'Spelling Practice',
       }}
-      onClose={() => {}}
-    />);
+    /></FeedbackProvider>);
 
     await waitFor(() => expect(screen.getByTestId('pdf-page')).toBeTruthy());
     expect(screen.getByTestId('pdf-page').style.width).toBe('500px');
@@ -110,15 +110,5 @@ describe('PageViewer sizing', () => {
     });
 
     expect(viewerMocks.pageRender).not.toHaveBeenCalled();
-  });
-
-  it('links a lesson to its read-along reader, and only a lesson', async () => {
-    const lesson = { document_id: 9, page_from: 1, page_to: 2, subject_name: 'History', topic_title: 'Genghis Khan' };
-    const { unmount } = render(<PageViewer childId={2} slot={{ ...lesson, topic_id: 372 }} onClose={() => {}} />);
-    expect(screen.getByRole('link', { name: /read along/i }).getAttribute('href')).toBe('/lesson?learner=2&topic=372');
-    unmount();
-    render(<PageViewer childId={2} slot={lesson} onClose={() => {}} />);
-    expect(screen.queryByRole('link', { name: /read along/i })).toBeNull();
-    await waitFor(() => expect(screen.getByTestId('pdf-page')).toBeTruthy());
   });
 });

@@ -253,7 +253,7 @@ export default function Lesson() {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         <div className="flex-1 min-h-0 min-w-0 bg-surface">
           {viewerSlot?.document_id ? (
-            <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)} hideClose
+            <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
               boundaryNote={viewing ? null : boundary}
               highlightSentence={!viewing && hasText ? highlight : null}
               requestedPage={!viewing && activeIndex !== null ? sentencePages[activeIndex] : null} />

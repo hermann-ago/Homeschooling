@@ -6,11 +6,11 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
 
 ## What it does
 
-- **Family app:** Today, Weekly, Daily Canvas, Curriculum, Progress, Calendar and Settings. It covers scheduling across children and subjects, completion tracking with timestamps, AI enrichment (quiz, summary, key terms, simple explanation) and handwriting on PDF pages.
-- **Lesson reader:** open it with **Read along** on any lesson's pages, or at `/lesson?learner=…&topic=…` (the tutor adds `&session=…`).
+- **Family app:** Today, Plan (week and month), Curriculum, Progress and Settings, for everyone or one learner (each device remembers its choice). It covers scheduling across children and subjects, days off and re-planning, completion tracking with timestamps, and progress against the school year.
+- **Lesson:** open it from any lesson (**Open**), or at `/lesson?learner=…&topic=…` (the plan adds `&slot=…` for **Mark lesson done**; the tutor adds `&session=…`).
   - It shows the original PDF pages, so layouts, maps and illustrations stay intact.
   - It marks the assigned start and stop headings, including lessons that begin or end partway down a page.
-  - It includes the handwriting tools.
+  - It includes the handwriting tools, **Practice** (AI quiz, summary, key terms, simple explanation) and **Extra pages** from other books. In a tutor session only the pages and the read-along show.
   - It has a read-along panel with play, pause, replay, speed and sentence highlighting. The highlighting follows real timing data only: Google TTS timepoints or the device voice's own events. Nothing is estimated.
   - **Create read-along voice** builds a Google voice for the lesson from any device, within the monthly character guard. It is saved with the lesson and reused by every device and the tutor.
 - **Tutoring records:** sessions, handwritten attempts (first answer, help and revision kept separately), reviews, checkpoints and assignments. They sit in the same database as the rest of the app. The lesson reader never shows answer keys or grading evidence.

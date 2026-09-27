@@ -15,6 +15,12 @@ import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useC
 import { learnerTones } from '../utils/colors';
 import { byTime, isoDay, lessonPath, shortTime } from '../utils/lessons';
 
+/** Today, or next Monday on a weekend, so the week view opens on the school week that matters. */
+const schoolWeekAnchor = () => {
+  const today = new Date();
+  return today.getDay() === 6 ? addDays(today, 2) : today.getDay() === 0 ? addDays(today, 1) : today;
+};
+
 const REASONS = { holiday: 'Holiday', sick: 'Sick day', custom: 'Day off' };
 
 function DayOffDialog({ open, onClose, learners, defaultWho, defaultDate, onSaved }) {
@@ -101,7 +107,7 @@ export default function Plan() {
   const { learners, selected, learner } = useLearner();
   const [params, setParams] = useSearchParams();
   const view = params.get('view') === 'month' ? 'month' : 'week';
-  const [anchor, setAnchor] = useState(() => new Date());
+  const [anchor, setAnchor] = useState(schoolWeekAnchor);
   const [dayOff, setDayOff] = useState(null);
   const navigate = useNavigate();
   const client = useQueryClient();
@@ -179,7 +185,7 @@ export default function Plan() {
           <div className="flex gap-1">
             <IconButton icon={ChevronLeft} size="sm" label={view === 'week' ? 'Previous week' : 'Previous month'} onClick={() => move(-1)} />
             <IconButton icon={ChevronRight} size="sm" label={view === 'week' ? 'Next week' : 'Next month'} onClick={() => move(1)} />
-            <Button size="sm" variant="quiet" onClick={() => setAnchor(new Date())}>Today</Button>
+            <Button size="sm" variant="quiet" onClick={() => setAnchor(schoolWeekAnchor())}>Today</Button>
           </div>
           <div className="flex-1" />
           <SegmentedControl label="View" size="sm" value={view} onChange={setView}

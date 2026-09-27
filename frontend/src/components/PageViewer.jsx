@@ -2,13 +2,14 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { ChevronLeft, ChevronRight, Headphones, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
 import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
 import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
 import { toPhysicalPage } from './pdfAnnotations/annotationGeometry';
 import { highlightItemIndices } from '../utils/readAlong';
+import { useConfirm } from '../ui/useFeedback';
 
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -22,7 +23,11 @@ function escapeHtml(text) {
 }
 
 
-const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requestedPage = null, boundaryNote = null, hideClose = false }) => {
+/**
+ * The book pages of a lesson with handwriting, used by the Lesson screen
+ * (which shows the subject and title in its own header).
+ */
+const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = null, boundaryNote = null }) => {
   const start = slot?.page_from || 1;
   const end = slot?.page_to || start;
   const offset = slot?.pdf_page_offset || 0;
@@ -93,6 +98,12 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
     pageNumber: page,
     enabled: Boolean(childId && slot?.document_id && pdfData),
   });
+  const confirm = useConfirm();
+
+  // Save handwriting at once when the viewer goes away (Back, or other pages shown).
+  const flushRef = useRef(annotation.flush);
+  useEffect(() => { flushRef.current = annotation.flush; });
+  useEffect(() => () => { flushRef.current(); }, []);
 
   const highlighted = useMemo(
     () => highlightItemIndices(textItems, highlightSentence),
@@ -128,13 +139,12 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
     viewportRef.current?.scrollTo({ top: 0, left: 0 });
   };
 
-  const closeViewer = async () => {
-    await annotation.flush();
-    onClose?.();
-  };
-
-  const clearPage = () => {
-    if (window.confirm('Clear all handwriting from this PDF page? You can undo this while the viewer stays open.')) {
+  const clearPage = async () => {
+    if (await confirm({
+      title: 'Clear the handwriting on this page?',
+      description: 'You can undo this while the lesson stays open.',
+      confirmLabel: 'Clear page', danger: true,
+    })) {
       annotation.clear();
     }
   };
@@ -143,26 +153,6 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
 
   return (
     <div className="flex flex-col h-full bg-surface min-h-0">
-      {/* The Lesson screen (hideClose) shows the subject and title in its own header. */}
-      {!hideClose && <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50 shrink-0 gap-3">
-        <div className="min-w-0">
-          <h3 className="font-bold text-sm truncate">{slot.subject_name}</h3>
-          <p className="text-xs text-text-secondary truncate">{slot.topic_title || `Assigned pages ${start}-${end}`}</p>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-            {slot.topic_id && childId && (
-              <a href={`/lesson?${new URLSearchParams({ learner: childId, topic: slot.topic_id })}`}
-                className="h-11 px-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">
-                <Headphones className="w-5 h-5" />
-                Read along
-              </a>
-            )}
-            <button type="button" aria-label="Close PDF viewer" onClick={closeViewer} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-200">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-      </div>}
-
       {boundaryNote && (
         <div className="px-4 py-2 bg-action-soft border-b border-line text-[13px] text-action" data-testid="boundary-note">{boundaryNote}</div>
       )}
