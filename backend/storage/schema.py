@@ -161,6 +161,12 @@ TABLES: dict[str, Table] = {t.name: t for t in [
         "manifest_path": "str", "status": "str", "characters": "int", "sentence_count": "int",
         "timing": "str", "note": "str", "created_at": "datetime",
     }, id_type="str", foreign_keys=(ForeignKey("topic_id", "topics"),), required=("topic_id", "provider", "status")),
+    _t("guides", "Guided Lessons", {
+        "topic_id": "int", "source_sha256": "str", "guide_sha256": "str", "guide_path": "str",
+        "guide_file_sha256": "str", "mode": "str", "model": "str", "language": "str", "sentence_count": "int",
+        "character_count": "int", "created_at": "datetime",
+    }, id_type="str", foreign_keys=(ForeignKey("topic_id", "topics"),),
+        required=("topic_id", "source_sha256", "guide_sha256", "guide_path")),
     _t("question_maps", "Question Map", {
         "subject_id": "int", "chapter": "int", "question": "int", "topic_id": "int", "anchor": "str",
         "evidence": "str", "note": "str",

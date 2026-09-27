@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { AudioLines } from 'lucide-react';
 import { tutorApi } from '../api/tutor';
+import { Button } from '../ui';
 
 const cleanError = (e) => e.message.replace(/^\/[^:]+: /, '');
 
 /**
- * Builds the lesson's read-along voice with the home server's text-to-speech.
- * It first shows how much of the monthly allowance the lesson needs; the voice
- * is saved with the lesson, so the tutor and every device reuse it.
+ * Builds the lesson's read-along voice (or, with `guide`, the guided lesson's
+ * voice) with the home server's text-to-speech. It first shows how much of the
+ * monthly allowance it needs; the voice is saved with the lesson, so the tutor
+ * and every device reuse it.
  */
-export default function VoiceBuilder({ learner, topic, disabled, onBuilt }) {
+export default function VoiceBuilder({ learner, topic, guide = false, disabled, onBuilt }) {
   const [estimate, setEstimate] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -26,45 +28,39 @@ export default function VoiceBuilder({ learner, topic, disabled, onBuilt }) {
     }
   };
 
-  const ask = () => run(async () => setEstimate(await tutorApi.buildNarration(learner, topic, true)));
+  const ask = () => run(async () => setEstimate(await tutorApi.buildNarration(learner, topic, true, guide)));
   const build = () => run(async () => {
-    await tutorApi.buildNarration(learner, topic, false);
+    await tutorApi.buildNarration(learner, topic, false, guide);
     setEstimate(null);
     onBuilt();
   });
 
   const left = estimate ? Math.max(0, estimate.monthly_limit - estimate.used_this_month) : 0;
   return (
-    <div className="p-3 border-b bg-sky-50 text-sm space-y-2">
+    <div className="p-4 border-b border-line bg-action-soft/60 text-sm flex flex-col gap-2.5">
       {!estimate ? (
-        <button type="button" onClick={ask} disabled={disabled || busy}
-          className="w-full h-11 rounded-xl bg-sky-600 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
-          <AudioLines className="w-5 h-5" />
-          {busy ? 'Checking…' : 'Create read-along voice'}
-        </button>
+        <Button variant="primary" icon={AudioLines} onClick={ask} disabled={disabled || busy} className="w-full">
+          {busy ? 'Checking…' : guide ? 'Create the guided lesson voice' : 'Create read-along voice'}
+        </Button>
       ) : (
         <>
           <p>
-            Create a natural voice for this lesson? It uses {estimate.characters.toLocaleString()} of the{' '}
+            Create a natural voice for this {guide ? 'guided lesson' : 'lesson'}? It uses {estimate.characters.toLocaleString()} of the{' '}
             {left.toLocaleString()} characters left this month.
           </p>
           <div className="flex gap-2">
-            <button type="button" onClick={build} disabled={disabled || busy || estimate.characters > left}
-              className="flex-1 h-11 rounded-xl bg-sky-600 text-white font-semibold disabled:opacity-50">
+            <Button variant="primary" className="flex-1" onClick={build} disabled={disabled || busy || estimate.characters > left}>
               {busy ? 'Creating the voice…' : 'Create voice'}
-            </button>
-            <button type="button" onClick={() => setEstimate(null)} disabled={busy}
-              className="h-11 px-4 rounded-xl border bg-white">
-              Cancel
-            </button>
+            </Button>
+            <Button onClick={() => setEstimate(null)} disabled={busy}>Cancel</Button>
           </div>
           {estimate.characters > left && (
-            <p className="text-xs text-amber-800">Not enough of this month's voice allowance is left; it renews next month. The device voice still works.</p>
+            <p className="text-[13px] text-attention">Not enough of this month's voice allowance is left; it renews next month. The device voice still works.</p>
           )}
         </>
       )}
-      {!estimate && !busy && <p className="text-xs text-text-secondary">Until then, choose “Device voice” below.</p>}
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {!estimate && !busy && <p className="text-[13px] text-muted">Until then, the device's own voice reads it (choose “Device voice” below).</p>}
+      {error && <p className="text-[13px] text-problem">{error}</p>}
     </div>
   );
 }

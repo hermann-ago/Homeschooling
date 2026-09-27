@@ -24,6 +24,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const [speed, setSpeed] = useState(1);
   const [error, setError] = useState('');
   const audioRef = useRef(null);
+  const listRef = useRef(null);
   const pendingSeek = useRef(null);
   const speechIndex = useRef(0);
   const track = usable.find((t) => t.track_id === source);
@@ -34,6 +35,11 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   }, []);
 
   useEffect(() => () => stopSpeech(), [stopSpeech]);
+
+  // Keep the sentence being read in view, so a child can follow without scrolling.
+  useEffect(() => {
+    listRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [activeIndex]);
 
   useEffect(() => {
     setManifest(null);
@@ -133,36 +139,59 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
 
   const replay = () => seekTo(activeIndex ?? 0);
 
+  // Sentences grouped into runs of the same kind, so a guided lesson's teacher parts stand apart.
+  const runs = [];
+  sentences.forEach((sentence, index) => {
+    const kind = sentence.kind === 'teacher' ? 'teacher' : 'book';
+    if (runs.length && runs[runs.length - 1].kind === kind) runs[runs.length - 1].items.push(index);
+    else runs.push({ kind, items: [index] });
+  });
+  const sentenceButton = (index) => (
+    <button key={`${index}-${sentences[index].text.slice(0, 12)}`} type="button" onClick={() => seekTo(index)}
+      className={clsx('inline text-left rounded-[4px] px-0.5 -mx-0.5 hover:bg-paper-deep',
+        synchronized && index === activeIndex && 'bg-[#F7DE8A] hover:bg-[#F7DE8A]')}
+      aria-current={synchronized && index === activeIndex ? 'true' : undefined}>
+      {sentences[index].text}
+    </button>
+  );
+
+  const flow = (index) => <React.Fragment key={index}>{sentenceButton(index)}{' '}</React.Fragment>;
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="p-3 border-b space-y-2">
-        <div className="flex items-center gap-2">
+      <div className="p-4 border-b border-line flex flex-col gap-3">
+        <div className="flex items-center gap-3">
           <button type="button" onClick={toggle} disabled={disabled} aria-label={playing ? 'Pause' : 'Play'}
-            className="w-11 h-11 rounded-xl bg-sky-600 text-white flex items-center justify-center disabled:opacity-40">
-            {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+            className="w-14 h-14 shrink-0 rounded-full bg-action text-white grid place-items-center hover:bg-action-hover disabled:opacity-40">
+            {playing ? <Pause className="w-6 h-6" fill="currentColor" /> : <Play className="w-6 h-6 translate-x-px" fill="currentColor" />}
           </button>
-          <button type="button" onClick={replay} disabled={disabled} aria-label="Replay sentence"
-            className="w-11 h-11 rounded-xl border flex items-center justify-center disabled:opacity-40">
+          <button type="button" onClick={replay} disabled={disabled} aria-label="Replay sentence" title="Replay sentence"
+            className="w-11 h-11 shrink-0 rounded-xl border border-line bg-surface grid place-items-center hover:bg-paper disabled:opacity-40">
             <RotateCcw className="w-5 h-5" />
           </button>
-          <label className="text-xs text-text-secondary">Speed{' '}
-            <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="rounded-sm border p-1">
-              {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
+          <label className="flex-1 min-w-0 flex flex-col gap-0.5 text-xs font-semibold text-muted">Voice
+            <select value={source} onChange={(e) => setSource(e.target.value)}
+              className="h-9 px-2 rounded-lg border border-line bg-surface text-sm font-normal text-ink w-full">
+              {usable.map((t) => (
+                <option key={t.track_id} value={t.track_id}>{t.voice || t.provider}{t.synchronized ? '' : ' (no highlighting)'}</option>
+              ))}
+              <option value={DEVICE}>Device voice</option>
             </select>
           </label>
         </div>
-        <label className="block text-xs text-text-secondary">Voice{' '}
-          <select value={source} onChange={(e) => setSource(e.target.value)} className="rounded-sm border p-1 max-w-full">
-            {usable.map((t) => (
-              <option key={t.track_id} value={t.track_id}>{t.voice || t.provider}{t.synchronized ? '' : ' (no highlighting)'}</option>
-            ))}
-            <option value={DEVICE}>Device voice</option>
-          </select>
-        </label>
+        <div role="group" aria-label="Speed" className="flex gap-1">
+          {SPEEDS.map((s) => (
+            <button key={s} type="button" aria-pressed={speed === s} onClick={() => setSpeed(s)}
+              className={clsx('flex-1 h-8 rounded-full text-[13px] font-semibold',
+                speed === s ? 'bg-ink text-white' : 'border border-line bg-surface hover:bg-paper')}>
+              {s}×
+            </button>
+          ))}
+        </div>
         {!synchronized && (
-          <p className="text-xs text-amber-800">This recording has no verified timings for this passage, so sentences are not highlighted.</p>
+          <p className="text-[13px] text-attention">This recording has no verified timings for this passage, so sentences are not highlighted.</p>
         )}
-        {error && <p className="text-xs text-red-700">{error}</p>}
+        {error && <p className="text-[13px] text-problem">{error}</p>}
       </div>
       {partUrl && source !== DEVICE && (
         <audio
@@ -196,17 +225,16 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
           }}
         />
       )}
-      <ol className="flex-1 overflow-y-auto p-3 space-y-1 text-base leading-relaxed" aria-label="Passage">
-        {sentences.map((sentence, index) => (
-          <li key={`${index}-${sentence.text.slice(0, 12)}`}>
-            <button type="button" onClick={() => seekTo(index)}
-              className={clsx('text-left rounded-sm px-1', synchronized && index === activeIndex && 'bg-yellow-200')}
-              aria-current={synchronized && index === activeIndex ? 'true' : undefined}>
-              {sentence.text}
-            </button>
-          </li>
-        ))}
-      </ol>
+      <div ref={listRef} className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 text-[17px] leading-relaxed" aria-label="Passage">
+        {runs.map((run) => (run.kind === 'teacher' ? (
+          <div key={run.items[0]} className="rounded-xl bg-action-soft/70 px-3.5 py-2.5 text-[16px]">
+            <span className="block mb-0.5 text-[11px] font-bold tracking-[0.8px] uppercase text-action">Teacher</span>
+            <span className="block">{run.items.map(flow)}</span>
+          </div>
+        ) : (
+          <p key={run.items[0]} className="m-0">{run.items.map(flow)}</p>
+        )))}
+      </div>
     </div>
   );
 }

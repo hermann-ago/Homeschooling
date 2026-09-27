@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { getDocument } from 'pdfjs-dist';
-import { ArrowLeft, BookOpen, Check, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Plus, Sparkles, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import PageViewer from '../components/PageViewer';
 import ReadAlong from '../components/ReadAlong';
@@ -14,7 +14,7 @@ import { tutorApi } from '../api/tutor';
 import { canvasApi } from '../api/canvas';
 import { keys, useInserts, useSetLessonDone } from '../api/queries';
 import { useLearner } from '../app/learnerContext';
-import { Button, IconButton, useConfirm, useToast } from '../ui';
+import { Button, IconButton, SegmentedControl, useConfirm, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { locateSentences } from '../utils/readAlong';
 
@@ -113,6 +113,72 @@ function ExtraPages({ topicId, learner, viewing, onView }) {
   );
 }
 
+/** The guided lesson: written once by the AI, then read like any passage. */
+function GuidePanel({ guide, learner, topic, session, closed, activeIndex, onActiveIndex, language, onChanged }) {
+  const [writing, setWriting] = useState(false);
+  const [problem, setProblem] = useState('');
+  const confirm = useConfirm();
+  const write = async (rewrite) => {
+    if (rewrite && !(await confirm({
+      title: 'Write the guided lesson again?',
+      description: 'The AI writes a new version. Its voice will need to be created again.',
+      confirmLabel: 'Write again',
+    }))) return;
+    setWriting(true);
+    setProblem('');
+    try {
+      await tutorApi.writeGuide(learner, topic, rewrite);
+      onChanged();
+    } catch (error) {
+      setProblem(clean(error));
+    } finally {
+      setWriting(false);
+    }
+  };
+
+  if (!guide?.current) {
+    return (
+      <div className="p-5 flex flex-col gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="w-9 h-9 rounded-xl bg-action-soft text-action grid place-items-center"><Sparkles aria-hidden="true" className="w-5 h-5" /></span>
+          <h2 className="text-base font-bold">Guided lesson</h2>
+        </div>
+        <p className="text-sm text-muted leading-relaxed">
+          The AI turns this lesson into a teacher's walk-through: a welcome, the book text read in full, short
+          explanations of hard words and ideas along the way, and a recap. Lessons that are already a teacher's script
+          are tidied into one clear reading.
+        </p>
+        {guide && !guide.current && (
+          <p className="text-[13px] text-attention">The book pages for this lesson changed since the guide was written.</p>
+        )}
+        <Button variant="primary" icon={Sparkles} disabled={writing || closed} onClick={() => write(Boolean(guide))}>
+          {writing ? 'Writing the guided lesson…' : guide ? 'Write it again for the new pages' : 'Write the guided lesson'}
+        </Button>
+        {writing && <p className="text-[13px] text-muted" role="status">This takes about half a minute.</p>}
+        {problem && <p className="text-[13px] text-problem">{problem}</p>}
+      </div>
+    );
+  }
+
+  const voiceReady = guide.audio.some((t) => t.synchronized);
+  return (
+    <>
+      <div className="px-4 py-2.5 flex items-center gap-3 border-b border-line text-[13px] text-muted">
+        <span className="flex-1">
+          {guide.mode === 'tidy' ? 'Tidied' : 'Written'} by AI{guide.created_at ? ` on ${new Date(guide.created_at).toLocaleDateString()}` : ''}. Listen once before the lesson.
+        </span>
+        {!session && <Button size="sm" variant="quiet" disabled={writing} onClick={() => write(true)}>{writing ? 'Writing…' : 'Write again'}</Button>}
+      </div>
+      {problem && <p className="px-4 py-2 text-[13px] text-problem">{problem}</p>}
+      {!voiceReady && !closed && <VoiceBuilder learner={learner} topic={topic} guide onBuilt={onChanged} />}
+      <div className="flex-1 min-h-0">
+        <ReadAlong key={`guide-${guide.guide_id}-${guide.audio.map((t) => t.track_id).join()}`} passage={guide} tracks={guide.audio}
+          activeIndex={activeIndex} onActiveIndex={onActiveIndex} disabled={closed} language={language} />
+      </div>
+    </>
+  );
+}
+
 /**
  * The full-screen lesson: /lesson?learner=&topic=, plus &slot= when opened
  * from the plan (for "Mark lesson done") or &session= when the tutor opens it.
@@ -133,6 +199,8 @@ export default function Lesson() {
   const [lesson, setLesson] = useState(null);
   const [error, setError] = useState('');
   const [activeIndex, setActiveIndex] = useState(null);
+  const [guideIndex, setGuideIndex] = useState(null);
+  const [readMode, setReadMode] = useState(null);
   const [sentencePages, setSentencePages] = useState([]);
   const [closed, setClosed] = useState(false);
   const [tab, setTab] = useState(null);
@@ -194,7 +262,13 @@ export default function Lesson() {
     passage.start_at && `Start at “${passage.start_at}” (book page ${passage.printed_pages.start}).`,
     passage.stop_before && `Stop before “${passage.stop_before}” (book page ${passage.printed_pages.end}).`,
   ].filter(Boolean).join(' ');
-  const highlight = activeIndex !== null ? passage.sentences[activeIndex]?.text : null;
+  const guide = lesson.guide;
+  const mode = readMode ?? (guide?.current ? 'guide' : 'book');
+  // The book sentence being read: directly, or the one a guided-lesson sentence comes from.
+  const sourceIndex = mode === 'guide'
+    ? (guideIndex !== null ? guide?.sentences[guideIndex]?.source ?? null : null)
+    : activeIndex;
+  const highlight = sourceIndex !== null ? passage.sentences[sourceIndex]?.text : null;
   const pages = passage.printed_pages.start === passage.printed_pages.end
     ? `page ${passage.printed_pages.start}` : `pages ${passage.printed_pages.start}–${passage.printed_pages.end}`;
 
@@ -256,7 +330,7 @@ export default function Lesson() {
             <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
               boundaryNote={viewing ? null : boundary}
               highlightSentence={!viewing && hasText ? highlight : null}
-              requestedPage={!viewing && activeIndex !== null ? sentencePages[activeIndex] : null} />
+              requestedPage={!viewing && sourceIndex !== null ? sentencePages[sourceIndex] : null} />
           ) : (
             <div className="h-full grid place-items-center p-8 text-center">
               <div className="flex flex-col items-center gap-3 max-w-sm">
@@ -272,6 +346,16 @@ export default function Lesson() {
             <Tabs tabs={tabs} value={activeTab} onChange={setTab} />
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
               {activeTab === 'read' && (
+                <div className="px-4 pt-3">
+                  <SegmentedControl label="What to read" size="sm" value={mode} onChange={setReadMode}
+                    options={[{ value: 'guide', label: 'Guided lesson' }, { value: 'book', label: 'Book text' }]} />
+                </div>
+              )}
+              {activeTab === 'read' && mode === 'guide' && (
+                <GuidePanel guide={guide} learner={learner} topic={topic} session={session} closed={closed}
+                  activeIndex={guideIndex} onActiveIndex={setGuideIndex} language={lesson.language} onChanged={load} />
+              )}
+              {activeTab === 'read' && mode === 'book' && (
                 <>
                   {!voiceReady && !closed && <VoiceBuilder learner={learner} topic={topic} onBuilt={load} />}
                   <div className="flex-1 min-h-0">

@@ -23,6 +23,7 @@ from datetime import date, datetime, timedelta, timezone
 from storage import StoreError, layout
 
 from . import audio as audio_mod
+from . import guide as guide_mod
 from . import passages
 
 RESULTS = ("Correct", "Partly correct", "Not yet", "Unanswered", "Unreadable", "Source disputed")
@@ -525,15 +526,33 @@ class TutorService:
             if not session or session["topic_id"] != topic_id or session["child_id"] != child_id:
                 raise TutorError("This reader link does not match the lesson")
         package = passages.load(self.ctx, topic)
+        guide = self.guide(topic, package)
         return {"learner": {"child_id": child_id, "name": self.store.get("children", child_id)["name"]},
                 "subject_name": subject["name"], "language": audio_mod.language_for(subject["name"]),
                 "session_id": session_id,
                 "reader_state": self.reader_state(session_id) if session_id else "open",
-                "passage": package, "audio": self.audio_tracks(topic, package)}
+                "passage": package,
+                "audio": self.audio_tracks(topic, package, exclude=guide["passage_sha256"] if guide else None),
+                "guide": {**guide, "audio": self.audio_tracks(topic, guide, only=guide["passage_sha256"])}
+                if guide else None}
 
-    def audio_tracks(self, topic: dict, package: dict) -> list[dict]:
+    def guide(self, topic: dict, package: dict) -> dict | None:
+        """The lesson's guided walk-through, if one was written (see tutoring/guide.py)."""
+        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"])
+        if not row:
+            return None
+        try:
+            return guide_mod.package(self.ctx, row, fresh)
+        except Exception:  # an unreadable guide file must not hide the reader
+            return None
+
+    def audio_tracks(self, topic: dict, package: dict, *, exclude: str | None = None,
+                     only: str | None = None) -> list[dict]:
+        """Voices for the passage, or (``only``) for a guide; ``exclude`` leaves out the guide's voices."""
         tracks = []
         for row in self.store.find("audio_tracks", topic_id=topic["id"]):
+            if (only and row["passage_sha256"] != only) or (exclude and row["passage_sha256"] == exclude):
+                continue
             synchronized = False
             reason = row["note"] or ""
             if row["status"] == "ready" and row["timing"] and row["manifest_path"]:

@@ -13,6 +13,7 @@ from app_context import request_operation as write
 from dependencies import context, current_device, require_family, store
 from security.devices import Device
 from tutoring import audio as audio_mod
+from tutoring import guide as guide_mod
 from tutoring import passages
 from utils import get_or_404
 
@@ -286,19 +287,75 @@ class ReaderNarrationRequest(BaseModel):
     learner: int
     topic: int
     dry_run: bool = True
+    guide: bool = False
+
+
+def _learners_topic(learner: int, topic_id: int) -> dict:
+    topic = get_or_404(store(), "topics", topic_id, "Topic")
+    if store().get("subjects", topic["subject_id"])["child_id"] != learner:
+        raise HTTPException(status_code=400, detail="This lesson is not assigned to that learner")
+    return topic
 
 
 @router.post("/reader/narration")
 def reader_narration(payload: ReaderNarrationRequest):
-    """Estimate (default) or build the lesson's read-along voice from any paired device.
+    """Estimate (default) or build the lesson's read-along voice from any home device.
 
-    It stays within the monthly guard; only a parent can approve paid overage (see /audio/generate).
+    With ``guide`` it voices the lesson's guided walk-through instead of the book text. It stays
+    within the monthly guard; only a parent can approve paid overage (see /audio/generate).
     """
-    topic = get_or_404(store(), "topics", payload.topic, "Topic")
-    if store().get("subjects", topic["subject_id"])["child_id"] != payload.learner:
-        raise HTTPException(status_code=400, detail="This lesson is not assigned to that learner")
+    topic = _learners_topic(payload.learner, payload.topic)
     voice, rate = _narrator(topic)
-    return _generate(topic, voice, rate, payload.dry_run)
+    if not payload.guide:
+        return _generate(topic, voice, rate, payload.dry_run)
+    package = passages.load(context(), topic)
+    guide = service().guide(topic, package)
+    if not guide or not guide["current"]:
+        raise HTTPException(status_code=400, detail="Write the guided lesson first")
+    try:
+        if payload.dry_run:
+            return audio_mod.generate(context(), store_tx_readonly(), topic, guide, voice=voice, rate=rate, dry_run=True)
+        with write("tutor.guide_audio", f"Guided lesson voice for {topic['title']}") as tx:
+            return audio_mod.generate(context(), tx, topic, guide, voice=voice, rate=rate)
+    except (ValueError, audio_mod.LedgerError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class ReaderGuideRequest(BaseModel):
+    learner: int
+    topic: int
+    rewrite: bool = False
+
+
+@router.post("/reader/guide", dependencies=[Depends(require_family)])
+def reader_guide(payload: ReaderGuideRequest):
+    """Write the lesson's guided walk-through with the AI (or return the current one).
+
+    The book text is always read in full and in order; the AI adds an introduction, short
+    explanations and a recap, or tidies a lesson that is already a teacher's script.
+    """
+    topic = _learners_topic(payload.learner, payload.topic)
+    package = passages.load(context(), topic)
+    existing = service().guide(topic, package)
+    if existing and existing["current"] and not payload.rewrite:
+        return existing
+    if not package["sentences"]:
+        raise HTTPException(status_code=400, detail="This lesson has no text from the book to guide")
+    subject = store().get("subjects", topic["subject_id"])
+    child = store().get("children", payload.learner)
+    language = audio_mod.language_for(subject["name"])
+    configured = context().config.get("ai", {}).get("guide_model")
+    models = (configured, *guide_mod.DEFAULT_MODELS) if configured else guide_mod.DEFAULT_MODELS
+    text = guide_mod.prompt(package, subject=subject["name"], learner=child.get("nickname") or child["name"],
+                            grade=child.get("grade_year"), language=language)
+    try:
+        plan, model = guide_mod.write_plan(text, models)  # outside the transaction: it can take a while
+        built = guide_mod.build(package["sentences"], plan)
+    except guide_mod.GuideError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    with write("tutor.guide", f"Guided lesson for {topic['title']}") as tx:
+        row = guide_mod.save(tx, topic, package, built, model=model, language=language)
+    return guide_mod.package(context(), row, True)
 
 
 @router.get("/reader/{session_id}/state")

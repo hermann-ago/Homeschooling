@@ -22,12 +22,12 @@ describe('VoiceBuilder', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /create read-along voice/i }));
     await screen.findByText(/uses 4[.,\s]200 of the 140[.,\s]000 characters left/i); // any locale's separator
-    expect(buildNarration).toHaveBeenCalledWith('1', '372', true);
+    expect(buildNarration).toHaveBeenCalledWith('1', '372', true, false);
     expect(onBuilt).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /^create voice$/i }));
     await waitFor(() => expect(onBuilt).toHaveBeenCalled());
-    expect(buildNarration).toHaveBeenLastCalledWith('1', '372', false);
+    expect(buildNarration).toHaveBeenLastCalledWith('1', '372', false, false);
   });
 
   it('will not build past the monthly allowance', async () => {
