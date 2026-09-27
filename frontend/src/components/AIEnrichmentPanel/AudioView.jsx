@@ -39,7 +39,7 @@ export default function AudioView({ text }) {
   return (
     <div className="space-y-4">
       {/* Summary text block */}
-      <div className="bg-white rounded-xl border border-sky-200 p-4 text-sm text-text-primary leading-relaxed">
+      <div className="bg-white rounded-xl border border-line p-4 text-sm text-text-primary leading-relaxed">
         {text}
       </div>
 
@@ -50,8 +50,8 @@ export default function AudioView({ text }) {
           className={clsx(
             'flex items-center space-x-2 px-5 py-2.5 rounded-xl text-sm font-bold transition active:scale-95',
             playing
-              ? 'bg-sky-600 text-white hover:bg-sky-700'
-              : 'bg-sky-100 text-sky-700 hover:bg-sky-200'
+              ? 'bg-action text-white hover:bg-action'
+              : 'bg-action-soft text-action hover:bg-action-soft'
           )}
         >
           {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
@@ -60,7 +60,7 @@ export default function AudioView({ text }) {
         {(playing || window.speechSynthesis.paused) && (
           <button
             onClick={stop}
-            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gray-100 hover:bg-gray-200 text-text-secondary transition"
+            className="flex items-center space-x-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-paper-deep hover:bg-line text-text-secondary transition"
           >
             <Square className="w-3.5 h-3.5" />
             <span>Stop</span>

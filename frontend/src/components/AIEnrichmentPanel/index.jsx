@@ -109,25 +109,25 @@ export default function AIEnrichmentPanel({
   if (!topicId) return null;
 
   return (
-    <div className={embedded ? 'pt-4' : 'border-t border-dashed border-violet-200 bg-gradient-to-b from-violet-50/40 to-transparent'}>
+    <div className={embedded ? 'pt-4' : 'border-t border-dashed border-line bg-gradient-to-b from-action-soft/40 to-transparent'}>
 
       {/* Toggle bar (a Practice tab shows the tools straight away) */}
       {!embedded && <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3 hover:bg-violet-50/60 transition group"
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-action-soft/60 transition group"
       >
         <div className="flex items-center space-x-2">
-          <Sparkles className="w-4 h-4 text-violet-500 group-hover:scale-110 transition-transform" />
-          <span className="text-sm font-semibold text-violet-700">AI Learning Tools</span>
+          <Sparkles className="w-4 h-4 text-action group-hover:scale-110 transition-transform" />
+          <span className="text-sm font-semibold text-action">AI Learning Tools</span>
           {cachedTypes.size > 0 && (
-            <span className="text-[10px] bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full font-semibold">
+            <span className="text-xs bg-action-soft text-action px-2 py-0.5 rounded-full font-semibold">
               {cachedTypes.size} cached
             </span>
           )}
         </div>
         {open
-          ? <ChevronUp className="w-4 h-4 text-violet-400" />
-          : <ChevronDown className="w-4 h-4 text-violet-400" />
+          ? <ChevronUp className="w-4 h-4 text-action" />
+          : <ChevronDown className="w-4 h-4 text-action" />
         }
       </button>}
 
@@ -136,7 +136,7 @@ export default function AIEnrichmentPanel({
         <div className="px-4 pb-5 space-y-4">
 
           {/* Tool buttons row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {TOOLS.map(tool => {
               const isCached = cachedTypes.has(tool.key);
               const isActive = activeTool === tool.key;
@@ -155,7 +155,7 @@ export default function AIEnrichmentPanel({
                     'active:scale-95',
                     isActive
                       ? `${c.bg} ${c.border} ${c.text} shadow-xs`
-                      : `bg-white border-border hover:${c.bg} hover:${c.border} text-text-secondary hover:${c.text}`
+                      : 'bg-surface border-line text-muted hover:bg-action-soft hover:border-action hover:text-action'
                   )}
                 >
                   {/* Cached badge */}
@@ -167,10 +167,10 @@ export default function AIEnrichmentPanel({
 
                   {isLoading
                     ? <Loader2 className={`w-5 h-5 mb-1 animate-spin ${c.icon}`} />
-                    : <Icon className={`w-5 h-5 mb-1 ${isActive ? c.icon : 'text-gray-400'}`} />
+                    : <Icon className={`w-5 h-5 mb-1 ${isActive ? c.icon : 'text-subtle'}`} />
                   }
                   <span className="text-xs font-semibold leading-tight">{tool.label}</span>
-                  <span className="text-[10px] leading-tight mt-0.5 opacity-70">{tool.description}</span>
+                  <span className="text-xs leading-tight mt-0.5 opacity-70">{tool.description}</span>
                 </button>
               );
             })}
@@ -178,9 +178,9 @@ export default function AIEnrichmentPanel({
 
           {/* Error state */}
           {error && (
-            <div className="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700">{error}</p>
+            <div className="flex items-start space-x-2 p-3 bg-problem-soft border border-problem-soft rounded-xl">
+              <AlertCircle className="w-4 h-4 text-problem shrink-0 mt-0.5" />
+              <p className="text-xs text-problem">{error}</p>
             </div>
           )}
 
@@ -206,7 +206,7 @@ export default function AIEnrichmentPanel({
                     {activeTool$.label}
                   </span>
                   {results[activeTool]?.from_cache && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 ${COLOUR[activeTool$.color].badge}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 ${COLOUR[activeTool$.color].badge}`}>
                       <Zap className="w-2.5 h-2.5" /> Cached
                     </span>
                   )}
@@ -251,12 +251,12 @@ export default function AIEnrichmentPanel({
 
           {/* Loading skeleton */}
           {loadingTool && (
-            <div className="rounded-2xl border border-dashed border-violet-300 bg-violet-50/50 p-8 flex flex-col items-center space-y-3">
-              <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-              <p className="text-sm text-violet-500 font-medium">
+            <div className="rounded-2xl border border-dashed border-line bg-action-soft/50 p-8 flex flex-col items-center space-y-3">
+              <Loader2 className="w-8 h-8 text-action animate-spin" />
+              <p className="text-sm text-action font-medium">
                 Generating {TOOLS.find(t => t.key === loadingTool)?.label}…
               </p>
-              <p className="text-xs text-violet-400">This may take a few seconds.</p>
+              <p className="text-xs text-action">This may take a few seconds.</p>
             </div>
           )}
         </div>
