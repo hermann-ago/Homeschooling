@@ -6,7 +6,7 @@ import { User, Clock, Calendar as CalendarIcon, Save, X, Plus, Trash2 } from 'lu
 import clsx from 'clsx';
 import HomeServerSettings from '../components/HomeServerSettings';
 
-const Settings = () => {
+const Settings = ({ onChildrenChanged }) => {
   const [children, setChildren] = useState([]);
   const [schoolYear, setSchoolYear] = useState({ start_date: '', end_date: '' });
   const [savingSettings, setSavingSettings] = useState(false);
@@ -155,7 +155,7 @@ const Settings = () => {
       {/* Child Profile Modal */}
       {isChildModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center">
               <h3 className="text-xl font-bold text-text-primary">
                 {editingChild.id ? 'Edit Profile' : 'Add Child'}
@@ -221,6 +221,7 @@ const Settings = () => {
                       await childrenApi.create(editingChild);
                     }
                     loadData();
+                    onChildrenChanged?.();
                     setIsChildModalOpen(false);
                   } catch { alert("Failed to save child."); }
                 }}
@@ -236,7 +237,7 @@ const Settings = () => {
       {/* Time Windows Modal */}
       {isTwModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center bg-gray-50">
               <div>
                 <h3 className="text-xl font-bold text-text-primary">Study Windows</h3>

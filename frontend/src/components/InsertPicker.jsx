@@ -31,7 +31,7 @@ const InsertPicker = ({ childId, onSelect, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col max-h-[80vh]">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="p-5 border-b border-border flex justify-between items-center bg-gray-50 flex-shrink-0">
           <div>

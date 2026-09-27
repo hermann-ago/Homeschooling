@@ -33,7 +33,7 @@ const InputDialog = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h3 className="text-lg font-bold text-text-primary">{title}</h3>
           <button onClick={onCancel} className="p-1 text-text-secondary hover:text-text-primary">

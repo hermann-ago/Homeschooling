@@ -1,15 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app_context import request_operation as write
-from dependencies import require_member, store
+from dependencies import store
 from schemas import CompletionResponse, ScheduledSlotResponse
 from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
 from utils import get_or_404, slots_response
 
-router = APIRouter(dependencies=[Depends(require_member)])
+router = APIRouter()
 
 
 def _child_slots(child_id: int):

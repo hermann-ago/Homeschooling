@@ -13,7 +13,8 @@ export default {
         accent: {
           DEFAULT: '#6B9E8A',
           light: '#E8F2ED',
-          hover: '#5A8976'
+          hover: '#5A8976',
+          dark: '#3F6E5C'
         },
         text: {
           primary: '#2D3436',
@@ -35,7 +36,7 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['system-ui', '"Segoe UI"', 'sans-serif'],
       },
       boxShadow: {
         soft: '0 4px 20px -2px rgba(0, 0, 0, 0.05)',

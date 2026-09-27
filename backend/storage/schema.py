@@ -258,23 +258,6 @@ def column_kind(table: Table, column: str) -> str:
     return table.columns[column]
 
 
-def row_to_cells(table: Table, record: dict) -> list[str]:
-    return [to_cell(column_kind(table, c), record.get(c)) for c in table.header]
-
-
-def cells_to_row(table: Table, header: list[str], cells: list) -> dict:
-    """Parse one sheet row using the sheet's own header (columns may be reordered)."""
-    record = {}
-    for index, column in enumerate(header):
-        if column not in table.header:
-            continue  # tolerate parent-added helper columns
-        raw = cells[index] if index < len(cells) else ""
-        record[column] = coerce(column_kind(table, column), raw, from_cell=True)
-    for column in table.header:
-        record.setdefault(column, None)
-    return record
-
-
 def normalise(table: Table, values: dict, partial: bool = False) -> dict:
     """Validate caller input against the tab definition."""
     unknown = set(values) - set(table.header)

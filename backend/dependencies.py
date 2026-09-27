@@ -44,19 +44,10 @@ def current_device(request: Request) -> Device:
     return context().devices.authenticate(_bearer(request)) or FAMILY
 
 
-def require_member(device: Device = Depends(current_device)) -> Device:
-    return device
-
-
-def require_parent(device: Device = Depends(current_device)) -> Device:
-    if not device.is_parent:
+def require_family(device: Device = Depends(current_device)) -> Device:
+    """Family devices only: the tutor bridge may not change family settings or curriculum."""
+    if not device.is_family:
         raise HTTPException(status_code=403, detail="Not available to the tutor")
-    return device
-
-
-def require_teacher(device: Device = Depends(current_device)) -> Device:
-    if not device.sees_teacher_content:
-        raise HTTPException(status_code=403, detail="Teacher-only content")
     return device
 
 

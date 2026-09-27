@@ -7,7 +7,7 @@ import threading
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from dependencies import context, current_device, require_host, require_member, require_parent
+from dependencies import context, current_device, require_host, require_family
 from security.devices import Device
 from security.network import is_loopback
 
@@ -40,13 +40,13 @@ def session(request: Request, device: Device = Depends(current_device)):
 
 # ── Storage: database, Drive folder, backups ────────────────────────────────
 
-@router.get("/storage/status", dependencies=[Depends(require_member)])
+@router.get("/storage/status")
 def storage_status():
     """Where data lives and whether the synced Drive folder is reachable."""
     return context().status()
 
 
-@router.get("/sync/operations/{operation_id}", dependencies=[Depends(require_member)])
+@router.get("/sync/operations/{operation_id}")
 def operation(operation_id: str):
     return {"operation_id": operation_id, "state": context().store.operation_state(operation_id) or "unknown"}
 
@@ -55,7 +55,7 @@ class DriveFolderRequest(BaseModel):
     path: str = Field(..., min_length=3, max_length=400)
 
 
-@router.post("/storage/drive-folder", dependencies=[Depends(require_parent), Depends(require_host)])
+@router.post("/storage/drive-folder", dependencies=[Depends(require_family), Depends(require_host)])
 def set_drive_folder(payload: DriveFolderRequest):
     """Point the server at the synced Homeschooling folder (host computer only)."""
     try:
@@ -64,12 +64,12 @@ def set_drive_folder(payload: DriveFolderRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@router.post("/storage/backup", dependencies=[Depends(require_parent)])
+@router.post("/storage/backup", dependencies=[Depends(require_family)])
 def backup_now():
     return context().backup_now()
 
 
-@router.post("/storage/export", dependencies=[Depends(require_parent)])
+@router.post("/storage/export", dependencies=[Depends(require_family)])
 def export_now():
     return {"path": context().export_now()}
 

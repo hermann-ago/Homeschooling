@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { subjectsApi } from '../api/subjects';
 import { UploadCloud, FileText, ChevronDown, ChevronRight, Edit3, Loader2, BookOpen, CheckCircle2, Circle, Trash2, Star, Book, X, FolderOpen } from 'lucide-react';
 import DriveBookPicker from '../components/DriveBookPicker';
@@ -17,7 +17,6 @@ const Curriculum = ({ activeChildId }) => {
   const [editingSubject, setEditingSubject] = useState(null);
   const [chaptersCount, setChaptersCount] = useState(1);
   const [generating, setGenerating] = useState(false);
-  const fileInputRef = useRef(null);
   
   const loadSubjects = () => {
     if (!activeChildId) return;
@@ -59,7 +58,8 @@ const Curriculum = ({ activeChildId }) => {
     }
   };
 
-  const handleUpload = async (subjectId, file) => {
+  const handleUpload = async (subjectId, input) => {
+    const file = input.files[0];
     if (!file) return;
     setIsUploading(subjectId);
     try {
@@ -70,7 +70,7 @@ const Curriculum = ({ activeChildId }) => {
       alert(`Upload failed: ${error.message}`);
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      input.value = '';
     }
   };
 
@@ -191,7 +191,7 @@ const Curriculum = ({ activeChildId }) => {
         <div className="bg-surface rounded-xl border border-border p-12 text-center shadow-soft">
           <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-text-primary">No subjects found</h3>
-          <p className="text-text-secondary mt-1">Add a subject in Settings to start uploading curriculum.</p>
+          <p className="text-text-secondary mt-1">Use + Add Subject above to start adding books.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -282,8 +282,7 @@ const Curriculum = ({ activeChildId }) => {
                             id={`pdf-upload-${subject.id}`} 
                             className="hidden" 
                             accept=".pdf"
-                            ref={fileInputRef}
-                            onChange={(e) => handleUpload(subject.id, e.target.files[0])}
+                            onChange={(e) => handleUpload(subject.id, e.target)}
                             disabled={isUploading === subject.id}
                           />
                           <label 
@@ -401,7 +400,7 @@ const Curriculum = ({ activeChildId }) => {
                                       <th className="px-4 py-3 text-center text-xs font-medium text-text-secondary uppercase tracking-wider w-12">Done</th>
                                       <th className="px-6 py-3 text-left text-xs font-medium text-text-secondary uppercase tracking-wider">Chapter / Topic</th>
                                       <th className="px-6 py-3 text-center text-xs font-medium text-text-secondary uppercase tracking-wider">Pages</th>
-                                      <th className="px-6 py-3 text-center text-xs font-medium text-text-secondary uppercase tracking-wider">Pages</th>
+                                      <th className="px-6 py-3 text-center text-xs font-medium text-text-secondary uppercase tracking-wider">Length</th>
                                       <th className="px-4 py-3 text-center text-xs font-medium text-text-secondary uppercase tracking-wider w-12"></th>
                                     </tr>
                                   </thead>
@@ -505,7 +504,7 @@ const Curriculum = ({ activeChildId }) => {
       {/* Subject Edit Modal */}
       {editingSubject && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center bg-gray-50">
               <div>
                 <h3 className="text-xl font-bold text-text-primary">Edit Subject</h3>

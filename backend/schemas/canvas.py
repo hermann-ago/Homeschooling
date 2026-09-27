@@ -17,7 +17,6 @@ class CanvasInsertResponse(BaseModel):
     insert_topic_title: Optional[str] = None
     insert_page_start: Optional[int] = None
     insert_page_end: Optional[int] = None
-    insert_pdf_path: Optional[str] = None
     insert_document_id: Optional[int] = None
     insert_pdf_page_offset: Optional[int] = 0
 
@@ -32,7 +31,6 @@ class CanvasSlotResponse(BaseModel):
     time_end: str
     page_from: Optional[int] = None
     page_to: Optional[int] = None
-    pdf_path: Optional[str] = None
     document_id: Optional[int] = None
     pdf_page_offset: Optional[int] = 0
     is_completed: bool = False

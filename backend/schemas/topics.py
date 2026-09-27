@@ -11,7 +11,6 @@ class TopicBase(BaseModel):
     language: Optional[str] = Field(None, max_length=10)
     chapter_order: int = Field(default=0)
     pdf_filename: Optional[str] = None
-    pdf_path: Optional[str] = None
     document_id: Optional[int] = None
     pdf_page_offset: int = Field(default=0)
     is_core: bool = True

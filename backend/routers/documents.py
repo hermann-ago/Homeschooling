@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from dependencies import context, require_member, require_parent, store
+from dependencies import context, require_family, store
 from schemas.documents import DocumentResponse, StorageUsageResponse
 from storage import FileUnavailable, OutsideBoundary, layout
 from utils import get_or_404
@@ -9,12 +9,12 @@ from utils import get_or_404
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 
-@router.get("/usage", response_model=StorageUsageResponse, dependencies=[Depends(require_member)])
+@router.get("/usage", response_model=StorageUsageResponse)
 def storage_usage():
     return StorageUsageResponse(bytes_used=sum(d["size_bytes"] or 0 for d in store().all("documents")))
 
 
-@router.get("/{document_id:int}", response_model=DocumentResponse, dependencies=[Depends(require_member)])
+@router.get("/{document_id:int}", response_model=DocumentResponse)
 def get_document(document_id: int):
     return get_or_404(store(), "documents", document_id, "Document")
 
@@ -33,7 +33,7 @@ def document_bytes(document: dict) -> bytes:
     return data
 
 
-@router.get("/{document_id:int}/content", dependencies=[Depends(require_member)])
+@router.get("/{document_id:int}/content")
 def document_content(document_id: int):
     """PDF bytes read from the synced Homeschooling folder."""
     document = get_or_404(store(), "documents", document_id, "Document")
@@ -43,7 +43,7 @@ def document_content(document_id: int):
         "Content-Disposition": "inline"})
 
 
-@router.get("/drive/books", dependencies=[Depends(require_parent)])
+@router.get("/drive/books", dependencies=[Depends(require_family)])
 def drive_books():
     """PDFs beneath the Homeschooling folder, with whether each is already linked."""
     try:

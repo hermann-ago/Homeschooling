@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from app_context import request_operation as write
-from dependencies import context, require_member, require_parent, store
+from dependencies import context, require_family, store
 from schemas import AIAnalysisResult, SubjectCreate, SubjectResponse, SubjectUpdate, TopicResponse, TopicUpdate
 from services.ai_analyzer import analyze_curriculum
 from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
@@ -32,7 +32,7 @@ def _topic(subject_id: int, topic_id: int) -> dict:
 
 # ─── Books Management ────────────────────────────────────────────────
 
-@router.put("/{subject_id}/books/set-main-book", response_model=dict, dependencies=[Depends(require_parent)])
+@router.put("/{subject_id}/books/set-main-book", response_model=dict, dependencies=[Depends(require_family)])
 def set_main_book(subject_id: int, pdf_filename: str):
     _subject(subject_id)
     with write("books.set_main") as tx:
@@ -41,7 +41,7 @@ def set_main_book(subject_id: int, pdf_filename: str):
     return {"message": "Main book updated"}
 
 
-@router.put("/{subject_id}/books/set-book-offset", response_model=dict, dependencies=[Depends(require_parent)])
+@router.put("/{subject_id}/books/set-book-offset", response_model=dict, dependencies=[Depends(require_family)])
 def set_book_offset(subject_id: int, pdf_filename: str, offset: int):
     _subject(subject_id)
     with write("books.set_offset") as tx:
@@ -51,7 +51,7 @@ def set_book_offset(subject_id: int, pdf_filename: str, offset: int):
     return {"message": "Book page offset updated", "updated_topics": len(topics)}
 
 
-@router.delete("/{subject_id}/books", status_code=204, dependencies=[Depends(require_parent)])
+@router.delete("/{subject_id}/books", status_code=204, dependencies=[Depends(require_family)])
 def delete_book(subject_id: int, pdf_filename: str):
     _subject(subject_id)
     with write("books.delete") as tx:
@@ -60,20 +60,20 @@ def delete_book(subject_id: int, pdf_filename: str):
     return None
 
 
-@router.get("/by-child/{child_id}", response_model=List[SubjectResponse], dependencies=[Depends(require_member)])
+@router.get("/by-child/{child_id}", response_model=List[SubjectResponse])
 def list_subjects(child_id: int):
     get_or_404(store(), "children", child_id, "Child")
     return sorted(store().find("subjects", child_id=child_id), key=lambda s: s["name"])
 
 
-@router.post("", response_model=SubjectResponse, status_code=201, dependencies=[Depends(require_parent)])
+@router.post("", response_model=SubjectResponse, status_code=201, dependencies=[Depends(require_family)])
 def create_subject(subject: SubjectCreate):
     child = get_or_404(store(), "children", subject.child_id, "Child")
     with write("subjects.create") as tx:
         return tx.insert("subjects", {**subject.model_dump(), "folder": layout.subject_folder(child, subject.name)})
 
 
-@router.delete("/{subject_id}", status_code=204, dependencies=[Depends(require_parent)])
+@router.delete("/{subject_id}", status_code=204, dependencies=[Depends(require_family)])
 def delete_subject(subject_id: int):
     _subject(subject_id)
     with write("subjects.delete") as tx:
@@ -81,12 +81,12 @@ def delete_subject(subject_id: int):
     return None
 
 
-@router.get("/{subject_id}", response_model=SubjectResponse, dependencies=[Depends(require_member)])
+@router.get("/{subject_id}", response_model=SubjectResponse)
 def get_subject(subject_id: int):
     return _subject(subject_id)
 
 
-@router.put("/{subject_id}", response_model=SubjectResponse, dependencies=[Depends(require_parent)])
+@router.put("/{subject_id}", response_model=SubjectResponse, dependencies=[Depends(require_family)])
 def update_subject(subject_id: int, updates: SubjectUpdate):
     _subject(subject_id)
     with write("subjects.update") as tx:
@@ -95,13 +95,13 @@ def update_subject(subject_id: int, updates: SubjectUpdate):
 
 # ─── Topics ──────────────────────────────────────────────────────────
 
-@router.get("/{subject_id}/topics", response_model=List[TopicResponse], dependencies=[Depends(require_member)])
+@router.get("/{subject_id}/topics", response_model=List[TopicResponse])
 def list_topics(subject_id: int):
     _subject(subject_id)
     return sorted(store().find("topics", subject_id=subject_id), key=lambda t: t["chapter_order"] or 0)
 
 
-@router.post("/{subject_id}/generate-chapters", response_model=List[TopicResponse], dependencies=[Depends(require_parent)])
+@router.post("/{subject_id}/generate-chapters", response_model=List[TopicResponse], dependencies=[Depends(require_family)])
 def generate_chapters(subject_id: int, count: int = Query(..., ge=1, le=100)):
     _subject(subject_id)
     with write("topics.generate") as tx:
@@ -110,7 +110,7 @@ def generate_chapters(subject_id: int, count: int = Query(..., ge=1, le=100)):
                 for i in range(1, count + 1)]
 
 
-@router.put("/{subject_id}/topics/{topic_id}", response_model=TopicResponse, dependencies=[Depends(require_parent)])
+@router.put("/{subject_id}/topics/{topic_id}", response_model=TopicResponse, dependencies=[Depends(require_family)])
 def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate):
     topic = _topic(subject_id, topic_id)
     changes = updates.model_dump(exclude_unset=True)
@@ -125,7 +125,7 @@ def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate):
                                               "completed_at": topic["completed_at"]})
 
 
-@router.delete("/{subject_id}/topics/{topic_id}", status_code=204, dependencies=[Depends(require_parent)])
+@router.delete("/{subject_id}/topics/{topic_id}", status_code=204, dependencies=[Depends(require_family)])
 def delete_topic(subject_id: int, topic_id: int):
     _topic(subject_id, topic_id)
     with write("topics.delete") as tx:
@@ -143,8 +143,7 @@ def _complete_history(tx, topic_ids, recorded_at):
             tx.insert("completions", {"slot_id": slot["id"], "completed_at": recorded_at})
 
 
-@router.post("/{subject_id}/topics/{topic_id}/toggle-complete", response_model=TopicResponse,
-             dependencies=[Depends(require_member)])
+@router.post("/{subject_id}/topics/{topic_id}/toggle-complete", response_model=TopicResponse)
 def toggle_topic_complete(subject_id: int, topic_id: int):
     topic = _topic(subject_id, topic_id)
     recorded_at = datetime.now(timezone.utc).replace(microsecond=0)
@@ -160,7 +159,7 @@ def toggle_topic_complete(subject_id: int, topic_id: int):
         return save_topic(tx, topic)
 
 
-@router.post("/{subject_id}/topics/{topic_id}/complete-previous", dependencies=[Depends(require_parent)])
+@router.post("/{subject_id}/topics/{topic_id}/complete-previous", dependencies=[Depends(require_family)])
 def complete_previous(subject_id: int, topic_id: int):
     target = _topic(subject_id, topic_id)
     recorded_at = datetime.now(timezone.utc).replace(microsecond=0)
@@ -199,7 +198,7 @@ def _analyse(toc_text: str, page_count: int) -> dict:
         raise HTTPException(status_code=502, detail=f"AI analysis failed: {exc}") from exc
 
 
-@router.post("/{subject_id}/documents", response_model=AIAnalysisResult, dependencies=[Depends(require_parent)])
+@router.post("/{subject_id}/documents", response_model=AIAnalysisResult, dependencies=[Depends(require_family)])
 async def upload_document(subject_id: int, file: UploadFile = File(...)):
     """Store a book in the subject's ``Books`` folder (deduplicated by checksum) and create its topics."""
     _subject(subject_id)
@@ -228,7 +227,7 @@ class DriveBookRequest(BaseModel):
 
 
 @router.post("/{subject_id}/documents/from-drive", response_model=AIAnalysisResult,
-             dependencies=[Depends(require_parent)])
+             dependencies=[Depends(require_family)])
 def link_drive_document(subject_id: int, payload: DriveBookRequest):
     """Use a book already in the Homeschooling folder, referenced by its relative path."""
     _subject(subject_id)

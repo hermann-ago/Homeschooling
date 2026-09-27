@@ -27,11 +27,6 @@ backend/*.db
 *.sqlite3-wal
 *.sqlite3-shm
 
-# ─── Uploaded files ──────────────────────────────────────────────────────────
-# User-uploaded PDFs — not source code, can be large
-backend/uploads/
-!backend/uploads/.gitkeep
-
 # ─── Environment / Secrets ───────────────────────────────────────────────────
 backend/.env
 .env
@@ -52,15 +47,6 @@ frontend/.vite/
 Thumbs.db
 desktop.ini
 
-# ─── Alembic ─────────────────────────────────────────────────────────────────
-# Keep migration scripts but not compiled cache
-backend/alembic/__pycache__/
-backend/alembic/versions/__pycache__/
 node_modules/
-public/
 
-.vercel
 .env*
-migration-manifest.json
-migration-sql*/
-migration-payload.json

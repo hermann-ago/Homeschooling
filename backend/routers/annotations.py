@@ -3,15 +3,15 @@ JSON files; the annotations table holds the file path, checksum and revision."""
 import hashlib
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from app_context import request_operation as write
-from dependencies import context, require_member, store
+from dependencies import context, store
 from schemas.annotations import AnnotationPageResponse, AnnotationPageUpdate
 from storage import RevisionConflict, layout
 from storage import FileUnavailable
 
-router = APIRouter(prefix="/annotations", tags=["PDF Annotations"], dependencies=[Depends(require_member)])
+router = APIRouter(prefix="/annotations", tags=["PDF Annotations"])
 MAX_REQUEST_BYTES = 1_048_576
 
 

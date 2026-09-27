@@ -297,7 +297,7 @@ const Calendar = ({ activeChildId }) => {
 
       {/* Notification toast */}
       {notification && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-surface border border-border rounded-2xl shadow-2xl p-4 animate-in slide-in-from-bottom-5 duration-300">
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-surface border border-border rounded-2xl shadow-2xl p-4">
           <p className="text-sm text-text-primary whitespace-pre-line">{notification}</p>
           <button 
             onClick={() => setNotification(null)}

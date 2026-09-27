@@ -43,7 +43,6 @@ class ScheduledSlotResponse(BaseModel):
     page_to: Optional[int]
     subject_name: Optional[str] = None
     topic_title: Optional[str] = None
-    pdf_path: Optional[str] = None
     document_id: Optional[int] = None
     pdf_page_offset: Optional[int] = 0
     is_completed: bool = False

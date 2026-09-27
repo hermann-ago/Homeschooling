@@ -14,7 +14,7 @@ from pathlib import Path
 import request_context
 from config import HostConfig
 from security.devices import DeviceRegistry
-from storage import SAVED, DriveFolder, Store
+from storage import DriveFolder, Store
 from storage.backups import create_backup, export_excel, latest_backup
 
 logger = logging.getLogger(__name__)
@@ -138,11 +138,6 @@ class AppContext:
     def export_now(self) -> str | None:
         self.last_export = export_excel(self.store)
         return self.last_export
-
-    # ── compatibility helpers used by routes ─────────────────────────────────
-    def settle(self, operation_ids: list[str], wait: float = 0) -> str:
-        """Changes are committed to the home server's database before responses are sent."""
-        return SAVED
 
     def file_bytes(self, path: str | None, sha256: str | None = None) -> bytes:
         if not path:

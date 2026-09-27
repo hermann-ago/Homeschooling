@@ -166,7 +166,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
             onClick={onClose}
           />
           {/* Drawer */}
-          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-surface shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-surface shadow-2xl flex flex-col">
             {sidebarContent}
           </aside>
         </div>

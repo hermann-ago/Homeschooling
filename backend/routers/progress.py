@@ -1,12 +1,12 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from dependencies import require_member, store
+from dependencies import store
 from schemas import ChildProgress, FamilyProgress, SubjectProgress
 from utils import get_or_404, get_setting
 
-router = APIRouter(dependencies=[Depends(require_member)])
+router = APIRouter()
 
 
 def _pages(start, end):

@@ -5,15 +5,6 @@ function newOperationId() {
   return (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9-]/g, '');
 }
 
-function publishSync(response) {
-  const state = response.headers.get('x-sync-state');
-  if (state) {
-    window.dispatchEvent(new CustomEvent('sync:state', {
-      detail: { state, operationId: response.headers.get('x-operation-id') },
-    }));
-  }
-}
-
 /**
  * Fetch from the home server. Writes carry an Idempotency-Key and are retried
  * with the same key after a network failure, so a lost response never creates
@@ -30,9 +21,7 @@ export async function request(endpoint, options = {}) {
   let lastError;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, method, headers });
-      publishSync(response);
-      return response;
+      return await fetch(`${API_BASE_URL}${endpoint}`, { ...options, method, headers });
     } catch (error) {
       lastError = error;
       await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));

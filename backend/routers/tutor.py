@@ -1,5 +1,5 @@
-"""Tutoring API. Teacher routes need a parent or tutor (agent) device; the reader
-routes are learner-safe and never include answer keys or grading evidence."""
+"""Tutoring API for family devices and the tutor bridge. The reader routes are
+learner-safe and never include answer keys or grading evidence."""
 from __future__ import annotations
 
 import json
@@ -10,14 +10,13 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from app_context import request_operation as write
-from dependencies import context, current_device, require_member, require_parent, require_teacher, store
+from dependencies import context, current_device, require_family, store
 from security.devices import Device
 from tutoring import audio as audio_mod
 from tutoring import passages
 from utils import get_or_404
 
 router = APIRouter()
-teacher = [Depends(require_teacher)]
 
 
 def service():
@@ -29,12 +28,12 @@ def _session_result(result: dict, session_id: str) -> dict:
     return {**result, "revision": session["revision"] if session else None}
 
 
-@router.get("/learners", dependencies=teacher)
+@router.get("/learners")
 def learners():
     return service().learners()
 
 
-@router.get("/context", dependencies=teacher)
+@router.get("/context")
 def tutor_context(child_id: int, subject_id: int, phase: Literal["start", "reading", "grading", "closeout"] = "start",
                   questions: str | None = Query(None, description="Comma-separated question numbers for grading")):
     numbers = [int(q) for q in questions.split(",") if q.strip()] if questions else None
@@ -47,7 +46,7 @@ class StartRequest(BaseModel):
     topic_id: int | None = None
 
 
-@router.post("/sessions/start", dependencies=teacher)
+@router.post("/sessions/start")
 def start_session(payload: StartRequest):
     with write("tutor.start", "Started or resumed a lesson") as tx:
         result = service().start(tx, payload.child_id, payload.subject_id, payload.topic_id)
@@ -55,7 +54,7 @@ def start_session(payload: StartRequest):
     return _session_result(result, result["session_id"])
 
 
-@router.get("/sessions/{session_id}", dependencies=teacher)
+@router.get("/sessions/{session_id}")
 def get_session(session_id: str):
     session = get_or_404(store(), "tutor_sessions", session_id, "Session")
     return {**service()._session_view(session), "checkpoint": service().open_checkpoint(session_id),
@@ -80,7 +79,7 @@ class CheckpointRequest(BaseModel):
     minutes: int | None = Field(None, ge=0, le=600)
 
 
-@router.post("/sessions/{session_id}/checkpoint", dependencies=teacher)
+@router.post("/sessions/{session_id}/checkpoint")
 def checkpoint(session_id: str, payload: CheckpointRequest):
     with write("tutor.checkpoint", f"Checkpoint for {session_id}") as tx:
         result = service().checkpoint(tx, session_id, payload.expected_revision, payload.phase, payload.next_prompt,
@@ -94,7 +93,7 @@ class AttemptsRequest(BaseModel):
     attempts: list[dict[str, Any]] = Field(..., min_length=1, max_length=60)
 
 
-@router.post("/sessions/{session_id}/attempts", dependencies=teacher)
+@router.post("/sessions/{session_id}/attempts")
 def attempts(session_id: str, payload: AttemptsRequest):
     with write("tutor.attempts", f"{len(payload.attempts)} answers for {session_id}") as tx:
         result = service().attempts(tx, session_id, payload.expected_revision, payload.attempts)
@@ -106,14 +105,14 @@ class ReviewsRequest(BaseModel):
     reviews: list[dict[str, Any]] = Field(..., min_length=1, max_length=30)
 
 
-@router.post("/sessions/{session_id}/reviews", dependencies=teacher)
+@router.post("/sessions/{session_id}/reviews")
 def reviews(session_id: str, payload: ReviewsRequest):
     with write("tutor.reviews", f"Reviews for {session_id}") as tx:
         result = service().reviews(tx, session_id, payload.expected_revision, payload.reviews)
     return _session_result(result, session_id)
 
 
-@router.get("/sessions/{session_id}/assignments", dependencies=teacher)
+@router.get("/sessions/{session_id}/assignments")
 def available_assignments(session_id: str):
     session = get_or_404(store(), "tutor_sessions", session_id, "Session")
     return service().assignments(store().get("topics", session["topic_id"]))
@@ -125,14 +124,14 @@ class AssignRequest(BaseModel):
     note: str | None = None
 
 
-@router.post("/sessions/{session_id}/assignments", dependencies=teacher)
+@router.post("/sessions/{session_id}/assignments")
 def assign(session_id: str, payload: AssignRequest):
     with write("tutor.assign", f"Assigned questions for {session_id}") as tx:
         result = service().assign(tx, session_id, payload.expected_revision, payload.questions, payload.note)
     return _session_result(result, session_id)
 
 
-@router.post("/sessions/{session_id}/evidence", dependencies=teacher)
+@router.post("/sessions/{session_id}/evidence")
 async def evidence(session_id: str, expected_revision: int = Form(...), note: str | None = Form(None),
                    file: UploadFile = File(...)):
     data = await file.read(25 * 1024 * 1024 + 1)
@@ -165,14 +164,14 @@ class FinishRequest(BaseModel):
     chapter_updates: list[dict[str, Any]] = Field(default_factory=list)
 
 
-@router.post("/sessions/{session_id}/finish", dependencies=teacher)
+@router.post("/sessions/{session_id}/finish")
 def finish(session_id: str, payload: FinishRequest):
     with write("tutor.finish", f"Finished {session_id}") as tx:
         result = service().finish(tx, session_id, payload.expected_revision, payload.model_dump())
     return _session_result(result, session_id)
 
 
-@router.post("/sessions/{session_id}/reader/close", dependencies=teacher)
+@router.post("/sessions/{session_id}/reader/close")
 def close_reader(session_id: str):
     """Close the lesson's reader session. The home server keeps running for the household."""
     get_or_404(store(), "tutor_sessions", session_id, "Session")
@@ -187,7 +186,7 @@ class PreferenceRequest(BaseModel):
     confirmed_by: str = Field(..., max_length=80)
 
 
-@router.post("/preferences", dependencies=teacher)
+@router.post("/preferences")
 def preference(payload: PreferenceRequest):
     with write("tutor.preference", f"Preference {payload.key}") as tx:
         return service().preference(tx, payload.child_id, payload.key, payload.value, payload.confirmed_by)
@@ -201,7 +200,7 @@ class PassageReview(BaseModel):
     images: list[dict[str, Any]] = Field(default_factory=list)
 
 
-@router.post("/passages/{topic_id}/review", dependencies=teacher)
+@router.post("/passages/{topic_id}/review")
 def review_passage(topic_id: int, payload: PassageReview):
     """Record a tutor/parent review after inspecting every assigned page."""
     topic = get_or_404(store(), "topics", topic_id, "Topic")
@@ -231,7 +230,7 @@ class AudioRequest(BaseModel):
     approve_overage_characters: int | None = Field(None, ge=1, le=100_000)
 
 
-@router.post("/audio/generate", dependencies=teacher)
+@router.post("/audio/generate")
 def generate_audio(payload: AudioRequest, device: Device = Depends(current_device)):
     """Estimate (default) or generate one narrator. Paid overage needs a family device's approval; the tutor cannot approve it."""
     if payload.approve_overage_characters and not device.is_parent:
@@ -278,7 +277,7 @@ def store_tx_readonly():
 
 # ── Learner-safe reader ─────────────────────────────────────────────────────
 
-@router.get("/reader", dependencies=[Depends(require_member)])
+@router.get("/reader")
 def reader(learner: int, topic: int, session: str | None = None):
     return service().reader(learner, topic, session)
 
@@ -289,7 +288,7 @@ class ReaderNarrationRequest(BaseModel):
     dry_run: bool = True
 
 
-@router.post("/reader/narration", dependencies=[Depends(require_member)])
+@router.post("/reader/narration")
 def reader_narration(payload: ReaderNarrationRequest):
     """Estimate (default) or build the lesson's read-along voice from any paired device.
 
@@ -302,7 +301,7 @@ def reader_narration(payload: ReaderNarrationRequest):
     return _generate(topic, voice, rate, payload.dry_run)
 
 
-@router.get("/reader/{session_id}/state", dependencies=[Depends(require_member)])
+@router.get("/reader/{session_id}/state")
 def reader_state(session_id: str):
     return {"session_id": session_id, "reader_state": service().reader_state(session_id)}
 
@@ -314,7 +313,7 @@ def _manifest(track_id: str) -> dict:
     return json.loads(context().file_bytes(row["manifest_path"], None))
 
 
-@router.get("/audio/{track_id}/manifest", dependencies=[Depends(require_member)])
+@router.get("/audio/{track_id}/manifest")
 def audio_manifest(track_id: str):
     manifest = _manifest(track_id)
     return {"track_id": track_id, "passageHash": manifest.get("passageHash"),
@@ -323,7 +322,7 @@ def audio_manifest(track_id: str):
                        for i, t in enumerate(manifest.get("tracks", []))]}
 
 
-@router.get("/audio/{track_id}/parts/{index}", dependencies=[Depends(require_member)])
+@router.get("/audio/{track_id}/parts/{index}")
 def audio_part(track_id: str, index: int):
     tracks = _manifest(track_id).get("tracks", [])
     if not 0 <= index < len(tracks):
@@ -333,7 +332,7 @@ def audio_part(track_id: str, index: int):
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
-@router.get("/usage", dependencies=[Depends(require_parent)])
+@router.get("/usage", dependencies=[Depends(require_family)])
 def narration_usage():
     from config import home_tutor_dir
     ledger = audio_mod.UsageLedger(home_tutor_dir(), context().config.get("tts", {}).get("project"))

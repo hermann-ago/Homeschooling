@@ -109,7 +109,7 @@ function App() {
               <Route path="/progress" element={<Progress activeChildId={activeChildId} />} />
               <Route path="/calendar" element={<Calendar activeChildId={activeChildId} />} />
               <Route path="/canvas" element={<DailyCanvas activeChildId={activeChildId} />} />
-              <Route path="/settings" element={<Settings activeChildId={activeChildId} onChildrenChanged={loadChildren} />} />
+              <Route path="/settings" element={<Settings onChildrenChanged={loadChildren} />} />
             </Routes>
           ) : (
             <div className="flex items-center justify-center h-full">

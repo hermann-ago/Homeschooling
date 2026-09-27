@@ -4,7 +4,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query
 
 from app_context import request_operation as write
-from dependencies import require_member, require_parent, store
+from dependencies import require_family, store
 from schemas import BlockedDayCreate, BlockedDayResponse, SchoolYearSettings, TopicCompletionActivity
 from utils import get_or_404, get_setting, set_setting
 
@@ -26,14 +26,13 @@ def standalone_topic_completions(db, child_id: int) -> list[TopicCompletionActiv
                                     completed_at=t["completed_at"]) for t in topics]
 
 
-@router.get("/completed-topics/{child_id}", response_model=List[TopicCompletionActivity],
-            dependencies=[Depends(require_member)])
+@router.get("/completed-topics/{child_id}", response_model=List[TopicCompletionActivity])
 def list_standalone_topic_completions(child_id: int):
     get_or_404(store(), "children", child_id, "Child")
     return standalone_topic_completions(store(), child_id)
 
 
-@router.get("/blocked-days", response_model=List[BlockedDayResponse], dependencies=[Depends(require_member)])
+@router.get("/blocked-days", response_model=List[BlockedDayResponse])
 def list_blocked_days(child_id: Optional[int] = Query(None), start_date: Optional[date] = Query(None),
                       end_date: Optional[date] = Query(None)):
     rows = store().all("blocked_days")
@@ -48,7 +47,7 @@ def list_blocked_days(child_id: Optional[int] = Query(None), start_date: Optiona
 
 
 @router.post("/blocked-days", response_model=BlockedDayResponse, status_code=201,
-             dependencies=[Depends(require_parent)])
+             dependencies=[Depends(require_family)])
 def create_blocked_day(blocked: BlockedDayCreate):
     if blocked.child_id is not None:
         get_or_404(store(), "children", blocked.child_id, "Child")
@@ -56,7 +55,7 @@ def create_blocked_day(blocked: BlockedDayCreate):
         return tx.insert("blocked_days", blocked.model_dump())
 
 
-@router.delete("/blocked-days/{blocked_id}", status_code=204, dependencies=[Depends(require_parent)])
+@router.delete("/blocked-days/{blocked_id}", status_code=204, dependencies=[Depends(require_family)])
 def delete_blocked_day(blocked_id: int):
     get_or_404(store(), "blocked_days", blocked_id, "Blocked day")
     with write("blocked_days.delete") as tx:
@@ -64,13 +63,13 @@ def delete_blocked_day(blocked_id: int):
     return None
 
 
-@router.get("/settings/school-year", response_model=SchoolYearSettings, dependencies=[Depends(require_member)])
+@router.get("/settings/school-year", response_model=SchoolYearSettings)
 def get_school_year():
     return SchoolYearSettings(start_date=date.fromisoformat(get_setting(store(), "SCHOOL_YEAR_START")),
                               end_date=date.fromisoformat(get_setting(store(), "SCHOOL_YEAR_END")))
 
 
-@router.put("/settings/school-year", response_model=SchoolYearSettings, dependencies=[Depends(require_parent)])
+@router.put("/settings/school-year", response_model=SchoolYearSettings, dependencies=[Depends(require_family)])
 def update_school_year(settings: SchoolYearSettings):
     with write("settings.school_year") as tx:
         set_setting(tx, "SCHOOL_YEAR_START", settings.start_date.isoformat())

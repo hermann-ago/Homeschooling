@@ -29,12 +29,8 @@ class Device:
     token_hash: str
 
     @property
-    def is_parent(self) -> bool:
+    def is_family(self) -> bool:
         return self.role == "family"
-
-    @property
-    def sees_teacher_content(self) -> bool:
-        return self.role in ("family", "tutor")
 
 
 FAMILY = Device("family", "Home network device", "family", "")

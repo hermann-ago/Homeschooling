@@ -8,6 +8,12 @@
   }
 }
 
+/* Thin scrollbars for the inner scrolling panels. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #D1D5DB transparent;
+}
+
 /* ─── Print Styles ─────────────────────────────────────────── */
 @media print {
   /* When printing from the PDF viewer, hide everything except the PDF content */

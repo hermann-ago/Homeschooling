@@ -3,17 +3,17 @@ import logging
 from datetime import date
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from app_context import request_operation as write
-from dependencies import context, require_member, store
+from dependencies import context, store
 from schemas import CanvasAIRequest, CanvasAIResponse, CanvasInsertCreate, CanvasInsertResponse, CanvasSlotResponse
 from services import ai_enrichment
 from storage import FileUnavailable, layout
 from utils import completion_by_slot, get_or_404
 
 logger = logging.getLogger(__name__)
-router = APIRouter(dependencies=[Depends(require_member)])
+router = APIRouter()
 
 
 def _topic(topic_id: int, label: str = "Topic") -> dict:
@@ -30,7 +30,6 @@ def _insert_to_response(ci: dict) -> dict:
         "insert_topic_title": topic["title"] if topic else None,
         "insert_page_start": topic["page_start"] if topic else None,
         "insert_page_end": topic["page_end"] if topic else None,
-        "insert_pdf_path": None,
         "insert_document_id": topic["document_id"] if topic else None,
         "insert_pdf_page_offset": (topic["pdf_page_offset"] or 0) if topic else 0,
     }
@@ -56,7 +55,7 @@ def get_today_canvas(child_id: int):
         result.append(CanvasSlotResponse(
             id=slot["id"], subject_name=subject["name"] if subject else "Unknown",
             topic_title=topic["title"] if topic else None, time_start=slot["time_start"], time_end=slot["time_end"],
-            page_from=slot["page_from"], page_to=slot["page_to"], pdf_path=None,
+            page_from=slot["page_from"], page_to=slot["page_to"],
             document_id=topic["document_id"] if topic else None,
             pdf_page_offset=(topic["pdf_page_offset"] or 0) if topic else 0,
             is_completed=slot["id"] in completions, topic_id=slot["topic_id"], inserts=inserts,
@@ -92,7 +91,7 @@ def get_available_topics(child_id: int):
         topics = sorted(store().find("topics", subject_id=s["id"]), key=lambda t: t["chapter_order"] or 0)
         result.append({"subject_id": s["id"], "subject_name": s["name"], "topics": [
             {"id": t["id"], "title": t["title"], "page_start": t["page_start"], "page_end": t["page_end"],
-             "pdf_path": None, "document_id": t["document_id"], "pdf_filename": t["pdf_filename"]} for t in topics]})
+             "document_id": t["document_id"], "pdf_filename": t["pdf_filename"]} for t in topics]})
     return result
 
 
