@@ -5,6 +5,7 @@
     python launcher/homeschooling.py status
     python launcher/homeschooling.py open
     python launcher/homeschooling.py pair-agent [--name "Codex"]
+    python launcher/homeschooling.py autostart on|off|status
 
 The launcher records the exact process it started (PID, creation time,
 command line and a per-instance token) in the project's data\\run folder.
@@ -103,6 +104,52 @@ def _port_holder(port: int):
     return None
 
 
+def server_python() -> Path:
+    """The console interpreter, even when the launcher runs windowless under pythonw.
+
+    Windows Firewall allows incoming connections per program, so the server must
+    keep running as python.exe for other home devices to reach it.
+    """
+    python = Path(sys.executable)
+    return python.with_name("python.exe") if python.name.lower() == "pythonw.exe" else python
+
+
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AUTOSTART_NAME = "Homeschooling home server"
+
+
+def autostart_command() -> str:
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    return f'"{pythonw}" "{Path(__file__).resolve()}" start --no-browser'
+
+
+def autostart(action: str):
+    """Start the server when this Windows user signs in (Task Manager lists it under Startup apps)."""
+    if os.name != "nt":
+        print("Starting at sign-in is only available on Windows.")
+        return 1
+    import winreg
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
+        if action == "on":
+            winreg.SetValueEx(key, AUTOSTART_NAME, 0, winreg.REG_SZ, autostart_command())
+            print("The home server will start by itself when this Windows user signs in.")
+        elif action == "off":
+            try:
+                winreg.DeleteValue(key, AUTOSTART_NAME)
+            except FileNotFoundError:
+                pass
+            print("The home server will no longer start by itself. Start it with 'Start Homeschooling.cmd'.")
+        else:
+            try:
+                command = winreg.QueryValueEx(key, AUTOSTART_NAME)[0]
+            except FileNotFoundError:
+                print("Off: the home server starts only with 'Start Homeschooling.cmd'.")
+            else:
+                state = "On" if command == autostart_command() else "On, but pointing at another copy"
+                print(f"{state}: {command}")
+    return 0
+
+
 def build_frontend():
     npm = "npm.cmd" if os.name == "nt" else "npm"
     print("Building the app interface (first run only)…")
@@ -128,7 +175,7 @@ def start(config: HostConfig, port: int, open_browser: bool):
     log_dir = config.dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log = open(log_dir / "server.log", "ab")
-    command = [sys.executable, "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(port)]
+    command = [str(server_python()), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(port)]
     flags = 0
     if os.name == "nt":
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
@@ -234,6 +281,8 @@ def main(argv=None):
     commands.add_parser("build")
     agent = commands.add_parser("pair-agent")
     agent.add_argument("--name", default="Desktop tutor")
+    commands.add_parser("autostart").add_argument("action", choices=("on", "off", "status"), nargs="?",
+                                                  default="status")
     args = parser.parse_args(argv)
     config = HostConfig()
     if args.command == "start":
@@ -250,6 +299,8 @@ def main(argv=None):
         return 0
     if args.command == "pair-agent":
         return pair_agent(config, args.name)
+    if args.command == "autostart":
+        return autostart(args.action)
 
 
 if __name__ == "__main__":
