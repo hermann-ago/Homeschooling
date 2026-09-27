@@ -113,6 +113,23 @@ def test_checklist_completion_marks_topic_and_undo_restores(harness):
     assert harness.ctx.store.get("topics", topic["id"])["completed"] is False
 
 
+def test_lesson_lists_pages_added_from_other_books_in_order(harness):
+    _, subject, document = seed(harness)
+    with harness.ctx.store.transaction() as tx:
+        lesson = tx.insert("topics", {"subject_id": subject["id"], "title": "Lesson", "page_start": 1, "page_end": 2,
+                                      "document_id": document["id"]})
+        extra = tx.insert("topics", {"subject_id": subject["id"], "title": "Map", "page_start": 5, "page_end": 6,
+                                     "document_id": document["id"]})
+        extra2 = tx.insert("topics", {"subject_id": subject["id"], "title": "Poem", "page_start": 7, "page_end": 7})
+    for insert in (extra, extra2):
+        r = harness.call("POST", "/api/canvas/insert", json={"parent_topic_id": lesson["id"], "insert_topic_id": insert["id"]})
+        assert r.status_code == 201
+    listed = harness.call("GET", f"/api/canvas/inserts/{lesson['id']}").json()
+    assert [i["insert_topic_title"] for i in listed] == ["Map", "Poem"]
+    assert listed[0]["insert_document_id"] == document["id"] and listed[0]["insert_page_start"] == 5
+    assert harness.call("GET", "/api/canvas/inserts/99999").status_code == 404
+
+
 def stroke(color="#1D4ED8"):
     return {"id": str(uuid4()), "color": color, "width": 0.004, "points": [[0.1, 0.2], [0.3, 0.4]]}
 

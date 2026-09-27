@@ -143,13 +143,13 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
 
   return (
     <div className="flex flex-col h-full bg-surface min-h-0">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50 shrink-0 gap-3">
+      {/* The Lesson screen (hideClose) shows the subject and title in its own header. */}
+      {!hideClose && <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50 shrink-0 gap-3">
         <div className="min-w-0">
           <h3 className="font-bold text-sm truncate">{slot.subject_name}</h3>
           <p className="text-xs text-text-secondary truncate">{slot.topic_title || `Assigned pages ${start}-${end}`}</p>
         </div>
-        {!hideClose && (
-          <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
             {slot.topic_id && childId && (
               <a href={`/lesson?${new URLSearchParams({ learner: childId, topic: slot.topic_id })}`}
                 className="h-11 px-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">
@@ -161,11 +161,10 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
               <X className="w-5 h-5" />
             </button>
           </div>
-        )}
-      </div>
+      </div>}
 
       {boundaryNote && (
-        <div className="px-3 py-2 bg-sky-50 border-b border-sky-200 text-xs text-sky-900" data-testid="boundary-note">{boundaryNote}</div>
+        <div className="px-4 py-2 bg-action-soft border-b border-line text-[13px] text-action" data-testid="boundary-note">{boundaryNote}</div>
       )}
 
       {annotation.conflict && (

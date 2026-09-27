@@ -63,6 +63,14 @@ def get_today_canvas(child_id: int):
     return result
 
 
+@router.get("/inserts/{topic_id}", response_model=List[CanvasInsertResponse])
+def get_topic_inserts(topic_id: int):
+    """Pages from other books added to a lesson, in reading order."""
+    _topic(topic_id, "Topic")
+    inserts = sorted(store().find("canvas_inserts", parent_topic_id=topic_id), key=lambda ci: ci["position"] or 0)
+    return [_insert_to_response(ci) for ci in inserts]
+
+
 @router.post("/insert", response_model=CanvasInsertResponse, status_code=201)
 def create_insert(payload: CanvasInsertCreate):
     _topic(payload.parent_topic_id, "Parent topic")

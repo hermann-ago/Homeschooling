@@ -9,6 +9,8 @@ export const canvasApi = {
     body: JSON.stringify(data),
   }),
 
+  getInsertsForTopic: (topicId) => fetchApi(`/canvas/inserts/${topicId}`),
+
   deleteInsert: (insertId) => fetchApi(`/canvas/insert/${insertId}`, {
     method: 'DELETE',
   }),

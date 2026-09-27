@@ -1,116 +1,34 @@
-import React, { useState } from 'react';
-import { Routes, Route } from 'react-router';
-import Sidebar from './components/Sidebar';
-import ErrorBoundary from './components/ErrorBoundary';
-import Today from './pages/Today';
-import Weekly from './pages/Weekly';
-import Curriculum from './pages/Curriculum';
+import { Navigate, Route, Routes } from 'react-router';
+import Shell from './app/Shell';
+import { useLearner } from './app/learnerContext';
+import Today from './screens/Today';
 import Calendar from './pages/Calendar';
-import Settings from './pages/Settings';
+import Curriculum from './pages/Curriculum';
 import Progress from './pages/Progress';
-import AllChildrenDashboard from './pages/AllChildrenDashboard';
-import FamilyToday from './pages/FamilyToday';
-import DailyCanvas from './pages/DailyCanvas';
-import { useQueryClient } from '@tanstack/react-query';
-import { keys, useChildren } from './api/queries';
-import { Menu } from 'lucide-react';
-import { hexToRgb } from './utils/colors';
+import Settings from './pages/Settings';
 
-
-function App() {
-  const queryClient = useQueryClient();
-  const { data: children = [], error, refetch } = useChildren();
-  const [selectedChildId, setActiveChildId] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const activeChildId = selectedChildId ?? children[0]?.id ?? null;
-  const loadError = error ? (error.message || 'Unable to load the family workspace.') : null;
-  const loadChildren = () => queryClient.invalidateQueries({ queryKey: keys.children });
-
-  const activeChild = activeChildId !== 'all'
-    ? children.find(c => c.id === activeChildId)
-    : null;
-
-  // Build CSS custom properties from active child's color
-  const childColor = activeChild?.color || '#6B9E8A';
-  const rgb = hexToRgb(childColor);
-  const childStyle = {
-    '--child-color': childColor,
-    '--child-color-light': `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`,
-    '--child-color-hover': `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.85)`,
-  };
-
-  return (
-    <div className="flex h-screen bg-background font-sans text-text-primary overflow-hidden" style={childStyle}>
-      <Sidebar
-        children={children}
-        activeChildId={activeChildId}
-        setActiveChildId={setActiveChildId}
-        activeChild={activeChild}
-        onChildrenChanged={loadChildren}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-      
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {/* Mobile top bar - only visible on small screens */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-surface border-b border-border shrink-0">
-          <button 
-            onClick={() => setSidebarOpen(true)}
-            className="p-2 text-text-secondary hover:text-text-primary hover:bg-gray-100 rounded-lg transition"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-          <h1 className="text-lg font-bold text-text-primary tracking-tight">Homeschooler</h1>
-          {activeChild ? (
-            <div 
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs" 
-              style={{ backgroundColor: activeChild.color }}
-            >
-              {activeChild.name.charAt(0)}
-            </div>
-          ) : loadError ? (
-            <div className="flex items-center justify-center h-full p-6">
-              <div className="max-w-md text-center">
-                <p className="font-medium text-red-700">Unable to load the family workspace</p>
-                <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
-                <button onClick={() => refetch()} className="mt-4 rounded-sm bg-accent px-4 py-2 text-white">Try again</button>
-              </div>
-            </div>
-          ) : (
-            <div className="w-8 h-8" /> /* spacer */
-          )}
-        </div>
-
-        <main className="flex-1 overflow-y-auto w-full">
-          <ErrorBoundary>
-          {activeChildId === 'all' ? (
-            <Routes>
-              <Route path="/" element={<AllChildrenDashboard children={children} setActiveChildId={setActiveChildId} />} />
-              <Route path="/family-today" element={<FamilyToday children={children} />} />
-            </Routes>
-          ) : activeChildId ? (
-            <Routes>
-              <Route path="/" element={<Today activeChildId={activeChildId} />} />
-              <Route path="/weekly" element={<Weekly activeChildId={activeChildId} />} />
-              <Route path="/curriculum" element={<Curriculum activeChildId={activeChildId} />} />
-              <Route path="/progress" element={<Progress activeChildId={activeChildId} />} />
-              <Route path="/calendar" element={<Calendar activeChildId={activeChildId} />} />
-              <Route path="/canvas" element={<DailyCanvas activeChildId={activeChildId} />} />
-              <Route path="/settings" element={<Settings onChildrenChanged={loadChildren} />} />
-            </Routes>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent mx-auto mb-4"></div>
-                <p className="text-text-secondary">Loading children...</p>
-              </div>
-            </div>
-          )}
-          </ErrorBoundary>
-        </main>
-      </div>
-    </div>
-  );
+/** Screens not rebuilt yet, shown for the chosen learner inside the new frame. */
+function Legacy({ page: Page }) {
+  const { single, refetch } = useLearner();
+  return <Page activeChildId={single} onChildrenChanged={refetch} />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<Shell />}>
+        <Route index element={<Today />} />
+        <Route path="plan" element={<Legacy page={Calendar} />} />
+        <Route path="curriculum" element={<Legacy page={Curriculum} />} />
+        <Route path="progress" element={<Legacy page={Progress} />} />
+        <Route path="settings" element={<Legacy page={Settings} />} />
+        {/* Addresses from the old menu */}
+        <Route path="weekly" element={<Navigate to="/plan" replace />} />
+        <Route path="calendar" element={<Navigate to="/plan?view=month" replace />} />
+        <Route path="canvas" element={<Navigate to="/" replace />} />
+        <Route path="family-today" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}

@@ -41,9 +41,9 @@ describe('LessonRow', () => {
   it('shows time and a single page, and hides Open once done', () => {
     const { rerender } = render(<LessonRow lesson={lesson} learnerColor="#4A90D9" onOpen={() => {}} />);
     expect(screen.getByText('10:00–11:00 · p. 277')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Open' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Open / })).toBeTruthy();
     rerender(<LessonRow lesson={{ ...lesson, is_completed: true }} learnerColor="#4A90D9" onOpen={() => {}} />);
-    expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Open / })).toBeNull();
   });
 });
 

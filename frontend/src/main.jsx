@@ -7,10 +7,11 @@ import '@fontsource-variable/fraunces'
 import './index.css'
 import App from './App.jsx'
 import ServerGate from './components/ServerGate.jsx'
-import LessonReader from './pages/LessonReader.jsx'
+import Lesson from './screens/Lesson.jsx'
 import StyleGuide from './pages/StyleGuide.jsx'
 import { createQueryClient } from './api/queries.js'
 import { FeedbackProvider } from './ui/feedback.jsx'
+import LearnerProvider from './app/LearnerProvider.jsx'
 
 const queryClient = createQueryClient()
 
@@ -20,11 +21,13 @@ createRoot(document.getElementById('root')).render(
       <FeedbackProvider>
         <BrowserRouter>
           <ServerGate>
-            <Routes>
-              <Route path="/lesson" element={<LessonReader />} />
-              <Route path="/styleguide" element={<StyleGuide />} />
-              <Route path="/*" element={<App />} />
-            </Routes>
+            <LearnerProvider>
+              <Routes>
+                <Route path="/lesson" element={<Lesson />} />
+                <Route path="/styleguide" element={<StyleGuide />} />
+                <Route path="/*" element={<App />} />
+              </Routes>
+            </LearnerProvider>
           </ServerGate>
         </BrowserRouter>
       </FeedbackProvider>

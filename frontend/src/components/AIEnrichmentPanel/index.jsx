@@ -19,8 +19,9 @@ export default function AIEnrichmentPanel({
   documentId,
   pdfPageOffset = 0,
   language = 'en',
+  embedded = false,
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(embedded);
   const [activeTool, setActiveTool] = useState(null);
   const [loadingTool, setLoadingTool] = useState(null);
   const [results, setResults] = useState({});   // { [content_type]: { content, from_cache } }
@@ -108,10 +109,10 @@ export default function AIEnrichmentPanel({
   if (!topicId) return null;
 
   return (
-    <div className="border-t border-dashed border-violet-200 bg-gradient-to-b from-violet-50/40 to-transparent">
+    <div className={embedded ? 'pt-4' : 'border-t border-dashed border-violet-200 bg-gradient-to-b from-violet-50/40 to-transparent'}>
 
-      {/* Toggle bar */}
-      <button
+      {/* Toggle bar (a Practice tab shows the tools straight away) */}
+      {!embedded && <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-5 py-3 hover:bg-violet-50/60 transition group"
       >
@@ -128,7 +129,7 @@ export default function AIEnrichmentPanel({
           ? <ChevronUp className="w-4 h-4 text-violet-400" />
           : <ChevronDown className="w-4 h-4 text-violet-400" />
         }
-      </button>
+      </button>}
 
       {/* Expanded panel */}
       {open && (
