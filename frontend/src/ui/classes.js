@@ -21,3 +21,7 @@ export const buttonClasses = ({ variant = 'secondary', size = 'md', className } 
   'disabled:opacity-50 disabled:cursor-not-allowed',
   VARIANTS[variant], SIZES[size], className,
 );
+
+/** The text-input look, shared by inputs, selects and date fields. */
+export const inputClasses = 'h-11 w-full box-border px-3 rounded-[10px] border border-line bg-surface text-[15px] text-ink '
+  + 'focus:outline-2 focus:outline-offset-0 focus:outline-action disabled:opacity-60';

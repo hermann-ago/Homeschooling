@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { buttonClasses } from './buttonClasses';
+import { buttonClasses } from './classes';
 
 /**
  * The app's button. `as` renders another element with the same look, for

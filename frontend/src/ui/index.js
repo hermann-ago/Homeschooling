@@ -1,8 +1,9 @@
 export { default as Button, IconButton } from './Button';
-export { buttonClasses } from './buttonClasses';
+export { buttonClasses, inputClasses } from './classes';
 export { default as Badge } from './Badge';
 export { default as CheckButton } from './CheckButton';
 export { default as Dialog } from './Dialog';
+export { default as Field } from './Field';
 export { default as LessonRow } from './LessonRow';
 export { default as ProgressBar } from './ProgressBar';
 export { default as SegmentedControl, LearnerSwitcher } from './SegmentedControl';

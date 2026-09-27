@@ -5,10 +5,11 @@ import { BookOpen, Check, Headphones, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
 import ScreenHeader from '../app/ScreenHeader';
 import { useLearner, useNow } from '../app/learnerContext';
+import useReplanAction from '../app/useReplanAction';
 import {
-  useChildProgress, useFamilyProgress, useReplan, useSetLessonDone, useSlots, useSlotsFor,
+  useChildProgress, useFamilyProgress, useSetLessonDone, useSlots, useSlotsFor,
 } from '../api/queries';
-import { Badge, Button, CheckButton, LessonRow, ProgressBar, useConfirm, useToast } from '../ui';
+import { Badge, Button, CheckButton, LessonRow, ProgressBar, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { byTime, comingDays, firstDay, greeting, lessonMeta, lessonPath, shortTime, todayFocus } from '../utils/lessons';
 
@@ -40,31 +41,6 @@ function useLessonActions() {
     open: (lesson) => navigate(lessonPath(lesson, lesson.child_id)),
     canOpen: (lesson) => Boolean(lesson.topic_id),
   };
-}
-
-/** The confirm-then-re-plan flow for one or more learners. */
-function useReplanAction() {
-  const replan = useReplan();
-  const confirm = useConfirm();
-  const toast = useToast();
-  const run = async (learners) => {
-    const names = learners.map((c) => c.name).join(' and ');
-    const ok = await confirm({
-      title: `Re-plan ${names} from today?`,
-      description: 'Every chapter not yet done is planned again from today, in order, in the study times you set. Lessons from earlier days that were not marked done move into the coming school days.',
-      confirmLabel: 'Re-plan',
-    });
-    if (!ok) return;
-    replan.mutate(learners.map((c) => c.id), {
-      onSuccess: (results) => {
-        const created = results.reduce((sum, r) => sum + (r.slots_created || 0), 0);
-        const warnings = results.flatMap((r) => (r.warnings || []).map((w) => w.message));
-        toast(warnings.length ? warnings.join(' ') : `Re-planned: ${created} lessons from today.`);
-      },
-      onError: (error) => toast({ tone: 'problem', message: `Could not re-plan: ${error.message}` }),
-    });
-  };
-  return { run, busy: replan.isPending };
 }
 
 function UnfinishedCard({ entries, onReplan, busy, onReview }) {
