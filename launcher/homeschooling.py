@@ -178,7 +178,9 @@ def start(config: HostConfig, port: int, open_browser: bool):
     command = [str(server_python()), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(port)]
     flags = 0
     if os.name == "nt":
-        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+        # A console of its own without a window, not DETACHED_PROCESS: the venv's python.exe starts
+        # the real interpreter as a child, which would otherwise open a new, closable console window.
+        flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
     process = subprocess.Popen(command, cwd=BACKEND, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
                                creationflags=flags, start_new_session=os.name != "nt")
     for _ in range(120):
