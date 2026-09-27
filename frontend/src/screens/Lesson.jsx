@@ -342,7 +342,7 @@ export default function Lesson() {
           )}
         </div>
         {tabs.length > 0 && (
-          <aside aria-label="Lesson tools" className="lg:w-[400px] h-80 lg:h-auto shrink-0 bg-surface border-t lg:border-t-0 lg:border-l border-line min-h-0 flex flex-col">
+          <aside aria-label="Lesson tools" className="lg:w-[400px] h-[50dvh] lg:h-auto shrink-0 bg-surface border-t lg:border-t-0 lg:border-l border-line min-h-0 flex flex-col">
             <Tabs tabs={tabs} value={activeTab} onChange={setTab} />
             <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
               {activeTab === 'read' && (
