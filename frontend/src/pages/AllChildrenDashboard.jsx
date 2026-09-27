@@ -88,7 +88,7 @@ const AllChildrenDashboard = ({ children, setActiveChildId }) => {
             </div>
 
             <div className="flex gap-3 flex-wrap">
-              <div className="flex items-center gap-2 bg-white border border-border rounded-xl px-4 py-2.5 shadow-sm">
+              <div className="flex items-center gap-2 bg-white border border-border rounded-xl px-4 py-2.5 shadow-xs">
                 <div className="w-8 h-8 bg-accent/10 rounded-lg flex items-center justify-center">
                   <Target className="w-4 h-4 text-accent" />
                 </div>
@@ -98,7 +98,7 @@ const AllChildrenDashboard = ({ children, setActiveChildId }) => {
                 </div>
               </div>
               {totalMissed > 0 && (
-                <div className="flex items-center gap-2 bg-white border border-red-100 rounded-xl px-4 py-2.5 shadow-sm">
+                <div className="flex items-center gap-2 bg-white border border-red-100 rounded-xl px-4 py-2.5 shadow-xs">
                   <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
                     <AlertCircle className="w-4 h-4 text-red-500" />
                   </div>
@@ -133,7 +133,7 @@ const AllChildrenDashboard = ({ children, setActiveChildId }) => {
                   {/* Child identity */}
                   <div className="flex items-center gap-3 mb-4">
                     <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow-sm flex-shrink-0"
+                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold shadow-xs shrink-0"
                       style={{ backgroundColor: child.color }}
                     >
                       {child.name.charAt(0)}
@@ -204,7 +204,7 @@ const AllChildrenDashboard = ({ children, setActiveChildId }) => {
                             <div className="flex items-center justify-between mb-1">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <span className={clsx(
-                                  "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                  "w-1.5 h-1.5 rounded-full shrink-0",
                                   subject.status === 'on_track' ? 'bg-green-400' :
                                   subject.status === 'behind' ? 'bg-yellow-400' : 'bg-red-400'
                                 )} />

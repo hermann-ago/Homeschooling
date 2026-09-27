@@ -104,7 +104,7 @@ const Today = ({ activeChildId }) => {
       )}>
         
         {/* Header Section */}
-        <header className="p-4 sm:p-6 lg:p-8 pb-0 flex-shrink-0">
+        <header className="p-4 sm:p-6 lg:p-8 pb-0 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-1 flex items-center">
@@ -119,7 +119,7 @@ const Today = ({ activeChildId }) => {
             </div>
             
             {slots.length > 0 && (
-              <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex items-center gap-3 shrink-0">
                 {pendingMissed.length > 0 && (
                   <div className="flex items-center gap-1.5 bg-red-50 text-red-600 text-xs font-bold px-3 py-1.5 rounded-full border border-red-100">
                     <AlertCircle className="w-3.5 h-3.5" />
@@ -149,12 +149,12 @@ const Today = ({ activeChildId }) => {
 
             {/* Catch Up Column — only visible if there are missed tasks */}
             {pendingMissed.length > 0 && (
-              <div className="lg:w-[340px] xl:w-[380px] flex-shrink-0 flex flex-col">
+              <div className="lg:w-[340px] xl:w-[380px] shrink-0 flex flex-col">
                 <div className="bg-white rounded-2xl border border-red-100 shadow-soft overflow-hidden flex flex-col h-full relative">
                   {/* Red accent bar */}
                   <div className="absolute top-0 left-0 w-1 h-full bg-status-at-risk-text rounded-l-2xl" />
                   
-                  <div className="flex items-center justify-between p-4 border-b border-red-100 bg-red-50/30 flex-shrink-0">
+                  <div className="flex items-center justify-between p-4 border-b border-red-100 bg-red-50/30 shrink-0">
                     <h2 className="text-sm font-bold text-status-at-risk-text flex items-center">
                       <AlertCircle className="w-4 h-4 mr-2" />
                       Catch Up
@@ -181,7 +181,7 @@ const Today = ({ activeChildId }) => {
 
             {/* Schedule Grid Column */}
             <div className="flex-1 bg-white rounded-2xl border border-border shadow-soft overflow-hidden flex flex-col min-h-0 min-w-0 relative">
-              <div className="flex items-center p-4 border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-sm flex-shrink-0">
+              <div className="flex items-center p-4 border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-xs shrink-0">
                 <CheckSquare className="w-5 h-5 mr-2 text-text-secondary" />
                 <h2 className="text-sm font-bold text-text-primary uppercase tracking-wider">Schedule</h2>
                 <span className="ml-auto text-xs text-text-secondary flex items-center">
@@ -200,7 +200,7 @@ const Today = ({ activeChildId }) => {
                    {/* Hour Lines */}
                    {Array.from({ length: 24 }).map((_, i) => (
                       <div key={i} className="absolute w-full border-t border-border flex items-start" style={{ top: `${i * 60}px`, height: '60px' }}>
-                         <div className="w-14 flex-shrink-0 text-right pr-3 -mt-2.5">
+                         <div className="w-14 shrink-0 text-right pr-3 -mt-2.5">
                             <span className="text-[10px] sm:text-xs font-medium text-text-secondary bg-white px-1">
                                {i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}
                             </span>
@@ -213,7 +213,7 @@ const Today = ({ activeChildId }) => {
                       className="absolute left-14 right-0 border-t-[2px] border-red-500 z-20 pointer-events-none"
                       style={{ top: `${currentPixels}px` }}
                    >
-                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-sm" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-xs" />
                    </div>
 
                    {/* Slot Blocks */}
@@ -227,7 +227,7 @@ const Today = ({ activeChildId }) => {
                            key={slot.id}
                            onClick={() => setSelectedSlot(slot)}
                            className={clsx(
-                             "absolute left-14 right-3 rounded-xl p-2.5 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-sm z-10 group",
+                             "absolute left-14 right-3 rounded-xl p-2.5 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-xs z-10 group",
                              slot.is_completed 
                                ? "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100" 
                                : "bg-accent/10 border-accent/40 hover:border-accent hover:shadow-md hover:-translate-y-[1px]"
@@ -252,12 +252,12 @@ const Today = ({ activeChildId }) => {
                                
                                <button 
                                  onClick={(e) => { e.stopPropagation(); toggleSlot(slot.id, slot.is_completed); }}
-                                 className="flex-shrink-0 mt-0.5 p-1 rounded-md hover:bg-white/50 transition active:scale-90"
+                                 className="shrink-0 mt-0.5 p-1 rounded-md hover:bg-white/50 transition active:scale-90"
                                >
                                   {slot.is_completed ? (
                                       <CheckSquare className="w-5 h-5 text-accent fill-accent/20" />
                                   ) : (
-                                      <div className="w-4 h-4 rounded border-2 border-accent bg-white mt-0.5 mr-0.5" />
+                                      <div className="w-4 h-4 rounded-sm border-2 border-accent bg-white mt-0.5 mr-0.5" />
                                   )}
                                </button>
                             </div>

@@ -95,7 +95,7 @@ const ResponsivePageViewerPanel = ({ slot, childId, onClose }) => {
     <aside
       aria-label="PDF lesson workspace"
       data-testid="pdf-viewer-panel"
-      className="fixed inset-0 z-50 w-full bg-surface h-full min-w-0 lg:relative lg:inset-auto lg:z-40 lg:w-[var(--pdf-panel-width)] lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:flex-shrink-0"
+      className="fixed inset-0 z-50 w-full bg-surface h-full min-w-0 lg:relative lg:inset-auto lg:z-40 lg:w-[var(--pdf-panel-width)] lg:min-w-[380px] lg:border-l lg:border-border lg:shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.05)] lg:shrink-0"
       style={{ '--pdf-panel-width': `${panelWidth}px` }}
     >
       <div
@@ -118,11 +118,11 @@ const ResponsivePageViewerPanel = ({ slot, childId, onClose }) => {
           savePanelWidth(nextWidth);
         }}
         className={clsx(
-          'group absolute inset-y-0 left-0 z-50 hidden w-3 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center outline-none lg:flex',
+          'group absolute inset-y-0 left-0 z-50 hidden w-3 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center outline-hidden lg:flex',
           'focus-visible:bg-accent/10',
         )}
       >
-        <span className="h-16 w-1 rounded-full bg-border shadow-sm transition group-hover:bg-accent group-focus-visible:bg-accent" />
+        <span className="h-16 w-1 rounded-full bg-border shadow-xs transition group-hover:bg-accent group-focus-visible:bg-accent" />
       </div>
       <PageViewer slot={slot} childId={childId} onClose={onClose} />
     </aside>

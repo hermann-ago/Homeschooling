@@ -92,7 +92,7 @@ const DailyCanvas = ({ activeChildId }) => {
   return (
     <div className="h-full flex flex-col bg-gray-50/50 overflow-hidden">
       {/* Header */}
-      <header className="flex-shrink-0 p-4 sm:p-6 lg:p-8 pb-0">
+      <header className="shrink-0 p-4 sm:p-6 lg:p-8 pb-0">
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-3">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-1 flex items-center">
@@ -133,7 +133,7 @@ const DailyCanvas = ({ activeChildId }) => {
         <div className="flex-1 overflow-hidden flex flex-col lg:flex-row gap-0 lg:gap-0 p-4 sm:p-6 lg:p-8 pt-4 sm:pt-4 lg:pt-5">
 
           {/* Left: Section list */}
-          <div className="lg:w-[320px] xl:w-[360px] flex-shrink-0 flex flex-col lg:border-r lg:border-border lg:pr-5 mb-4 lg:mb-0">
+          <div className="lg:w-[320px] xl:w-[360px] shrink-0 flex flex-col lg:border-r lg:border-border lg:pr-5 mb-4 lg:mb-0">
             <h2 className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3 flex items-center">
               <FileText className="w-3.5 h-3.5 mr-1.5" />
               Sections
@@ -148,15 +148,15 @@ const DailyCanvas = ({ activeChildId }) => {
                     className={clsx(
                       "w-full text-left p-3 rounded-xl border transition-all duration-200 group flex items-start gap-3 cursor-pointer",
                       isActive
-                        ? "bg-accent/10 border-accent/30 shadow-sm"
+                        ? "bg-accent/10 border-accent/30 shadow-xs"
                         : slot.is_completed
                           ? "bg-gray-50 border-gray-200 opacity-70 hover:opacity-100"
-                          : "bg-white border-gray-200 hover:border-accent/20 hover:shadow-sm"
+                          : "bg-white border-gray-200 hover:border-accent/20 hover:shadow-xs"
                     )}
                   >
                     {/* Number badge */}
                     <div className={clsx(
-                      "w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold",
+                      "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
                       slot.is_completed
                         ? "bg-green-100 text-green-600"
                         : isActive
@@ -184,7 +184,7 @@ const DailyCanvas = ({ activeChildId }) => {
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleComplete(slot.id, slot.is_completed); }}
                       className={clsx(
-                        "p-1.5 rounded-lg transition active:scale-90 flex-shrink-0",
+                        "p-1.5 rounded-lg transition active:scale-90 shrink-0",
                         slot.is_completed
                           ? "bg-green-100 text-green-600 hover:bg-green-200"
                           : "bg-gray-100 text-text-secondary hover:bg-accent/10 hover:text-accent"
@@ -213,12 +213,12 @@ const DailyCanvas = ({ activeChildId }) => {
               <div className="flex-1 flex flex-col bg-white rounded-2xl border border-border shadow-soft overflow-hidden">
                 {/* Section header */}
                 <div className={clsx(
-                  "p-4 sm:p-5 flex items-center justify-between flex-shrink-0",
+                  "p-4 sm:p-5 flex items-center justify-between shrink-0",
                   activeSlot.is_completed ? "bg-green-50/50" : "bg-gray-50/80"
                 )}>
                   <div className="flex items-center min-w-0 flex-1">
                     <div className={clsx(
-                      "w-8 h-8 rounded-lg flex items-center justify-center mr-3 flex-shrink-0 text-sm font-bold",
+                      "w-8 h-8 rounded-lg flex items-center justify-center mr-3 shrink-0 text-sm font-bold",
                       activeSlot.is_completed
                         ? "bg-green-100 text-green-600"
                         : "bg-accent/10 text-accent"
@@ -241,7 +241,7 @@ const DailyCanvas = ({ activeChildId }) => {
                     </div>
                   </div>
 
-                  <div className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                  <div className="flex items-center space-x-2 shrink-0 ml-3">
                     <button
                       onClick={() => toggleComplete(activeSlot.id, activeSlot.is_completed)}
                       className={clsx(
@@ -281,7 +281,7 @@ const DailyCanvas = ({ activeChildId }) => {
                           <div key={insert.id} className="border-b border-border last:border-b-0">
                             <div className="px-4 py-3 bg-amber-50/50 flex items-center justify-between">
                               <div className="flex items-center min-w-0">
-                                <div className="w-6 h-6 rounded bg-amber-100 flex items-center justify-center mr-2 flex-shrink-0">
+                                <div className="w-6 h-6 rounded-sm bg-amber-100 flex items-center justify-center mr-2 shrink-0">
                                   <BookOpen className="w-3.5 h-3.5 text-amber-600" />
                                 </div>
                                 <div className="min-w-0">

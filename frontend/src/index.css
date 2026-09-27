@@ -1,17 +1,75 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+/*
+  Design tokens from the style guide (Claude Design canvas "Homeschooling UI
+  Redesign"). Learner colours are family data, so they are not tokens here;
+  utils/colors.js derives their strong and soft shades.
+*/
+@theme {
+  --font-sans: 'Figtree Variable', system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, serif;
+
+  --color-paper: #f6f3ec;
+  --color-paper-deep: #efeae0;
+  --color-surface: #ffffff;
+  --color-line: #e3dccf;
+  --color-line-soft: #efeae0;
+  --color-ink: #1e2226;
+  --color-muted: #545b63;
+  --color-subtle: #6a7077;
+
+  --color-action: #2d5f54;
+  --color-action-hover: #1f463e;
+  --color-action-soft: #e3eeea;
+  --color-attention: #9a5b00;
+  --color-attention-soft: #fbf0dc;
+  --color-problem: #a63d2a;
+  --color-problem-soft: #f8e6e1;
+  --color-saved: #2e8b57;
+
+  /* Names used by the screens that have not been rebuilt yet. */
+  --color-background: var(--color-paper);
+  --color-border: var(--color-line);
+  --color-accent: var(--color-action);
+  --color-accent-light: var(--color-action-soft);
+  --color-accent-hover: var(--color-action-hover);
+  --color-accent-dark: var(--color-action-hover);
+  --color-text-primary: var(--color-ink);
+  --color-text-secondary: var(--color-muted);
+  --color-status-on-track-bg: var(--color-action-soft);
+  --color-status-on-track-text: var(--color-action);
+  --color-status-behind-bg: var(--color-attention-soft);
+  --color-status-behind-text: var(--color-attention);
+  --color-status-at-risk-bg: var(--color-problem-soft);
+  --color-status-at-risk-text: var(--color-problem);
+
+  --shadow-soft: 0 4px 20px -2px rgba(30, 34, 38, 0.05);
+}
 
 @layer base {
+  /* Tailwind 4 borders default to the text colour; keep the soft line colour. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-line);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
   body {
-    @apply bg-background text-text-primary antialiased;
+    @apply bg-paper text-ink antialiased;
   }
 }
 
 /* Thin scrollbars for the inner scrolling panels. */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #D1D5DB transparent;
+  scrollbar-color: var(--color-line) transparent;
 }
 
 /* ─── Print Styles ─────────────────────────────────────────── */

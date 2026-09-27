@@ -67,8 +67,8 @@ export default function HomeServerSettings() {
             run(() => systemApi.setDriveFolder(folderPath.trim()), 'Drive folder saved.');
           }}>
             <input value={folderPath} onChange={(e) => setFolderPath(e.target.value)} aria-label="Drive folder path"
-              placeholder="G:\My Drive\…\Homeschooling" className="flex-1 min-w-[16rem] rounded border p-2 font-mono text-xs" />
-            <button type="submit" className="rounded border px-3 py-2">Use this folder</button>
+              placeholder="G:\My Drive\…\Homeschooling" className="flex-1 min-w-[16rem] rounded-sm border p-2 font-mono text-xs" />
+            <button type="submit" className="rounded-sm border px-3 py-2">Use this folder</button>
           </form>
         ) : (
           <p className="text-sm text-text-secondary">The folder can be changed only on the host computer.</p>
@@ -83,8 +83,8 @@ export default function HomeServerSettings() {
           {storage?.last_backup ? ` Latest: ${backupTime(storage.last_backup)}.` : ' No backup yet.'}
         </p>
         <div className="flex flex-wrap gap-2 text-sm">
-          <button type="button" onClick={() => run(() => systemApi.backupNow(), (r) => `Backup saved: ${r.name}`)} className="rounded border px-3 py-2">Back up now</button>
-          <button type="button" onClick={() => run(() => systemApi.exportNow(), (r) => (r.path ? `Excel copy written: ${r.path}` : 'The Drive folder is not available.'))} className="rounded border px-3 py-2">Write the Excel copy</button>
+          <button type="button" onClick={() => run(() => systemApi.backupNow(), (r) => `Backup saved: ${r.name}`)} className="rounded-sm border px-3 py-2">Back up now</button>
+          <button type="button" onClick={() => run(() => systemApi.exportNow(), (r) => (r.path ? `Excel copy written: ${r.path}` : 'The Drive folder is not available.'))} className="rounded-sm border px-3 py-2">Write the Excel copy</button>
         </div>
         <p className="text-xs text-text-secondary">The Excel copy is for reading only and leaves out answer keys; make changes in the app.</p>
       </div>

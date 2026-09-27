@@ -177,14 +177,14 @@ const Calendar = ({ activeChildId }) => {
                 <div 
                   key={slot.id} 
                   className={clsx(
-                    "text-[10px] leading-tight px-1.5 py-0.5 rounded truncate flex items-center",
+                    "text-[10px] leading-tight px-1.5 py-0.5 rounded-sm truncate flex items-center",
                     slot.is_completed 
                       ? "bg-green-50 text-green-700 line-through opacity-70" 
                       : "bg-accent-light text-accent"
                   )}
                   title={`${slot.subject_name}: ${slot.topic_title || 'Study'} (p${slot.page_from}-${slot.page_to})`}
                 >
-                  {slot.is_completed && <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 flex-shrink-0" />}
+                  {slot.is_completed && <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 shrink-0" />}
                   <span className="truncate">{slot.subject_name}</span>
                 </div>
               ))}
@@ -198,10 +198,10 @@ const Calendar = ({ activeChildId }) => {
 
           {!blocked && completedActivities.length > 0 && (
             <div
-              className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded flex items-center bg-green-50 text-green-700"
+              className="mt-0.5 text-[10px] leading-tight px-1.5 py-0.5 rounded-sm flex items-center bg-green-50 text-green-700"
               title={completedActivities.map(activity => `${activity.subject_name}: ${activity.topic_title}`).join('\n')}
             >
-              <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 flex-shrink-0" />
+              <CheckCircle2 className="w-2.5 h-2.5 mr-0.5 shrink-0" />
               <span className="truncate">
                 {completedActivities.length} chapter{completedActivities.length === 1 ? '' : 's'} checked
               </span>
@@ -211,7 +211,7 @@ const Calendar = ({ activeChildId }) => {
           {/* Hover overlay for blocking — only show when no activities are visible */}
           {!blocked && daySlots.length === 0 && completedActivities.length === 0 && (
             <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <span className="bg-surface px-2 py-1 rounded shadow-sm text-[10px] font-medium text-text-primary">
+              <span className="bg-surface px-2 py-1 rounded-sm shadow-xs text-[10px] font-medium text-text-primary">
                 Block Day
               </span>
             </div>
@@ -242,7 +242,7 @@ const Calendar = ({ activeChildId }) => {
         <button 
           onClick={handleRecalculate}
           disabled={recalculating}
-          className="flex items-center bg-accent text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium shadow-sm hover:bg-accent-hover transition disabled:opacity-50 self-start sm:self-auto text-sm sm:text-base"
+          className="flex items-center bg-accent text-white px-4 sm:px-5 py-2.5 rounded-xl font-medium shadow-xs hover:bg-accent-hover transition disabled:opacity-50 self-start sm:self-auto text-sm sm:text-base"
         >
           <RefreshCw className={clsx("w-4 h-4 sm:w-5 sm:h-5 mr-2", recalculating && "animate-spin")} />
           {recalculating ? 'Recalculating...' : 'Recalculate Schedule'}
@@ -275,7 +275,7 @@ const Calendar = ({ activeChildId }) => {
         
         <div className="bg-surface relative">
           {loading && (
-            <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center">
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-xs z-10 flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
             </div>
           )}

@@ -181,7 +181,7 @@ const Curriculum = ({ activeChildId }) => {
         </div>
         <button 
           onClick={handleAddSubject}
-          className="bg-text-primary text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-sm"
+          className="bg-text-primary text-white py-2 px-4 rounded-lg text-sm font-medium hover:bg-gray-800 transition shadow-xs"
         >
           + Add Subject
         </button>
@@ -273,7 +273,7 @@ const Curriculum = ({ activeChildId }) => {
                             aria-label="Use a book already in Google Drive"
                             onClick={() => setDrivePickerFor(subject.id)}
                             disabled={isUploading === subject.id}
-                            className="flex items-center justify-center p-1.5 rounded-md text-sm border bg-white text-text-secondary border-border hover:border-accent hover:text-accent shadow-sm"
+                            className="flex items-center justify-center p-1.5 rounded-md text-sm border bg-white text-text-secondary border-border hover:border-accent hover:text-accent shadow-xs"
                           >
                             <FolderOpen className="w-4 h-4" />
                           </button>
@@ -292,7 +292,7 @@ const Curriculum = ({ activeChildId }) => {
                               "flex items-center justify-center p-1.5 rounded-md text-sm transition cursor-pointer border",
                               isUploading === subject.id
                                 ? "bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed"
-                                : "bg-white text-text-secondary border-border hover:border-accent hover:text-accent shadow-sm"
+                                : "bg-white text-text-secondary border-border hover:border-accent hover:text-accent shadow-xs"
                             )}
                           >
                             {isUploading === subject.id ? (
@@ -322,14 +322,14 @@ const Curriculum = ({ activeChildId }) => {
                               )}
                             >
                               <div className="flex items-start min-w-0 pr-2">
-                                <BookOpen className={clsx("w-4 h-4 mr-2 flex-shrink-0 mt-0.5", currentBookFilename === book.filename ? "text-accent" : "text-gray-400")} />
+                                <BookOpen className={clsx("w-4 h-4 mr-2 shrink-0 mt-0.5", currentBookFilename === book.filename ? "text-accent" : "text-gray-400")} />
                                 <div className="truncate flex flex-col">
                                   <span className="truncate leading-tight">{book.filename}</span>
                                   <span className="text-[10px] font-normal opacity-70 mt-0.5">{book.topicCount} topics</span>
                                 </div>
                               </div>
                               {book.is_core && (
-                                <Star className="w-4 h-4 fill-accent text-accent flex-shrink-0" title="Main Curriculum Book" />
+                                <Star className="w-4 h-4 fill-accent text-accent shrink-0" title="Main Curriculum Book" />
                               )}
                             </button>
                           ))
@@ -354,7 +354,7 @@ const Curriculum = ({ activeChildId }) => {
                               <h3 className="text-lg font-bold text-text-primary flex items-center mb-1">
                                 {currentBookInfo.filename}
                               </h3>
-                              <p className="text-sm text-text-secondary border border-border bg-gray-50 rounded px-2 py-0.5 inline-flex items-center">
+                              <p className="text-sm text-text-secondary border border-border bg-gray-50 rounded-sm px-2 py-0.5 inline-flex items-center">
                                 {currentBookInfo.is_core ? (
                                   <><Star className="w-3 h-3 mr-1 fill-accent text-accent" /> Main Curriculum</>
                                 ) : (
@@ -362,7 +362,7 @@ const Curriculum = ({ activeChildId }) => {
                                 )}
                               </p>
                               {currentBookInfo.filename !== 'Unknown Book' && (
-                                <p className="text-sm text-text-secondary border border-border bg-gray-50 rounded px-2 py-0.5 inline-flex items-center ml-2">
+                                <p className="text-sm text-text-secondary border border-border bg-gray-50 rounded-sm px-2 py-0.5 inline-flex items-center ml-2">
                                   Offset: {currentBookTopics.length > 0 ? currentBookTopics[0].pdf_page_offset || 0 : 0}
                                 </p>
                               )}
@@ -372,7 +372,7 @@ const Curriculum = ({ activeChildId }) => {
                               {(!currentBookInfo.is_core || coreBooksCount > 1) && currentBookInfo.filename !== 'Unknown Book' && (
                                 <button
                                   onClick={() => handleSetMainBook(subject.id, currentBookInfo.filename)}
-                                  className="flex items-center px-4 py-2 bg-accent text-white hover:bg-accent-hover text-sm font-semibold rounded-lg transition shadow-sm"
+                                  className="flex items-center px-4 py-2 bg-accent text-white hover:bg-accent-hover text-sm font-semibold rounded-lg transition shadow-xs"
                                 >
                                   <Star className="w-4 h-4 mr-1.5 fill-white" />
                                   Set as Main
@@ -392,7 +392,7 @@ const Curriculum = ({ activeChildId }) => {
                           </div>
 
                           <div className="p-6 bg-gray-50/50 flex-1">
-                            <div className="bg-surface rounded-lg border border-border overflow-hidden shadow-sm">
+                            <div className="bg-surface rounded-lg border border-border overflow-hidden shadow-xs">
                               <div className="overflow-x-auto">
                                 <table className="min-w-full divide-y divide-border">
                                   <thead className="bg-gray-50">
@@ -427,7 +427,7 @@ const Curriculum = ({ activeChildId }) => {
                                         <td className="px-4 py-4 text-center">
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleToggleComplete(subject.id, topic.id); }}
-                                            className="focus:outline-none transition-transform active:scale-90"
+                                            className="focus:outline-hidden transition-transform active:scale-90"
                                           >
                                             {topic.completed ? (
                                               <CheckCircle2 className="w-6 h-6 text-accent fill-accent/20" />
@@ -447,7 +447,7 @@ const Curriculum = ({ activeChildId }) => {
                                           )}
                                         </td>
                                         <td className="px-6 py-4 text-center whitespace-nowrap">
-                                          <span className={clsx("text-sm font-medium px-2 py-1 rounded inline-block min-w-16", topic.completed ? "bg-gray-100 text-gray-400" : "bg-accent-light text-accent")}>
+                                          <span className={clsx("text-sm font-medium px-2 py-1 rounded-sm inline-block min-w-16", topic.completed ? "bg-gray-100 text-gray-400" : "bg-accent-light text-accent")}>
                                             {topic.page_start} - {topic.page_end}
                                           </span>
                                         </td>
@@ -503,7 +503,7 @@ const Curriculum = ({ activeChildId }) => {
 
       {/* Subject Edit Modal */}
       {editingSubject && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center bg-gray-50">
               <div>
@@ -516,7 +516,7 @@ const Curriculum = ({ activeChildId }) => {
               <div>
                 <label className="block text-sm font-semibold text-text-secondary mb-1">Subject Name</label>
                 <input 
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   value={editingSubject.name}
                   onChange={e => setEditingSubject({...editingSubject, name: e.target.value})}
                 />
@@ -528,7 +528,7 @@ const Curriculum = ({ activeChildId }) => {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   value={editingSubject.weight}
                   onChange={e => setEditingSubject({...editingSubject, weight: parseFloat(e.target.value)})}
                 />
@@ -550,7 +550,7 @@ const Curriculum = ({ activeChildId }) => {
                       className={clsx(
                         "flex-1 py-2 rounded-lg text-sm font-bold transition whitespace-nowrap px-2",
                         editingSubject.slot_type === slot.id 
-                          ? "bg-white text-accent shadow-sm" 
+                          ? "bg-white text-accent shadow-xs" 
                           : "text-text-secondary hover:text-text-primary"
                       )}
                     >
@@ -571,7 +571,7 @@ const Curriculum = ({ activeChildId }) => {
                 <label className="block text-sm font-semibold text-text-secondary mb-1">Target End Date (Optional)</label>
                 <input 
                   type="date"
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   value={editingSubject.end_date || ''}
                   onChange={e => setEditingSubject({...editingSubject, end_date: e.target.value})}
                 />
@@ -607,7 +607,7 @@ const Curriculum = ({ activeChildId }) => {
                           </span>
                           <input 
                             type="number"
-                            className="w-16 px-2 py-1 text-sm border border-border rounded-lg outline-none text-center focus:border-accent"
+                            className="w-16 px-2 py-1 text-sm border border-border rounded-lg outline-hidden text-center focus:border-accent"
                             defaultValue={book.offset}
                             onBlur={(e) => {
                                 const newOffset = parseInt(e.target.value, 10);
@@ -641,7 +641,7 @@ const Curriculum = ({ activeChildId }) => {
                       type="number"
                       min="1"
                       max="100"
-                      className="w-full h-10 px-3 text-sm border border-border rounded-xl outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all"
+                      className="w-full h-10 px-3 text-sm border border-border rounded-xl outline-hidden focus:border-accent focus:ring-2 focus:ring-accent/10 transition-all"
                       placeholder="Total Chapters"
                       value={chaptersCount}
                       onChange={(e) => setChaptersCount(parseInt(e.target.value) || 1)}
@@ -666,7 +666,7 @@ const Curriculum = ({ activeChildId }) => {
                     }}
                     disabled={generating}
                     className={clsx(
-                      "h-10 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center space-x-2 shadow-sm border border-border",
+                      "h-10 px-4 rounded-xl text-sm font-bold transition-all flex items-center justify-center space-x-2 shadow-xs border border-border",
                       generating 
                         ? "bg-gray-50 text-text-secondary cursor-not-allowed" 
                         : "bg-surface hover:bg-gray-50 text-text-primary active:scale-95"
@@ -709,7 +709,7 @@ const Curriculum = ({ activeChildId }) => {
                      setEditingSubject(null);
                    } catch { alert("Failed to save subject."); }
                 }}
-                className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-sm"
+                className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-xs"
               >
                 Save
               </button>

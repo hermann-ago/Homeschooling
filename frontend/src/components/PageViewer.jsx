@@ -143,13 +143,13 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
 
   return (
     <div className="flex flex-col h-full bg-surface min-h-0">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50 flex-shrink-0 gap-3">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-gray-50 shrink-0 gap-3">
         <div className="min-w-0">
           <h3 className="font-bold text-sm truncate">{slot.subject_name}</h3>
           <p className="text-xs text-text-secondary truncate">{slot.topic_title || `Assigned pages ${start}-${end}`}</p>
         </div>
         {!hideClose && (
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {slot.topic_id && childId && (
               <a href={`/lesson?${new URLSearchParams({ learner: childId, topic: slot.topic_id })}`}
                 className="h-11 px-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">
@@ -249,7 +249,7 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
         </div>
       </div>
 
-      <div className="border-t px-3 py-2 flex justify-between items-center gap-2 flex-shrink-0 bg-white">
+      <div className="border-t px-3 py-2 flex justify-between items-center gap-2 shrink-0 bg-white">
         <button type="button" aria-label="Previous assigned page" disabled={page <= physicalStart} onClick={() => changePage(page - 1)} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 disabled:opacity-30"><ChevronLeft /></button>
         <div className="text-center min-w-0">
           <p className="text-sm font-semibold">Book page {bookPage}</p>

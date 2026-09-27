@@ -91,10 +91,10 @@ export default function QuizView({ questions }) {
                     />
                     <span>{choice}</span>
                     {submitted && isAnswer && (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-green-600 ml-auto flex-shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-green-600 ml-auto shrink-0" />
                     )}
                     {submitted && isSelected && !isAnswer && (
-                      <XCircle className="w-3.5 h-3.5 text-red-500 ml-auto flex-shrink-0" />
+                      <XCircle className="w-3.5 h-3.5 text-red-500 ml-auto shrink-0" />
                     )}
                   </label>
                 );

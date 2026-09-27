@@ -32,7 +32,7 @@ const InputDialog = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-[60] p-4">
       <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
         <div className="p-6 border-b border-border flex justify-between items-center">
           <h3 className="text-lg font-bold text-text-primary">{title}</h3>
@@ -47,7 +47,7 @@ const InputDialog = ({
           <input
             type="text"
             autoFocus
-            className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+            className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
             placeholder={placeholder}
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -63,7 +63,7 @@ const InputDialog = ({
             <button 
               type="submit"
               disabled={!value.trim()}
-              className="bg-accent text-white px-5 py-2 rounded-xl font-bold text-sm shadow-sm hover:bg-accent-hover transition disabled:opacity-50"
+              className="bg-accent text-white px-5 py-2 rounded-xl font-bold text-sm shadow-xs hover:bg-accent-hover transition disabled:opacity-50"
             >
               {submitLabel}
             </button>

@@ -127,7 +127,7 @@ const FamilyToday = ({ children }) => {
         selectedSlot ? "lg:flex-1 lg:min-w-0" : ""
       )}>
         {/* Header */}
-        <header className="p-4 sm:p-6 lg:p-8 pb-0 flex-shrink-0">
+        <header className="p-4 sm:p-6 lg:p-8 pb-0 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-1 flex items-center">
@@ -138,7 +138,7 @@ const FamilyToday = ({ children }) => {
                 {format(new Date(), 'EEEE, MMMM do')} — All children's tasks at a glance.
               </p>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
               {allCatchUp.length > 0 && (
                 <button
                   onClick={() => setShowCatchUp(!showCatchUp)}
@@ -153,7 +153,7 @@ const FamilyToday = ({ children }) => {
                   {allCatchUp.length} to catch up
                 </button>
               )}
-              <span className="text-xs text-text-secondary flex items-center bg-white px-3 py-1.5 rounded-full border border-border shadow-sm">
+              <span className="text-xs text-text-secondary flex items-center bg-white px-3 py-1.5 rounded-full border border-border shadow-xs">
                 <Clock className="w-3.5 h-3.5 mr-1" />
                 {format(currentTime, 'h:mm a')}
               </span>
@@ -166,10 +166,10 @@ const FamilyToday = ({ children }) => {
 
           {/* Catch Up Column */}
           {showCatchUp && allCatchUp.length > 0 && (
-            <div className="lg:w-[340px] xl:w-[380px] flex-shrink-0 flex flex-col mb-4 lg:mb-0 lg:mr-5">
+            <div className="lg:w-[340px] xl:w-[380px] shrink-0 flex flex-col mb-4 lg:mb-0 lg:mr-5">
               <div className="bg-white rounded-2xl border border-red-100 shadow-soft overflow-hidden flex flex-col h-full relative">
                 <div className="absolute top-0 left-0 w-1 h-full bg-status-at-risk-text rounded-l-2xl" />
-                <div className="flex items-center justify-between p-4 border-b border-red-100 bg-red-50/30 flex-shrink-0">
+                <div className="flex items-center justify-between p-4 border-b border-red-100 bg-red-50/30 shrink-0">
                   <h2 className="text-sm font-bold text-status-at-risk-text flex items-center">
                     <AlertCircle className="w-4 h-4 mr-2" />
                     Catch Up — All Children
@@ -185,22 +185,22 @@ const FamilyToday = ({ children }) => {
                       className="flex items-center gap-3 p-3 rounded-xl border border-red-100 bg-red-50/20 hover:bg-red-50/50 transition-all cursor-pointer group"
                       onClick={() => toggleSlot(slot._childId, slot.id, slot.is_completed)}
                     >
-                      <button className="flex-shrink-0 transition active:scale-90">
+                      <button className="shrink-0 transition active:scale-90">
                         {slot.is_completed ? (
                           <CheckSquare className="w-5 h-5 text-gray-400" />
                         ) : (
-                          <div className="w-4 h-4 rounded border-2 bg-white" style={{ borderColor: slot._childColor }} />
+                          <div className="w-4 h-4 rounded-sm border-2 bg-white" style={{ borderColor: slot._childColor }} />
                         )}
                       </button>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: slot._childColor }} />
+                          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: slot._childColor }} />
                           <span className="text-[10px] font-bold text-text-secondary">{slot._childName}</span>
                         </div>
                         <p className="text-sm font-semibold text-text-primary truncate">{slot.subject_name}</p>
                         <p className="text-[11px] text-text-secondary truncate">{slot.topic_title}</p>
                       </div>
-                      <div className="text-right flex-shrink-0">
+                      <div className="text-right shrink-0">
                         {slot.date && (
                           <p className="text-[10px] font-medium text-red-400 whitespace-nowrap">
                             {format(new Date(slot.date + 'T00:00:00'), 'MMM d')}
@@ -216,12 +216,12 @@ const FamilyToday = ({ children }) => {
 
           {/* Schedule Grid */}
           <div className="flex-1 bg-white rounded-2xl border border-border shadow-soft overflow-hidden flex flex-col min-h-[500px] min-w-0 relative">
-            <div className="flex items-center border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-sm flex-shrink-0">
-              <div className="w-12 sm:w-14 flex-shrink-0 border-r border-border border-transparent"></div>
+            <div className="flex items-center border-b border-border bg-gray-50/80 sticky top-0 z-30 shadow-xs shrink-0">
+              <div className="w-12 sm:w-14 shrink-0 border-r border-border border-transparent"></div>
               {children.map(child => (
                 <div key={child.id} className="flex-1 py-3 px-2 text-center border-l border-border first:border-l-0 min-w-0">
                   <h3 className="font-bold text-text-primary text-xs sm:text-sm flex items-center justify-center truncate">
-                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full mr-1.5 sm:mr-2 flex-shrink-0" style={{ backgroundColor: child.color }} />
+                    <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full mr-1.5 sm:mr-2 shrink-0" style={{ backgroundColor: child.color }} />
                     <span className="truncate">{child.name}</span>
                   </h3>
                 </div>
@@ -238,7 +238,7 @@ const FamilyToday = ({ children }) => {
                 </div>
 
                 {/* Hour labels */}
-                <div className="w-12 sm:w-14 flex-shrink-0 relative z-20 border-r border-border bg-white/60 backdrop-blur-sm">
+                <div className="w-12 sm:w-14 shrink-0 relative z-20 border-r border-border bg-white/60 backdrop-blur-xs">
                   {Array.from({ length: 24 }).map((_, i) => (
                     <div key={i} className="absolute w-full text-right pr-1.5 sm:pr-2" style={{ top: `${i * 60 - 8}px` }}>
                       <span className="text-[9px] sm:text-[10px] font-medium text-text-secondary bg-white px-0.5">
@@ -260,7 +260,7 @@ const FamilyToday = ({ children }) => {
                           key={slot.id}
                           onClick={() => setSelectedSlot(slot)}
                           className={clsx(
-                            "absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-lg p-1.5 sm:p-2 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-sm group",
+                            "absolute left-1 right-1 sm:left-1.5 sm:right-1.5 rounded-lg p-1.5 sm:p-2 border overflow-hidden flex flex-col cursor-pointer transition-all shadow-xs group",
                             slot.is_completed
                               ? "bg-gray-50 border-gray-200 opacity-60 hover:opacity-100"
                               : "bg-white hover:shadow-md hover:-translate-y-[1px]"
@@ -283,12 +283,12 @@ const FamilyToday = ({ children }) => {
                             </div>
                             <button
                               onClick={(e) => { e.stopPropagation(); toggleSlot(child.id, slot.id, slot.is_completed); }}
-                              className="flex-shrink-0 p-0.5 sm:p-1 rounded-md hover:bg-white/50 transition active:scale-90"
+                              className="shrink-0 p-0.5 sm:p-1 rounded-md hover:bg-white/50 transition active:scale-90"
                             >
                               {slot.is_completed ? (
                                 <CheckSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
                               ) : (
-                                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded border-2 bg-white mt-0.5" style={{ borderColor: child.color }} />
+                                <div className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-sm border-2 bg-white mt-0.5" style={{ borderColor: child.color }} />
                               )}
                             </button>
                           </div>
@@ -303,7 +303,7 @@ const FamilyToday = ({ children }) => {
                   className="absolute left-12 sm:left-14 right-0 border-t-[2px] border-red-500 z-30 pointer-events-none"
                   style={{ top: `${currentPixels}px` }}
                 >
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-sm" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500 absolute -left-1.5 -top-[5px] shadow-xs" />
                 </div>
               </div>
             </div>

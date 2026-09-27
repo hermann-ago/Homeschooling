@@ -30,10 +30,10 @@ const InsertPicker = ({ childId, onSelect, onClose }) => {
   })).filter(s => s.topics.length > 0);
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         {/* Header */}
-        <div className="p-5 border-b border-border flex justify-between items-center bg-gray-50 flex-shrink-0">
+        <div className="p-5 border-b border-border flex justify-between items-center bg-gray-50 shrink-0">
           <div>
             <h3 className="text-lg font-bold text-text-primary flex items-center">
               <BookOpen className="w-5 h-5 mr-2 text-accent" />
@@ -47,13 +47,13 @@ const InsertPicker = ({ childId, onSelect, onClose }) => {
         </div>
 
         {/* Search */}
-        <div className="p-4 border-b border-border flex-shrink-0">
+        <div className="p-4 border-b border-border shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
             <input
               type="text"
               placeholder="Search topics..."
-              className="w-full pl-9 pr-4 py-2.5 text-sm border border-border rounded-xl outline-none focus:border-accent focus:ring-2 focus:ring-accent/10 transition"
+              className="w-full pl-9 pr-4 py-2.5 text-sm border border-border rounded-xl outline-hidden focus:border-accent focus:ring-2 focus:ring-accent/10 transition"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus

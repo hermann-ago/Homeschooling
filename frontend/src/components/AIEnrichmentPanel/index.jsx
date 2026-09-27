@@ -153,7 +153,7 @@ export default function AIEnrichmentPanel({
                     'disabled:opacity-60 disabled:cursor-not-allowed',
                     'active:scale-95',
                     isActive
-                      ? `${c.bg} ${c.border} ${c.text} shadow-sm`
+                      ? `${c.bg} ${c.border} ${c.text} shadow-xs`
                       : `bg-white border-border hover:${c.bg} hover:${c.border} text-text-secondary hover:${c.text}`
                   )}
                 >
@@ -178,7 +178,7 @@ export default function AIEnrichmentPanel({
           {/* Error state */}
           {error && (
             <div className="flex items-start space-x-2 p-3 bg-red-50 border border-red-200 rounded-xl">
-              <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
               <p className="text-xs text-red-700">{error}</p>
             </div>
           )}

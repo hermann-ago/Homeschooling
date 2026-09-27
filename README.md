@@ -23,7 +23,7 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
 |---|---|
 | `data/` | Local only, never committed: the database, local backups, the tutor credential, the narration ledger and migration exports. |
 | `backend/` | FastAPI home server. `storage/` holds the SQLite store, the Drive-folder file access and its Kid → Grade → Subject layout (`layout.py`), backups, `security/` the network guard, the tutor credential and DPAPI secrets, `tutoring/` the tutor service, passages and narration, `routers/` the API, and `migration/` the one-time migration tools. |
-| `frontend/` | React + Vite UI, served by the home server after `npm run build`. |
+| `frontend/` | React + Vite UI, served by the home server after `npm run build`. Colours and fonts are Tailwind tokens in `src/index.css`, shared components live in `src/ui/` (shown together at `/styleguide`), and screens read data through the hooks in `src/api/queries.js`. |
 | `launcher/` | `homeschooling.py start / stop / status / pair-agent / autostart`. It only stops the process it recorded. |
 | `tutor_mcp/bridge.py` | Portable stdio MCP bridge for desktop AI clients (standard library only). |
 | `tutor/skills/home-tutor/` | Subject-independent tutoring skill. `tutor/subjects/history/` holds the History guidance. |

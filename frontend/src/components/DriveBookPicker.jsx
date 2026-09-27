@@ -21,7 +21,7 @@ export default function DriveBookPicker({ onPick, onClose }) {
           <button type="button" onClick={onClose} aria-label="Close"><X className="w-5 h-5" /></button>
         </div>
         <div className="p-4 space-y-3 overflow-y-auto">
-          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name" className="w-full rounded border p-2 text-sm" />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter by name" className="w-full rounded-sm border p-2 text-sm" />
           {error && <p className="text-sm text-red-700">{error}</p>}
           {!books && !error && <p className="text-sm text-text-secondary">Listing the folder…</p>}
           {books && books.length === 0 && <p className="text-sm text-text-secondary">No PDFs in the Homeschooling folder yet.</p>}
@@ -33,7 +33,7 @@ export default function DriveBookPicker({ onPick, onClose }) {
                   <span className="block truncate text-xs text-text-secondary">{book.path}</span>
                 </span>
                 {book.linked ? <span className="text-xs text-text-secondary">Already linked</span> : (
-                  <button type="button" onClick={() => onPick(book)} className="rounded bg-accent text-white px-3 py-1 text-xs">Use</button>
+                  <button type="button" onClick={() => onPick(book)} className="rounded-sm bg-accent text-white px-3 py-1 text-xs">Use</button>
                 )}
               </li>
             ))}

@@ -9,13 +9,13 @@ const ChecklistItem = ({ slot, onToggle, onViewPages, showDate = false }) => {
   return (
     <div 
       className={clsx(
-        "group flex items-center p-4 rounded-xl border transition-all duration-200 cursor-pointer mb-3 shadow-sm hover:shadow-md",
+        "group flex items-center p-4 rounded-xl border transition-all duration-200 cursor-pointer mb-3 shadow-xs hover:shadow-md",
         slot.is_completed ? "bg-accent-light/50 border-accent/20" : "bg-surface border-border",
         isMissed && !slot.is_completed ? "border-status-at-risk-text/30 bg-status-at-risk-bg/30" : ""
       )}
       onClick={() => onToggle(slot.id, slot.is_completed)}
     >
-      <button className="mr-4 flex-shrink-0 focus:outline-none transition-transform active:scale-90">
+      <button className="mr-4 shrink-0 focus:outline-hidden transition-transform active:scale-90">
         {slot.is_completed ? (
           <CheckCircle2 className="w-8 h-8 text-accent fill-accent/20" />
         ) : (
@@ -50,7 +50,7 @@ const ChecklistItem = ({ slot, onToggle, onViewPages, showDate = false }) => {
         <div className="flex items-center mt-2 space-x-3">
           {(slot.page_from !== null && slot.page_to !== null) && (
             <span className={clsx(
-              "text-xs font-medium px-2 py-0.5 rounded",
+              "text-xs font-medium px-2 py-0.5 rounded-sm",
               slot.is_completed ? "bg-gray-100 text-gray-500" : "bg-accent/10 text-accent"
             )}>
               Pages {slot.page_from} - {slot.page_to}
@@ -60,7 +60,7 @@ const ChecklistItem = ({ slot, onToggle, onViewPages, showDate = false }) => {
           {slot.document_id && onViewPages && (
             <button 
               onClick={(e) => { e.stopPropagation(); onViewPages(slot); }}
-              className="group/btn flex items-center text-xs font-medium text-text-secondary hover:text-accent transition-colors px-2 py-0.5 rounded bg-gray-50 hover:bg-accent/10"
+              className="group/btn flex items-center text-xs font-medium text-text-secondary hover:text-accent transition-colors px-2 py-0.5 rounded-sm bg-gray-50 hover:bg-accent/10"
               title="View pages"
             >
               <BookOpen className="w-3.5 h-3.5 mr-1" />
@@ -76,7 +76,7 @@ const ChecklistItem = ({ slot, onToggle, onViewPages, showDate = false }) => {
           )}
           
           {isMissed && !slot.is_completed && !showDate && (
-             <span className="text-xs text-status-at-risk-text flex items-center font-medium bg-status-at-risk-bg px-2 py-0.5 rounded flex items-center">
+             <span className="text-xs text-status-at-risk-text flex items-center font-medium bg-status-at-risk-bg px-2 py-0.5 rounded-sm flex items-center">
                 <AlertCircle className="w-3 h-3 mr-1" />
                 Missed
              </span>

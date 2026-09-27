@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router';
 import { getDocument } from 'pdfjs-dist';
 import { ArrowLeft } from 'lucide-react';
 import PageViewer from '../components/PageViewer';
@@ -91,7 +91,7 @@ export default function LessonReader() {
         <div className="flex items-center gap-2 min-w-0">
           {!session && (
             <button type="button" onClick={goBack} aria-label="Back"
-              className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 flex-shrink-0">
+              className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 shrink-0">
               <ArrowLeft className="w-5 h-5" />
             </button>
           )}

@@ -40,7 +40,7 @@ const Progress = ({ activeChildId }) => {
         </div>
         
         <div className={clsx(
-          "mt-6 lg:mt-0 px-5 py-3 rounded-full border flex items-center shadow-sm w-fit",
+          "mt-6 lg:mt-0 px-5 py-3 rounded-full border flex items-center shadow-xs w-fit",
           getStatusColor(data.overall_status)
         )}>
           {StatusIcon && <StatusIcon className="w-5 h-5" />}

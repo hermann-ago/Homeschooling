@@ -23,7 +23,7 @@ export default function ServerGate({ children }) {
         <div>
           <p className="font-medium">The home server is not answering.</p>
           <p className="text-sm text-text-secondary mt-1">Make sure the family computer is on, awake and running Homeschooling.</p>
-          <button onClick={refresh} className="mt-4 rounded bg-accent px-4 py-2 text-white">Try again</button>
+          <button onClick={refresh} className="mt-4 rounded-sm bg-accent px-4 py-2 text-white">Try again</button>
         </div>
       </main>
     );

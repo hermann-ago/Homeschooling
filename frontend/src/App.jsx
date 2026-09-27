@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Routes, Route } from 'react-router';
 import Sidebar from './components/Sidebar';
 import ErrorBoundary from './components/ErrorBoundary';
 import Today from './pages/Today';
@@ -11,33 +11,20 @@ import Progress from './pages/Progress';
 import AllChildrenDashboard from './pages/AllChildrenDashboard';
 import FamilyToday from './pages/FamilyToday';
 import DailyCanvas from './pages/DailyCanvas';
-import { childrenApi } from './api/children';
+import { useQueryClient } from '@tanstack/react-query';
+import { keys, useChildren } from './api/queries';
 import { Menu } from 'lucide-react';
 import { hexToRgb } from './utils/colors';
 
 
 function App() {
-  const [children, setChildren] = useState([]);
-  const [activeChildId, setActiveChildId] = useState(null);
+  const queryClient = useQueryClient();
+  const { data: children = [], error, refetch } = useChildren();
+  const [selectedChildId, setActiveChildId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [loadError, setLoadError] = useState(null);
-
-  const loadChildren = () => {
-    setLoadError(null);
-    childrenApi.getAll().then(data => {
-      setChildren(data);
-      if (!activeChildId && data.length > 0) {
-        setActiveChildId(data[0].id);
-      }
-    }).catch(error => {
-      console.error(error);
-      setLoadError(error.message || 'Unable to load the family workspace.');
-    });
-  };
-
-  useEffect(() => {
-    loadChildren();
-  }, []);
+  const activeChildId = selectedChildId ?? children[0]?.id ?? null;
+  const loadError = error ? (error.message || 'Unable to load the family workspace.') : null;
+  const loadChildren = () => queryClient.invalidateQueries({ queryKey: keys.children });
 
   const activeChild = activeChildId !== 'all'
     ? children.find(c => c.id === activeChildId)
@@ -66,7 +53,7 @@ function App() {
       
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Mobile top bar - only visible on small screens */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-surface border-b border-border flex-shrink-0">
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-surface border-b border-border shrink-0">
           <button 
             onClick={() => setSidebarOpen(true)}
             className="p-2 text-text-secondary hover:text-text-primary hover:bg-gray-100 rounded-lg transition"
@@ -76,7 +63,7 @@ function App() {
           <h1 className="text-lg font-bold text-text-primary tracking-tight">Homeschooler</h1>
           {activeChild ? (
             <div 
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm" 
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-xs" 
               style={{ backgroundColor: activeChild.color }}
             >
               {activeChild.name.charAt(0)}
@@ -86,7 +73,7 @@ function App() {
               <div className="max-w-md text-center">
                 <p className="font-medium text-red-700">Unable to load the family workspace</p>
                 <p className="mt-2 text-sm text-text-secondary">{loadError}</p>
-                <button onClick={loadChildren} className="mt-4 rounded bg-accent px-4 py-2 text-white">Try again</button>
+                <button onClick={() => refetch()} className="mt-4 rounded-sm bg-accent px-4 py-2 text-white">Try again</button>
               </div>
             </div>
           ) : (

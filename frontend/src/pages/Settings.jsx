@@ -65,7 +65,7 @@ const Settings = ({ onChildrenChanged }) => {
                 type="date" 
                 value={schoolYear.start_date || ''}
                 onChange={e => setSchoolYear({...schoolYear, start_date: e.target.value})}
-                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none"
+                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-hidden"
               />
             </div>
             <div>
@@ -74,7 +74,7 @@ const Settings = ({ onChildrenChanged }) => {
                 type="date" 
                 value={schoolYear.end_date || ''}
                 onChange={e => setSchoolYear({...schoolYear, end_date: e.target.value})}
-                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none"
+                className="w-full px-4 py-2 border border-border rounded-lg focus:ring-2 focus:ring-accent/20 focus:border-accent outline-hidden"
               />
             </div>
           </div>
@@ -103,7 +103,7 @@ const Settings = ({ onChildrenChanged }) => {
             <div key={child.id} className="bg-surface p-6 rounded-2xl border border-border shadow-soft flex flex-col">
               <div className="flex items-center mb-4">
                 <div 
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold mr-4 shadow-sm"
+                  className="w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-bold mr-4 shadow-xs"
                   style={{ backgroundColor: child.color }}
                 >
                   {child.name.charAt(0)}
@@ -154,7 +154,7 @@ const Settings = ({ onChildrenChanged }) => {
 
       {/* Child Profile Modal */}
       {isChildModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center">
               <h3 className="text-xl font-bold text-text-primary">
@@ -166,7 +166,7 @@ const Settings = ({ onChildrenChanged }) => {
               <div>
                 <label className="block text-sm font-semibold text-text-secondary mb-1">Full Name</label>
                 <input 
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   value={editingChild.name}
                   onChange={e => setEditingChild({...editingChild, name: e.target.value})}
                 />
@@ -174,7 +174,7 @@ const Settings = ({ onChildrenChanged }) => {
               <div>
                 <label className="block text-sm font-semibold text-text-secondary mb-1">Nickname (Optional)</label>
                 <input 
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   value={editingChild.nickname || ''}
                   onChange={e => setEditingChild({...editingChild, nickname: e.target.value})}
                 />
@@ -182,7 +182,7 @@ const Settings = ({ onChildrenChanged }) => {
               <div>
                 <label className="block text-sm font-semibold text-text-secondary mb-1">Grade Year</label>
                 <input 
-                  className="w-full px-4 py-2 border border-border rounded-lg outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent"
+                  className="w-full px-4 py-2 border border-border rounded-lg outline-hidden focus:ring-2 focus:ring-accent/20 focus:border-accent"
                   placeholder="e.g. 4th Grade"
                   value={editingChild.grade_year || ''}
                   onChange={e => setEditingChild({...editingChild, grade_year: e.target.value})}
@@ -225,7 +225,7 @@ const Settings = ({ onChildrenChanged }) => {
                     setIsChildModalOpen(false);
                   } catch { alert("Failed to save child."); }
                 }}
-                className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-sm"
+                className="bg-accent text-white px-6 py-2 rounded-xl font-bold hover:bg-accent-hover transition shadow-xs"
               >
                 Save Profile
               </button>
@@ -236,7 +236,7 @@ const Settings = ({ onChildrenChanged }) => {
 
       {/* Time Windows Modal */}
       {isTwModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden">
             <div className="p-6 border-b border-border flex justify-between items-center bg-gray-50">
               <div>
@@ -284,7 +284,7 @@ const Settings = ({ onChildrenChanged }) => {
                   <div>
                     <label className="block text-xs font-semibold text-text-secondary mb-1">Day</label>
                     <select 
-                      className="w-full px-3 py-2 border border-border rounded-lg outline-none"
+                      className="w-full px-3 py-2 border border-border rounded-lg outline-hidden"
                       value={newTw.weekday}
                       onChange={e => setNewTw({...newTw, weekday: parseInt(e.target.value)})}
                     >
@@ -297,7 +297,7 @@ const Settings = ({ onChildrenChanged }) => {
                     <label className="block text-xs font-semibold text-text-secondary mb-1">Start</label>
                     <input 
                       type="time" 
-                      className="w-full px-3 py-2 border border-border rounded-lg outline-none"
+                      className="w-full px-3 py-2 border border-border rounded-lg outline-hidden"
                       value={newTw.start_time}
                       onChange={e => setNewTw({...newTw, start_time: e.target.value})}
                     />
@@ -306,7 +306,7 @@ const Settings = ({ onChildrenChanged }) => {
                     <label className="block text-xs font-semibold text-text-secondary mb-1">End</label>
                     <input 
                       type="time" 
-                      className="w-full px-3 py-2 border border-border rounded-lg outline-none"
+                      className="w-full px-3 py-2 border border-border rounded-lg outline-hidden"
                       value={newTw.end_time}
                       onChange={e => setNewTw({...newTw, end_time: e.target.value})}
                     />

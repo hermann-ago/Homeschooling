@@ -146,13 +146,13 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
             <RotateCcw className="w-5 h-5" />
           </button>
           <label className="text-xs text-text-secondary">Speed{' '}
-            <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="rounded border p-1">
+            <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="rounded-sm border p-1">
               {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
             </select>
           </label>
         </div>
         <label className="block text-xs text-text-secondary">Voice{' '}
-          <select value={source} onChange={(e) => setSource(e.target.value)} className="rounded border p-1 max-w-full">
+          <select value={source} onChange={(e) => setSource(e.target.value)} className="rounded-sm border p-1 max-w-full">
             {usable.map((t) => (
               <option key={t.track_id} value={t.track_id}>{t.voice || t.provider}{t.synchronized ? '' : ' (no highlighting)'}</option>
             ))}
@@ -200,7 +200,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
         {sentences.map((sentence, index) => (
           <li key={`${index}-${sentence.text.slice(0, 12)}`}>
             <button type="button" onClick={() => seekTo(index)}
-              className={clsx('text-left rounded px-1', synchronized && index === activeIndex && 'bg-yellow-200')}
+              className={clsx('text-left rounded-sm px-1', synchronized && index === activeIndex && 'bg-yellow-200')}
               aria-current={synchronized && index === activeIndex ? 'true' : undefined}>
               {sentence.text}
             </button>

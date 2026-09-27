@@ -1,5 +1,5 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router';
 import { 
   CheckSquare, 
   Calendar as CalendarIcon, 
@@ -91,7 +91,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
               } : {}}
             >
               <div 
-                className="w-3 h-3 rounded-full mr-3 shadow-sm ring-1 ring-white" 
+                className="w-3 h-3 rounded-full mr-3 shadow-xs ring-1 ring-white" 
                 style={{ backgroundColor: child.color }}
               />
               {child.name}
@@ -112,7 +112,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
                   className={({ isActive }) =>
                     `flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 ${
                       isActive
-                        ? 'text-white shadow-sm'
+                        ? 'text-white shadow-xs'
                         : 'text-text-secondary hover:bg-gray-50 hover:text-text-primary'
                     }`
                   }
@@ -132,7 +132,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
         <div className="p-4 border-t border-border" style={{ backgroundColor: `${activeChild.color}08` }}>
           <div className="flex items-center">
              <div 
-                className="w-8 h-8 rounded-full shadow-sm flex items-center justify-center text-white font-bold text-sm mr-3" 
+                className="w-8 h-8 rounded-full shadow-xs flex items-center justify-center text-white font-bold text-sm mr-3" 
                 style={{ backgroundColor: activeChild.color }}
               >
                 {activeChild.name.charAt(0)}
@@ -153,7 +153,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
   return (
     <>
       {/* Desktop sidebar - always visible on md+ */}
-      <aside className="hidden md:flex w-64 bg-surface border-r border-border h-screen flex-col shadow-soft flex-shrink-0">
+      <aside className="hidden md:flex w-64 bg-surface border-r border-border h-screen flex-col shadow-soft shrink-0">
         {sidebarContent}
       </aside>
 
@@ -162,7 +162,7 @@ const Sidebar = ({ children, activeChildId, setActiveChildId, activeChild, isOpe
         <div className="md:hidden fixed inset-0 z-50">
           {/* Backdrop */}
           <div 
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/40 backdrop-blur-xs"
             onClick={onClose}
           />
           {/* Drawer */}
