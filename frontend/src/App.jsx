@@ -3,7 +3,7 @@ import Shell from './app/Shell';
 import { useLearner } from './app/learnerContext';
 import Today from './screens/Today';
 import Plan from './screens/Plan';
-import Curriculum from './pages/Curriculum';
+import Curriculum from './screens/Curriculum';
 import Progress from './screens/Progress';
 import Settings from './pages/Settings';
 
@@ -19,7 +19,7 @@ export default function App() {
       <Route element={<Shell />}>
         <Route index element={<Today />} />
         <Route path="plan" element={<Plan />} />
-        <Route path="curriculum" element={<Legacy page={Curriculum} />} />
+        <Route path="curriculum" element={<Curriculum />} />
         <Route path="progress" element={<Progress />} />
         <Route path="settings" element={<Legacy page={Settings} />} />
         {/* Addresses from the old menu */}
