@@ -10,7 +10,7 @@ Generates four types of AI-powered learning content for a given PDF section:
 
 All functions:
   1. Accept extracted page text and a language hint ('pt' or 'en').
-  2. Call gemini-2.5-flash (same model used by ai_analyzer.py).
+  2. Call the current Gemini Flash model (same as ai_analyzer.py).
   3. Are bilingual-aware — prompts adapt based on the language argument.
   4. Return Python objects (dicts / strings), NOT raw JSON strings.
 
@@ -31,7 +31,8 @@ load_dotenv()
 
 # ── Gemini Configuration ──────────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.5-flash"
+# "latest" follows Google's current Flash model instead of failing when a version is retired.
+GEMINI_MODEL = "gemini-flash-latest"
 
 VALID_CONTENT_TYPES = {"quiz", "audio", "terms", "explain"}
 

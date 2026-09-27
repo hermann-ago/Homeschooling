@@ -2,6 +2,7 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 
 from app_context import request_operation as write
 from dependencies import require_family, store
@@ -75,3 +76,20 @@ def update_school_year(settings: SchoolYearSettings):
         set_setting(tx, "SCHOOL_YEAR_START", settings.start_date.isoformat())
         set_setting(tx, "SCHOOL_YEAR_END", settings.end_date.isoformat())
     return settings
+
+
+class AutoReplanSetting(BaseModel):
+    enabled: bool
+
+
+@router.get("/settings/auto-replan", response_model=AutoReplanSetting)
+def get_auto_replan():
+    """Whether unfinished lessons move forward by themselves each morning (see AppContext.move_unfinished_forward)."""
+    return AutoReplanSetting(enabled=get_setting(store(), "AUTO_REPLAN") == "on")
+
+
+@router.put("/settings/auto-replan", response_model=AutoReplanSetting, dependencies=[Depends(require_family)])
+def update_auto_replan(setting: AutoReplanSetting):
+    with write("settings.auto_replan") as tx:
+        set_setting(tx, "AUTO_REPLAN", "on" if setting.enabled else "off")
+    return setting

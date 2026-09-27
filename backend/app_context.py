@@ -131,6 +131,32 @@ class AppContext:
         if not latest or today not in latest:
             self.backup_now()
             self.export_now()
+        self.move_unfinished_forward()
+
+    def move_unfinished_forward(self, now: datetime | None = None) -> list[int]:
+        """With the family's "move unfinished lessons forward" setting on, re-plan every learner who has
+        unfinished lessons from earlier days, once a day, before that day's first lesson starts (so a school
+        day in progress is never reshuffled). Returns the learners re-planned."""
+        from services.scheduler_engine import recalculate_schedule
+        from utils import get_setting, set_setting
+        now = now or datetime.now()
+        today = now.date()
+        if get_setting(self.store, "AUTO_REPLAN") != "on" or get_setting(self.store, "AUTO_REPLAN_LAST") == today.isoformat():
+            return []
+        slots = self.store.all("scheduled_slots")
+        starts = [s["time_start"] for s in slots if s["date"] == today and s["time_start"]]
+        if starts and now.strftime("%H:%M") >= min(starts):
+            return []  # lessons have started today; try again tomorrow morning
+        done = {c["slot_id"] for c in self.store.all("completions")}
+        behind = sorted({s["child_id"] for s in slots if s["date"] < today and s["id"] not in done})
+        with self.store.transaction(kind="schedule.auto_replan",
+                                    summary=f"Moved unfinished lessons forward for {len(behind)} learners") as tx:
+            for child_id in behind:
+                recalculate_schedule(child_id, tx, today)
+            set_setting(tx, "AUTO_REPLAN_LAST", today.isoformat())
+        if behind:
+            logger.info("Moved unfinished lessons forward for learners %s", behind)
+        return behind
 
     def backup_now(self) -> dict:
         return create_backup(self.store, self.config.backup_dir)

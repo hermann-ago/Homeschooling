@@ -34,6 +34,7 @@ export const keys = {
   completedTopics: (childId) => ['completed-topics', childId],
   timeWindows: (childId) => ['time-windows', childId],
   schoolYear: ['school-year'],
+  autoReplan: ['auto-replan'],
   storage: ['storage'],
   narration: ['narration-usage'],
   inserts: (topicId) => ['inserts', topicId],
@@ -109,6 +110,9 @@ export const useTimeWindows = (childId) => useQuery({
 });
 
 export const useSchoolYear = () => useQuery({ queryKey: keys.schoolYear, queryFn: calendarApi.getSchoolYearSettings });
+
+/** Whether unfinished lessons move forward by themselves each morning. */
+export const useAutoReplan = () => useQuery({ queryKey: keys.autoReplan, queryFn: calendarApi.getAutoReplan });
 
 export const useStorageStatus = () => useQuery({
   queryKey: keys.storage, queryFn: systemApi.storageStatus, refetchInterval: 30_000, retry: 0,

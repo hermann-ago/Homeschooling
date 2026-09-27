@@ -244,3 +244,38 @@ def test_subjects_without_a_folder_get_one_at_start(harness):
         tx.insert("subjects", {"child_id": mila["id"], "name": "Math"})
     harness.restart()
     assert harness.ctx.store.all("subjects")[0]["folder"] == "Mila/1st Grade/Math"
+
+
+def test_unfinished_lessons_move_forward_each_morning_only_when_the_family_turns_it_on(harness):
+    child, subject, _ = seed(harness)
+    today = date(2026, 9, 28)
+    with harness.ctx.store.transaction() as tx:
+        for weekday in range(5):
+            tx.insert("time_windows", {"child_id": child["id"], "weekday": weekday, "start_time": "09:00",
+                                       "end_time": "10:00"})
+        topic = tx.insert("topics", {"subject_id": subject["id"], "title": "Missed", "page_start": 1, "page_end": 1})
+        tx.insert("scheduled_slots", {"child_id": child["id"], "subject_id": subject["id"], "topic_id": topic["id"],
+                                      "date": today - timedelta(days=3), "time_start": "09:00", "time_end": "10:00",
+                                      "page_from": 1, "page_to": 1})
+    early = datetime(2026, 9, 28, 7, 30)
+    assert harness.ctx.move_unfinished_forward(early) == []  # off unless the family chooses it
+    assert harness.call("PUT", "/api/calendar/settings/auto-replan", json={"enabled": True}).status_code == 200
+    assert harness.call("GET", "/api/calendar/settings/auto-replan").json() == {"enabled": True}
+
+    assert harness.ctx.move_unfinished_forward(early) == [child["id"]]
+    dates = sorted(s["date"] for s in harness.ctx.store.find("scheduled_slots", child_id=child["id"]))
+    assert dates and dates[0] >= today  # nothing left behind in the past
+    assert harness.ctx.move_unfinished_forward(early) == []  # once a day
+
+
+def test_moving_lessons_forward_waits_when_a_school_day_has_started(harness):
+    child, subject, _ = seed(harness)
+    today = date(2026, 9, 28)
+    with harness.ctx.store.transaction() as tx:
+        topic = tx.insert("topics", {"subject_id": subject["id"], "title": "Today", "page_start": 1, "page_end": 1})
+        for day in (today - timedelta(days=1), today):
+            tx.insert("scheduled_slots", {"child_id": child["id"], "subject_id": subject["id"], "topic_id": topic["id"],
+                                          "date": day, "time_start": "09:00", "time_end": "10:00"})
+    harness.call("PUT", "/api/calendar/settings/auto-replan", json={"enabled": True})
+    assert harness.ctx.move_unfinished_forward(datetime(2026, 9, 28, 9, 15)) == []
+    assert len(harness.ctx.store.find("scheduled_slots", child_id=child["id"])) == 2  # untouched

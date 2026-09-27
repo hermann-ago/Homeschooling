@@ -11,4 +11,6 @@ export const calendarApi = {
   
   getSchoolYearSettings: () => fetchApi('/calendar/settings/school-year'),
   updateSchoolYearSettings: (data) => fetchApi('/calendar/settings/school-year', { method: 'PUT', body: JSON.stringify(data) }),
+  getAutoReplan: () => fetchApi('/calendar/settings/auto-replan'),
+  setAutoReplan: (enabled) => fetchApi('/calendar/settings/auto-replan', { method: 'PUT', body: JSON.stringify({ enabled }) }),
 };

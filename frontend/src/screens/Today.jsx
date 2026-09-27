@@ -7,7 +7,7 @@ import ScreenHeader from '../app/ScreenHeader';
 import { useLearner, useNow } from '../app/learnerContext';
 import useReplanAction from '../app/useReplanAction';
 import {
-  useChildProgress, useFamilyProgress, useSetLessonDone, useSlots, useSlotsFor,
+  useAutoReplan, useChildProgress, useFamilyProgress, useSetLessonDone, useSlots, useSlotsFor,
 } from '../api/queries';
 import { Badge, Button, CheckButton, LessonRow, ProgressBar, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
@@ -44,6 +44,7 @@ function useLessonActions() {
 }
 
 function UnfinishedCard({ entries, onReplan, busy, onReview }) {
+  const { data: auto } = useAutoReplan();
   const total = entries.reduce((sum, e) => sum + e.count, 0);
   if (!total) return null;
   return (
@@ -70,7 +71,10 @@ function UnfinishedCard({ entries, onReplan, busy, onReview }) {
         ))}
       </ul>
       <Button variant="strong" onClick={onReplan} disabled={busy}>{busy ? 'Re-planning…' : 'Re-plan from today'}</Button>
-      <p className="text-[13px] text-subtle leading-snug">Re-planning moves them, in order, into the coming school days.</p>
+      <p className="text-[13px] text-subtle leading-snug">
+        Re-planning moves them, in order, into the coming school days.
+        {auto?.enabled ? ' This also happens by itself each morning.' : <> Or let it happen each morning: <Link to="/settings#school-year" className="font-semibold text-action">Settings</Link>.</>}
+      </p>
     </Card>
   );
 }

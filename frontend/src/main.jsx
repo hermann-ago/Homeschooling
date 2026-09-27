@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, lazy } from 'react'
+import { StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { QueryClientProvider } from '@tanstack/react-query'
@@ -7,10 +7,7 @@ import '@fontsource-variable/fraunces'
 import './index.css'
 import App from './App.jsx'
 import ServerGate from './components/ServerGate.jsx'
-// The lesson (PDF pages, handwriting, read-along) and the style guide load only when opened, so Today
-// and the other screens start quickly on tablets.
-const Lesson = lazy(() => import('./screens/Lesson.jsx'))
-const StyleGuide = lazy(() => import('./screens/StyleGuide.jsx'))
+import { Lesson, StyleGuide } from './app/lazyScreens.js'
 import { createQueryClient } from './api/queries.js'
 import { FeedbackProvider } from './ui/feedback.jsx'
 import LearnerProvider from './app/LearnerProvider.jsx'

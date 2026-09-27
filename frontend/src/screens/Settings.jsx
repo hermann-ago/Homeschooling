@@ -9,7 +9,7 @@ import { childrenApi } from '../api/children';
 import { calendarApi } from '../api/calendar';
 import { systemApi } from '../api/system';
 import { timeWindowsApi } from '../api/timeWindows';
-import { keys, useFamilyProgress, useNarrationUsage, useSchoolYear, useStorageStatus, useTimeWindows } from '../api/queries';
+import { keys, useAutoReplan, useFamilyProgress, useNarrationUsage, useSchoolYear, useStorageStatus, useTimeWindows } from '../api/queries';
 import { useDevice } from '../components/deviceContext';
 import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
@@ -157,6 +157,7 @@ function SchoolYear() {
         <Field label="Starts" type="date" value={values.start_date} onChange={(e) => setForm({ ...values, start_date: e.target.value })} />
         <Field label="Ends" type="date" value={values.end_date} onChange={(e) => setForm({ ...values, end_date: e.target.value })} />
       </div>
+      <AutoReplan />
       <div className="flex flex-wrap items-center gap-3">
         <p className="flex-1 min-w-[14rem] text-[13px] text-muted">
           Subjects without their own finish date aim for the end of the school year. Saving offers to re-plan every learner.
@@ -169,6 +170,34 @@ function SchoolYear() {
         )}
       </div>
     </Section>
+  );
+}
+
+function AutoReplan() {
+  const { data } = useAutoReplan();
+  const client = useQueryClient();
+  const toast = useToast();
+  const change = async (enabled) => {
+    try {
+      await calendarApi.setAutoReplan(enabled);
+      await client.invalidateQueries({ queryKey: keys.autoReplan });
+      toast(enabled ? 'Unfinished lessons will move forward each morning.' : 'Unfinished lessons now stay until you re-plan.');
+    } catch (error) {
+      toast({ tone: 'problem', message: `Not saved: ${clean(error)}` });
+    }
+  };
+  return (
+    <label className="flex items-start gap-3 p-4 rounded-xl bg-paper text-sm cursor-pointer">
+      <input type="checkbox" className="mt-0.5 w-5 h-5 accent-[var(--color-action)]" checked={Boolean(data?.enabled)}
+        disabled={!data} onChange={(e) => change(e.target.checked)} />
+      <span className="flex flex-col gap-0.5">
+        <span className="font-semibold">Move unfinished lessons forward each morning</span>
+        <span className="text-[13px] text-muted">
+          Before the day's first lesson, lessons not marked done are planned again from today, in order. A school
+          day already under way is never changed.
+        </span>
+      </span>
+    </label>
   );
 }
 
