@@ -60,3 +60,17 @@ def test_bridge_reports_conflicts_and_missing_fields_as_tool_errors(harness):
     assert error and body["status"] == 409
     error, body = call(bridge, "finish_lesson", {"session_id": "x"})
     assert error and "Missing" in body["error"]
+
+
+def test_stdio_is_utf8_whatever_the_locale_code_page(tmp_path):
+    import os
+    import subprocess
+    bridge_path = Path(__file__).resolve().parents[2] / "tutor_mcp" / "bridge.py"
+    # Raw UTF-8 in ("Á" is 0xC3 0x81; 0x81 is undefined in cp1252) and an escaped accent out.
+    requests = (json.dumps({"jsonrpc": "2.0", "id": 1, "method": "Álbum"}, ensure_ascii=False) + "\n"
+                + json.dumps({"jsonrpc": "2.0", "id": 2, "method": "Português"}) + "\n")
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "HOMESCHOOLING_DATA": str(tmp_path)}
+    completed = subprocess.run([sys.executable, str(bridge_path)], input=requests.encode("utf-8"),
+                               capture_output=True, env=env, timeout=30)
+    replies = [json.loads(line) for line in completed.stdout.decode("utf-8").splitlines()]
+    assert [r["error"]["message"] for r in replies] == ["Method not found: Álbum", "Method not found: Português"]

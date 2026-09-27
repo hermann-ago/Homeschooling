@@ -357,4 +357,7 @@ def _error(request_id, code, message):
 
 
 if __name__ == "__main__":
+    # MCP messages are UTF-8; Windows otherwise reads and writes pipes in the locale code page.
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     Bridge().serve()
