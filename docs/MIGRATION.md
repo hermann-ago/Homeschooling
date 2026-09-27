@@ -4,15 +4,9 @@ The migration has three stages: storage and runtime replacement (this code), tut
 
 After cutover there is **one authoritative record**: the home server's SQLite database (`data\homeschooling.sqlite3` in the project folder), with its files in the synced Homeschooling Drive folder. The Excel tracker, Supabase and the new database are never synchronized with each other. The daily Excel copy the server writes is read-only output, not a second record.
 
-Keep these untouched until the migration is accepted:
+> **Status (2026-09-26):** the hosted app is retired. The Vercel project was deleted, and the Supabase project "Homeschooling" was paused so its owner can delete it from the Supabase dashboard. Its complete data is in `data\migration\export-20260925-225941-connector` and was checked against the live database before the pause: every table has the same row count and latest change. Only the login mapping (`family_accounts`) was left out, and the home server doesn't need it. Always run the steps below with `--export` pointing at that folder. `POSTGRES_URL` no longer applies.
 
-- the previous Vercel/Supabase deployment (rollback point: commit `1104cd4`),
-- the hosted database,
-- the `Lucas - History` folder with its Excel tracker.
-
-Deleting hosted resources is a separate, final decision.
-
-> The Vercel Git integration has been disconnected, so merging this branch does not replace the hosted app.
+Keep the `Lucas - History` folder with its Excel tracker untouched until the migration is accepted, and keep the export folder as long as you want the old records. The code before the move to the home server is commit `1104cd4`.
 
 All commands run on the host computer from `backend\` with `venv\Scripts\python -m …`. Reports are written to the project's `data\migration-reports`.
 
@@ -68,13 +62,14 @@ This writes every table (children, subjects, documents, topics, schedules, compl
 ## 3. Import the hosted data
 
 ```powershell
-venv\Scripts\python -m migration.import_hosted --export ..\data\migration\export-1 --books-from "G:\My Drive\Coding\homeschooling_data\uploads"
+venv\Scripts\python -m migration.import_hosted --export ..\data\migration\export-1
 ```
 
 - Source IDs, timestamps and annotation revisions are preserved.
 - Each subject gets its Kid → Grade → Subject folder (see SETUP_GUIDE.md §4).
 - Books already in the Homeschooling folder with the same SHA-256 are referenced where they are. The others are copied into the `Books` folder of the subject that uses them (`_Unassigned Books` when none does), from the export or from a `--books-from` folder.
-- `--books-from` is only read. Use it for the first app's upload folder (`G:\My Drive\Coding\homeschooling_data\uploads`), which still holds 11 of the 20 books with matching checksums.
+- `--books-from <folder>` is only read. Use it for book copies kept outside the Drive folder.
+- The first app's upload folder has already been sorted into the subject `Books` folders (11 of the 20 books, matching checksums). Its leftovers, including the first app's `homeschool.db`, are in `_Archive\homeschooling_data`. The 9 remaining documents are 4 distinct books: No mundo das consoantes – Volume 2 (Mila, Português), Sparks And Stars Parent Guide (Mila, Science), Good and Beautiful Math 1_compressed (Mila, Math) and Level 4 Course Book Part 1 (Lucas, Language Arts). Put the same files into those `Books` folders; they are matched by name and exact size.
 - Annotation strokes and enrichment content become files in the Drive folder, indexed in the database.
 - Re-running is safe: finished batches are skipped by their operation IDs.
 
@@ -162,6 +157,6 @@ The active runtime no longer uses Vercel, Supabase or Blob; this branch removes 
 ## Rollback (before acceptance)
 
 1. Stop the home server.
-2. Restore the Vercel deployment of `1104cd4` and the History project's original `AGENTS.md` / `START_HERE.md` from `backups\pre-integrated-tutor\`.
+2. Restore the History project's original `AGENTS.md` / `START_HERE.md` from `backups\pre-integrated-tutor\`, so History lessons use the Excel tracker again.
 
-The old systems were never modified. Anything recorded after cutover stays in the new database and its backups (and in the read-only Excel copy).
+The hosted app can no longer be restored: its Vercel project was deleted and its Supabase project is being deleted. Its data survives only in the export folder. The History folder was never modified. Anything recorded after cutover stays in the new database and its backups (and in the read-only Excel copy).
