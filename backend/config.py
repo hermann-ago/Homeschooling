@@ -1,8 +1,11 @@
 """Host configuration and local data locations.
 
-Everything the server keeps locally lives under ``%LOCALAPPDATA%\\Homeschooling``
-(outside Google Drive and OneDrive): the SQLite database, local backup copies,
-extraction caches and paired devices. Files live in the synced Drive folder.
+Everything the server keeps locally lives in the project's own ``data`` folder
+(ignored by Git): the SQLite database, local backup copies, caches, paired
+devices, the narration ledger and migration exports. The project must therefore
+sit outside Google Drive and OneDrive (for example ``C:\\CodingLocal``), because
+syncing a live database file can corrupt it. Books and other files live in the
+synced Drive folder.
 """
 from __future__ import annotations
 
@@ -20,21 +23,17 @@ DRIVE_FOLDER_CANDIDATES = (
 )
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
 def data_dir() -> Path:
     override = os.getenv("HOMESCHOOLING_DATA")
-    if override:
-        return Path(override)
-    if sys.platform == "win32":
-        base = Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-    else:
-        base = Path(os.getenv("XDG_DATA_HOME") or Path.home() / ".local" / "share")
-    return base / "Homeschooling"
+    return Path(override) if override else PROJECT_ROOT / "data"
 
 
 def home_tutor_dir() -> Path:
-    """Shared HomeTutor data (the narration usage ledger used by every subject)."""
-    base = Path(os.getenv("LOCALAPPDATA") or Path.home() / ".local" / "share")
-    return base / "HomeTutor"
+    """The narration usage ledger shared by every subject."""
+    return data_dir() / "home-tutor"
 
 
 def _refuse_synced(path: Path) -> None:

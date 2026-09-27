@@ -3,6 +3,7 @@
 Every table starts with ``id``, ``revision`` and ``updated_at``. Values are held
 in memory as Python types. Files (books, handwriting, audio, photos) live in the
 synced Google Drive folder; tables store their paths relative to that folder.
+``subjects.folder`` is the subject's Kid → Grade → Subject folder (see ``layout``).
 ``tab`` is the readable name used for the daily Excel copy.
 """
 from __future__ import annotations
@@ -51,7 +52,7 @@ TABLES: dict[str, Table] = {t.name: t for t in [
     }, required=("name",), defaults={"color": "#6B9E8A"}),
     _t("subjects", "Subjects", {
         "child_id": "int", "name": "str", "weight": "float", "slot_type": "str", "end_date": "date",
-        "created_at": "datetime",
+        "folder": "str", "created_at": "datetime",
     }, foreign_keys=(ForeignKey("child_id", "children"),), required=("child_id", "name"),
         defaults={"weight": 1.0, "slot_type": "A"}),
     _t("documents", "Documents", {

@@ -12,7 +12,7 @@ from schemas import AIAnalysisResult, SubjectCreate, SubjectResponse, SubjectUpd
 from services.ai_analyzer import analyze_curriculum
 from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
 from services.documents import MAX_PDF_BYTES, add_drive_document, add_uploaded_document, inspect_pdf
-from storage import FileUnavailable, OutsideBoundary
+from storage import FileUnavailable, OutsideBoundary, layout
 from utils import get_or_404
 
 router = APIRouter()
@@ -68,9 +68,9 @@ def list_subjects(child_id: int):
 
 @router.post("", response_model=SubjectResponse, status_code=201, dependencies=[Depends(require_parent)])
 def create_subject(subject: SubjectCreate):
-    get_or_404(store(), "children", subject.child_id, "Child")
+    child = get_or_404(store(), "children", subject.child_id, "Child")
     with write("subjects.create") as tx:
-        return tx.insert("subjects", subject.model_dump())
+        return tx.insert("subjects", {**subject.model_dump(), "folder": layout.subject_folder(child, subject.name)})
 
 
 @router.delete("/{subject_id}", status_code=204, dependencies=[Depends(require_parent)])
@@ -201,7 +201,7 @@ def _analyse(toc_text: str, page_count: int) -> dict:
 
 @router.post("/{subject_id}/documents", response_model=AIAnalysisResult, dependencies=[Depends(require_parent)])
 async def upload_document(subject_id: int, file: UploadFile = File(...)):
-    """Store a book in Drive ``Books`` (deduplicated by checksum) and create its topics."""
+    """Store a book in the subject's ``Books`` folder (deduplicated by checksum) and create its topics."""
     _subject(subject_id)
     filename = (file.filename or "book.pdf").replace("/", "_").replace("\\", "_")
     if not filename.lower().endswith(".pdf"):
@@ -219,7 +219,7 @@ async def upload_document(subject_id: int, file: UploadFile = File(...)):
 
 def _finish_upload(subject_id, data, filename, page_count, analysis):
     with write("documents.upload", f"Added book {filename}") as tx:
-        document = add_uploaded_document(tx, data, filename, page_count)
+        document = add_uploaded_document(tx, data, filename, page_count, subject_id)
         return _create_topics(tx, subject_id, document, analysis, filename)
 
 

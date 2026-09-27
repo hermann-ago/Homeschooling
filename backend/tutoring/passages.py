@@ -7,7 +7,7 @@ reviews it against the original pages; drafts never feed narration.
 
 Drafts are cached locally by document checksum, page range, boundaries and
 extraction version, so a changed book or changed boundaries re-extract.
-Reviewed passages live in Drive (Tutor Content) and are indexed in the
+Reviewed passages live in Drive (the subject's Lesson Content) and are indexed in the
 Passages tab with the document checksum they were reviewed against.
 """
 from __future__ import annotations
@@ -20,6 +20,8 @@ import unicodedata
 from datetime import datetime, timezone
 
 from pypdf import PdfReader
+
+from storage import layout
 
 EXTRACTION_VERSION = "generic-1"
 MIN_PAGE_CHARACTERS = 40
@@ -178,7 +180,7 @@ def record_review(tx, topic: dict, document: dict, passage: str, reviewed_pages:
     }
     body = json.dumps(content, ensure_ascii=False, sort_keys=True).encode("utf-8")
     name = f"passage-{topic.get('source_key') or topic['id']}-{content['passage_sha256'][:12]}.json"
-    path, _ = tx.add_blob(body, "Tutor Content", name, "application/json")
+    path, _ = tx.add_blob(body, layout.for_topic(tx, topic["id"], layout.LESSON_CONTENT), name, "application/json")
     row_id = f"{topic['id']}:{content['passage_sha256'][:16]}:{document['sha256'][:12]}"
     values = {"topic_id": topic["id"], "document_id": document["id"], "document_sha256": document["sha256"],
               "pdf_start": pdf_start, "pdf_end": pdf_end, "start_at": topic.get("start_at"),

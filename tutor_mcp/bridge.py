@@ -31,11 +31,10 @@ PROTOCOL = "2025-06-18"
 # ── credentials ──────────────────────────────────────────────────────────────
 
 def _data_dir() -> Path:
+    """The project's ``data`` folder, next to this bridge's folder (as in backend/config.py)."""
     if os.getenv("HOMESCHOOLING_DATA"):
         return Path(os.environ["HOMESCHOOLING_DATA"])
-    if sys.platform == "win32":
-        return Path(os.getenv("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Homeschooling"
-    return Path(os.getenv("XDG_DATA_HOME") or Path.home() / ".local" / "share") / "Homeschooling"
+    return Path(__file__).resolve().parents[1] / "data"
 
 
 def _unprotect(payload: bytes) -> bytes:

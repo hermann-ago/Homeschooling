@@ -114,16 +114,22 @@ def test_files_are_written_into_the_drive_folder(tmp_path, folder):
     with store.transaction() as tx:
         child = tx.insert("children", {"name": "Lucas"})
         document = tx.insert("documents", {"original_filename": "a.pdf", "page_count": 1})
-        path, sha = tx.add_blob(b'{"strokes":[]}', "Annotations", "a.json", "application/json")
+        path, sha = tx.add_blob(b'{"strokes":[]}', "Lucas/3rd Grade/History/Handwriting", "a.json",
+                                "application/json")
         tx.insert("annotations", {"child_id": child["id"], "document_id": document["id"], "page_number": 1,
                                   "file_path": path, "sha256": sha})
-    assert path == "Annotations/a.json"
-    assert (folder.root / "Annotations" / "a.json").read_bytes() == b'{"strokes":[]}'
+    handwriting = "Lucas/3rd Grade/History/Handwriting"
+    assert path == f"{handwriting}/a.json"
+    assert (folder.root / handwriting / "a.json").read_bytes() == b'{"strokes":[]}'
     assert folder.read(path, sha) == b'{"strokes":[]}'
     # Identical content reuses the file; different content never overwrites it.
-    assert folder.write("Annotations", "a.json", b'{"strokes":[]}')[0] == "Annotations/a.json"
-    assert folder.write("Annotations", "a.json", b'{"strokes":[1]}')[0] == "Annotations/a-2.json"
+    assert folder.write(handwriting, "a.json", b'{"strokes":[]}')[0] == f"{handwriting}/a.json"
+    assert folder.write(handwriting, "a.json", b'{"strokes":[1]}')[0] == f"{handwriting}/a-2.json"
     assert not list(folder.root.rglob("*.part"))
+    # Only subject folders with a known kind (or the top-level app folders) can be written.
+    for bad in ("Annotations", "Lucas/History/Secrets", "../Lucas/History/Books", "_Archive/Books", "C:/x/Books"):
+        with pytest.raises(OutsideBoundary):
+            folder.write(bad, "a.json", b"{}")
 
 
 def test_drive_folder_boundary_and_availability(tmp_path, folder):
@@ -133,7 +139,10 @@ def test_drive_folder_boundary_and_availability(tmp_path, folder):
             folder.read(bad)
     with pytest.raises(FileUnavailable):
         folder.read("Books/missing.pdf")
+    (folder.root / "Books").mkdir()
     (folder.root / "Books" / "book.pdf").write_bytes(b"%PDF-1.4 book")
+    (folder.root / "_Archive").mkdir()
+    (folder.root / "_Archive" / "old.pdf").write_bytes(b"%PDF-1.4 book")  # retired material is never listed
     with pytest.raises(FileUnavailable):
         folder.read("Books/book.pdf", sha256="0" * 64)
     assert [f["path"] for f in folder.list_pdfs()] == ["Books/book.pdf"]
@@ -153,11 +162,11 @@ def test_backup_is_verified_and_restorable(tmp_path, folder):
                                   "value": {"voice": "en-US-Neural2-J", "rate": 0.9}})
     result = create_backup(store, tmp_path / "local-backups")
     assert result["counts"]["children"] == 1
-    assert (folder.root / "Backups" / result["name"]).exists()
+    assert (folder.root / "_App Backups" / result["name"]).exists()
     assert latest_backup(store, tmp_path / "local-backups") == result["name"]
-    check = verify_restore(folder.root / "Backups" / result["name"])
+    check = verify_restore(folder.root / "_App Backups" / result["name"])
     assert check["integrity"] and check["counts"]["children"] == 1 and check["counts"]["preferences"] == 1
-    restored = Store(folder.root / "Backups" / result["name"]).load()
+    restored = Store(folder.root / "_App Backups" / result["name"]).load()
     assert restored.all("preferences")[0]["value"] == {"rate": 0.9, "voice": "en-US-Neural2-J"}
 
 
@@ -174,3 +183,13 @@ def test_excel_copy_leaves_out_answer_keys(tmp_path, folder):
     workbook = openpyxl.load_workbook(folder.root / relative, read_only=True)
     text = " ".join(str(c) for ws in workbook.worksheets for row in ws.iter_rows(values_only=True) for c in row)
     assert "Lucas" in text and "SECRET-ANSWER" not in text
+
+
+def test_layout_is_kid_grade_subject():
+    from storage import layout
+    assert [layout.grade_folder(g) for g in ("3rd", "1ST", "4", "12", "Pre-K", "N/A", "", None)] == \
+        ["3rd Grade", "1ST Grade", "4th Grade", "12th Grade", "Pre-K", None, None, None]
+    assert layout.subject_folder({"name": "Lucas", "grade_year": "3rd"}, "History") == "Lucas/3rd Grade/History"
+    assert layout.subject_folder({"name": "Mila", "grade_year": "1st"}, "Português") == "Mila/1st Grade/Português"
+    assert layout.subject_folder({"name": "Joshua", "grade_year": "N/A"}, "Reading") == "Joshua/Reading"
+    assert layout.subject_folder({"name": "Olivia", "grade_year": "Pre-K"}, "Math: Counting") == "Olivia/Pre-K/Math_ Counting"

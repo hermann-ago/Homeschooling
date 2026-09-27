@@ -16,8 +16,11 @@ venv/
 .venv/
 env/
 
-# ─── Database ────────────────────────────────────────────────────────────────
-# The live database lives in %LOCALAPPDATA%\Homeschooling and must NEVER be committed.
+# ─── Local data ──────────────────────────────────────────────────────────────
+# data/ holds the live database, backups, paired devices and migration exports.
+# It must NEVER be committed.
+data/
+backend/tests/.tmp-data/
 backend/homeschool.db
 backend/*.db
 *.sqlite3
@@ -61,4 +64,3 @@ public/
 migration-manifest.json
 migration-sql*/
 migration-payload.json
-.tmp-localappdata/

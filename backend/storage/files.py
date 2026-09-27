@@ -1,7 +1,8 @@
 """Files in the Homeschooling folder of the synced Google Drive (Drive for desktop).
 
-Books, handwriting, audio, student work, tutor content and backups are ordinary
-files in that folder; Drive for desktop uploads them. The database stores paths
+Books, handwriting, audio, student work, lesson content and backups are ordinary
+files in that folder, organised Kid → Grade → Subject (see ``layout``); Drive
+for desktop uploads them. The database stores paths
 relative to the folder, plus SHA-256 checksums so a moved or renamed book can be
 found again. Nothing outside the folder can be read or written.
 
@@ -17,7 +18,8 @@ import re
 import threading
 from pathlib import Path, PurePosixPath
 
-APP_FOLDERS = ("Books", "Student Work", "Audio", "Annotations", "Tutor Content", "Backups")
+# Folders the app never reads: dot-folders and retired material in ``_Archive``.
+SKIPPED_FOLDERS = ("_Archive",)
 
 
 class OutsideBoundary(PermissionError):
@@ -60,9 +62,11 @@ class DriveFolder:
                                   "Check that Google Drive for desktop is running and signed in.")
 
     def ensure_folders(self) -> list[str]:
+        """Create the top-level app folders; subject folders appear when files are first written."""
+        from .layout import BACKUPS
         self.require()
         created = []
-        for name in APP_FOLDERS:
+        for name in (BACKUPS,):
             folder = self.root / name
             if not folder.exists():
                 folder.mkdir()
@@ -108,13 +112,20 @@ class DriveFolder:
         return relative, sha
 
     def write_new(self, folder: str, name: str, data: bytes) -> tuple[str, str, bool]:
-        """Like ``write``; also says whether a new file was created (False when reused)."""
+        """Like ``write``; also says whether a new file was created (False when reused).
+
+        ``folder`` is a subject folder with its kind (``Lucas/3rd Grade/History/Books``)
+        or a top-level app folder (``_App Backups``); see ``layout``.
+        """
+        from .layout import check_folder
         self.require()
-        if folder not in APP_FOLDERS:
-            raise OutsideBoundary(f"Unknown app folder {folder}")
+        try:
+            folder = check_folder(folder)
+        except ValueError as error:
+            raise OutsideBoundary(str(error)) from error
         sha = sha256_bytes(data)
-        directory = self.root / folder
-        directory.mkdir(exist_ok=True)
+        directory = self.resolve(folder)
+        directory.mkdir(parents=True, exist_ok=True)
         stem, suffix = os.path.splitext(safe_name(name))
         with self._lock:
             candidate, number = directory / f"{stem}{suffix}", 1
@@ -139,7 +150,7 @@ class DriveFolder:
         self.require()
         result = []
         for directory, folders, files in os.walk(self.root):
-            folders[:] = [f for f in folders if not f.startswith(".")]
+            folders[:] = [f for f in folders if not f.startswith(".") and f not in SKIPPED_FOLDERS]
             for name in files:
                 if name.lower().endswith(".pdf") and not name.startswith("."):
                     path = Path(directory) / name
@@ -154,7 +165,7 @@ class DriveFolder:
         """Locate a file by content (only files of the same size are hashed)."""
         self.require()
         for directory, folders, files in os.walk(self.root):
-            folders[:] = [f for f in folders if not f.startswith(".")]
+            folders[:] = [f for f in folders if not f.startswith(".") and f not in SKIPPED_FOLDERS]
             for name in files:
                 if suffix and not name.lower().endswith(suffix):
                     continue

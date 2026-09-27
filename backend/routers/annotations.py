@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from app_context import request_operation as write
 from dependencies import context, require_member, store
 from schemas.annotations import AnnotationPageResponse, AnnotationPageUpdate
-from storage import RevisionConflict
+from storage import RevisionConflict, layout
 from storage import FileUnavailable
 
 router = APIRouter(prefix="/annotations", tags=["PDF Annotations"], dependencies=[Depends(require_member)])
@@ -72,7 +72,8 @@ def save_page_annotations(child_id: int, document_id: int, page_number: int, pay
         with write("annotations.save", f"Handwriting on page {page_number}") as tx:
             # Each saved version is its own content-addressed file, so earlier revisions remain.
             name = f"annotations-child{child_id}-doc{document_id}-p{page_number}-{hashlib.sha256(body).hexdigest()[:12]}.json"
-            path, sha = tx.add_blob(body, "Annotations", name, "application/json")
+            folder = layout.for_child_document(tx, child_id, document_id, layout.HANDWRITING)
+            path, sha = tx.add_blob(body, folder, name, "application/json")
             values = {"file_path": path, "sha256": sha, "stroke_count": len(strokes)}
             if existing:
                 tx.update("annotations", existing["id"], values, expected_revision=payload.base_revision)

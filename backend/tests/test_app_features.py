@@ -131,10 +131,11 @@ def test_annotations_create_update_conflict_and_drive_storage(harness):
     assert conflict.json()["detail"]["current"]["revision"] == 2
     # Strokes live in the Drive folder; the database only holds the reference.
     row = harness.ctx.store.all("annotations")[0]
-    assert row["file_path"].startswith("Annotations/") and (harness.drive / row["file_path"]).is_file()
+    # The book is not used by one of Mila's subjects yet, so her handwriting goes to her own folder.
+    assert row["file_path"].startswith("Mila/Handwriting/") and (harness.drive / row["file_path"]).is_file()
     assert "points" not in str(row)
     # Earlier revisions remain as their own files.
-    assert len(list((harness.drive / "Annotations").glob("*.json"))) == 2
+    assert len(list((harness.drive / "Mila" / "Handwriting").glob("*.json"))) == 2
 
 
 def test_annotation_page_bounds_and_size(harness):
@@ -177,3 +178,30 @@ def test_drive_files_outside_root_are_refused(harness):
     for path in ("../tax.pdf", str(harness.drive.parent / "tax.pdf")):
         r = harness.call("POST", f"/api/subjects/{subject['id']}/documents/from-drive", json={"path": path})
         assert r.status_code == 403, path
+
+
+def test_subject_folder_is_fixed_at_creation_and_books_go_there(harness, monkeypatch):
+    import routers.subjects
+    monkeypatch.setattr(routers.subjects, "analyze_curriculum", lambda text, pages: {
+        "topics": [{"title": "Chapter 1", "page_start": 1, "page_end": 2}], "language": "en"})
+    child = harness.call("POST", "/api/children", json={"name": "Lucas", "grade_year": "3rd"}).json()
+    subject = harness.call("POST", "/api/subjects", json={"child_id": child["id"], "name": "Science"}).json()
+    assert subject["folder"] == "Lucas/3rd Grade/Science"
+    pdf = make_pdf([["Chapter 1"], ["Chapter 2"]])
+    r = harness.call("POST", f"/api/subjects/{subject['id']}/documents",
+                     files={"file": ("Marine Biology.pdf", pdf, "application/pdf")})
+    assert r.status_code == 200, r.text
+    document = harness.ctx.store.all("documents")[0]
+    assert document["file_path"] == "Lucas/3rd Grade/Science/Books/Marine Biology.pdf"
+    assert (harness.drive / document["file_path"]).read_bytes() == pdf
+    # Moving up a grade later does not move this subject's folder.
+    harness.call("PUT", f"/api/children/{child['id']}", json={"grade_year": "4th"})
+    assert harness.ctx.store.get("subjects", subject["id"])["folder"] == "Lucas/3rd Grade/Science"
+
+
+def test_subjects_without_a_folder_get_one_at_start(harness):
+    with harness.ctx.store.transaction() as tx:
+        mila = tx.insert("children", {"name": "Mila", "grade_year": "1st"})
+        tx.insert("subjects", {"child_id": mila["id"], "name": "Math"})
+    harness.restart()
+    assert harness.ctx.store.all("subjects")[0]["folder"] == "Mila/1st Grade/Math"

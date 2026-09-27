@@ -87,7 +87,7 @@ export default function HomeServerSettings() {
       <div className="space-y-2">
         <h3 className="font-semibold">Backups</h3>
         <p className="text-sm text-text-secondary">
-          A verified copy of the database goes to the folder's Backups every day and when the server stops (the newest 30 are kept).
+          A verified copy of the database goes to the folder's _App Backups every day and when the server stops (the newest 30 are kept).
           {storage?.last_backup ? ` Latest: ${backupTime(storage.last_backup)}.` : ' No backup yet.'}
         </p>
         <div className="flex flex-wrap gap-2 text-sm">

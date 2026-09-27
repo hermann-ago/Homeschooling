@@ -3,7 +3,7 @@ from fastapi.responses import Response
 
 from dependencies import context, require_member, require_parent, store
 from schemas.documents import DocumentResponse, StorageUsageResponse
-from storage import FileUnavailable, OutsideBoundary
+from storage import FileUnavailable, OutsideBoundary, layout
 from utils import get_or_404
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -51,4 +51,4 @@ def drive_books():
     except FileUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     linked = {d["file_path"] for d in store().all("documents")}
-    return [{**f, "linked": f["path"] in linked} for f in pdfs if not f["path"].startswith("Backups/")]
+    return [{**f, "linked": f["path"] in linked} for f in pdfs if not f["path"].startswith(layout.BACKUPS + "/")]

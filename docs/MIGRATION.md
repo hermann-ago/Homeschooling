@@ -2,7 +2,7 @@
 
 The migration has three stages: storage and runtime replacement (this code), tutoring and read-along integration (this code), and then the verified data migration and cutover described here.
 
-After cutover there is **one authoritative record**: the home server's SQLite database (`%LOCALAPPDATA%\Homeschooling\homeschooling.sqlite3`), with its files in the synced Homeschooling Drive folder. The Excel tracker, Supabase and the new database are never synchronized with each other. The daily Excel copy the server writes is read-only output, not a second record.
+After cutover there is **one authoritative record**: the home server's SQLite database (`data\homeschooling.sqlite3` in the project folder), with its files in the synced Homeschooling Drive folder. The Excel tracker, Supabase and the new database are never synchronized with each other. The daily Excel copy the server writes is read-only output, not a second record.
 
 Keep these untouched until the migration is accepted:
 
@@ -14,7 +14,7 @@ Deleting hosted resources is a separate, final decision.
 
 > The Vercel Git integration has been disconnected, so merging this branch does not replace the hosted app.
 
-All commands run on the host computer from `backend\` with `venv\Scripts\python -m …`. Reports are written to `%LOCALAPPDATA%\Homeschooling\migration-reports`.
+All commands run on the host computer from `backend\` with `venv\Scripts\python -m …`. Reports are written to the project's `data\migration-reports`.
 
 ## 0. Prepare the host
 
@@ -41,7 +41,7 @@ Then run one command:
 venv\Scripts\python -m migration.dry_run
 ```
 
-It exports the hosted data read-only into `%LOCALAPPDATA%\Homeschooling\migration\export-<time>`, imports that export and the `Lucas - History` folder into a **throwaway copy** of the database, and reconciles the copy against both sources. Files the import would add are written to a temporary folder instead of Google Drive. It prints a summary to paste back for review and saves the full report.
+It exports the hosted data read-only into `data\migration\export-<time>`, imports that export and the `Lucas - History` folder into a **throwaway copy** of the database, and reconciles the copy against both sources. Files the import would add are written to a temporary folder instead of Google Drive. It prints a summary to paste back for review and saves the full report.
 
 - `--export <folder>` reuses an earlier export; `--no-hosted` checks only the History folder.
 - Without `POSTGRES_URL`, the hosted part is skipped with a warning. Without `BLOB_READ_WRITE_TOKEN` and Node, book PDFs are not downloaded and the book checks are incomplete.
@@ -58,7 +58,7 @@ The GitHub repository contains the application code, not necessarily its live da
 With both in `backend\.env` (or set for this terminal only):
 
 ```powershell
-venv\Scripts\python -m migration.export_hosted --out "%LOCALAPPDATA%\Homeschooling\export-1"
+venv\Scripts\python -m migration.export_hosted --out ..\data\migration\export-1
 ```
 
 (You can instead reuse the export folder the dry run created.)
@@ -68,11 +68,13 @@ This writes every table (children, subjects, documents, topics, schedules, compl
 ## 3. Import the hosted data
 
 ```powershell
-venv\Scripts\python -m migration.import_hosted --export "%LOCALAPPDATA%\Homeschooling\export-1"
+venv\Scripts\python -m migration.import_hosted --export ..\data\migration\export-1 --books-from "G:\My Drive\Coding\homeschooling_data\uploads"
 ```
 
 - Source IDs, timestamps and annotation revisions are preserved.
-- Books already in the Homeschooling folder with the same SHA-256 are referenced by their path. The others are copied into `Books`.
+- Each subject gets its Kid → Grade → Subject folder (see SETUP_GUIDE.md §4).
+- Books already in the Homeschooling folder with the same SHA-256 are referenced where they are. The others are copied into the `Books` folder of the subject that uses them (`_Unassigned Books` when none does), from the export or from a `--books-from` folder.
+- `--books-from` is only read. Use it for the first app's upload folder (`G:\My Drive\Coding\homeschooling_data\uploads`), which still holds 11 of the 20 books with matching checksums.
 - Annotation strokes and enrichment content become files in the Drive folder, indexed in the database.
 - Re-running is safe: finished batches are skipped by their operation IDs.
 
@@ -90,13 +92,13 @@ The import brings in:
 - **Chapters and teacher key:** chapter tests, the teacher key (with its known conflicts) and the reviewed question-to-topic mappings.
 - **Reviewed passages:** their exact sentences, boundaries and review notes.
 - **Cached narration:** each Neural2 track is marked synchronized only if its original hash (voice, rate and passage) matches the reviewed passage. The Robin Hood ElevenLabs audio is preserved as legacy audio.
-- **Files:** the textbook, the tests, audio and evidence photos are copied into `Books`, `Audio` and `Student Work`, so the History folder can be archived later without breaking any record. The originals stay where they are.
+- **Files:** the textbook, the tests, audio and evidence photos are copied into Lucas's History `Books`, `Audio` and `Student Work` folders, so the History folder can be archived later without breaking any record. The originals stay where they are.
 
 Topics are merged with any existing History topics by **source document and page range**, never by title alone. An ambiguous overlap is reported and not created. Review it, then rerun with `--create-unmatched` if the new topics are wanted.
 
 If the app already holds the textbook as a different file (same page count, and at least 90% of the curriculum's topic titles on it), that document is treated as the **same book**: it keeps its ID and topics but now uses the History folder's copy, and topics on it are also matched by title (a combined tracker topic "A / B" by any part). The app's completions are kept; only those the tracker explicitly marks otherwise are reported. An app topic inside a combined tracker topic is kept and reported as a possible duplicate.
 
-Books the old app recorded without a checksum are linked to a PDF in the Drive folder with the same name and exact size.
+Books the old app recorded without a checksum are linked to a PDF in the Drive folder (or a `--books-from` folder) with the same name and exact size.
 
 ### The unfinished lesson
 
@@ -112,7 +114,7 @@ Lucas's Genghis Khan discussion is imported as an **unfinished** session:
 ## 5. Reconcile
 
 ```powershell
-venv\Scripts\python -m migration.reconcile --export "%LOCALAPPDATA%\Homeschooling\export-1" --history "<Lucas - History folder>"
+venv\Scripts\python -m migration.reconcile --export ..\data\migration\export-1 --history "<Lucas - History folder>"
 ```
 
 It compares:
@@ -133,7 +135,7 @@ venv\Scripts\python -m migration.backup create
 venv\Scripts\python -m migration.backup verify
 ```
 
-`create` writes an integrity-checked copy of the database to the Drive folder's `Backups` and to the local copy. `verify` opens a copy of the newest backup on its own (never the live database), checks its integrity and compares every table's row count with the live database.
+`create` writes an integrity-checked copy of the database to the Drive folder's `_App Backups` and to `data\backups`. `verify` opens a copy of the newest backup on its own (never the live database), checks its integrity and compares every table's row count with the live database.
 
 ## 7. Cut over
 

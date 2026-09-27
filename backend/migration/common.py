@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from storage import DriveFolder, DuplicateOperation, FileUnavailable, Store
-from storage.files import APP_FOLDERS, OutsideBoundary, safe_name, sha256_bytes
+from storage.files import OutsideBoundary, safe_name, sha256_bytes
+from storage.layout import check_folder
 
 
 class ScratchFolder(DriveFolder):
@@ -39,8 +40,10 @@ class ScratchFolder(DriveFolder):
             raise FileUnavailable("The Homeschooling Drive folder is not available on this computer")
 
     def write_new(self, folder: str, name: str, data: bytes) -> tuple[str, str, bool]:
-        if folder not in APP_FOLDERS:
-            raise OutsideBoundary(f"Unknown app folder {folder}")
+        try:
+            folder = check_folder(folder)
+        except ValueError as error:
+            raise OutsideBoundary(str(error)) from error
         relative = f"{folder}/{safe_name(name)}"
         path = self.scratch / relative
         path.parent.mkdir(parents=True, exist_ok=True)

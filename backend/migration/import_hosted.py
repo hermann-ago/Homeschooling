@@ -2,10 +2,14 @@
 
     python -m migration.import_hosted --export <export folder> [--dry-run]
 
-Source IDs, timestamps and annotation revisions are preserved. Books already in
-the Homeschooling folder (same SHA-256) are referenced by their path; the rest
-are copied into ``Books``. Annotation strokes and enrichment content become
-files in the Drive folder, indexed in the database. The database must not
+Source IDs, timestamps and annotation revisions are preserved. Each subject
+gets its Kid -> Grade -> Subject folder. Books already in the Homeschooling folder
+(same SHA-256, or same name and size when no checksum was recorded) are
+referenced where they are; the rest are copied into the ``Books`` folder of the
+subject that uses them (``_Unassigned Books`` when none does), from the export
+or from ``--books-from`` folders such as the first app's upload folder.
+Annotation strokes and enrichment content become files in the Drive folder,
+indexed in the database. The database must not
 already hold app data unless this is a resumed run of the same import.
 """
 from __future__ import annotations
@@ -15,7 +19,8 @@ import json
 import re
 from pathlib import Path
 
-from storage.files import sha256_bytes
+from storage import layout
+from storage.files import sha256_bytes, sha256_path
 
 from .common import Report, chunks, dry_run_store, parse_time, staged
 
@@ -37,15 +42,44 @@ def _pick(row: dict, *columns) -> dict:
     return {c: row.get(c) for c in columns if c in row}
 
 
-def import_export(store, export: Path, report: Report) -> Report:
+class BookSources:
+    """Read-only folders outside the Drive folder that may hold copies of the books."""
+
+    def __init__(self, folders):
+        self.files = [p for folder in folders or () for p in Path(folder).rglob("*.pdf") if p.is_file()]
+
+    def find(self, sha: str | None, size: int | None, name: str | None) -> Path | None:
+        for path in self.files:
+            if size is not None and path.stat().st_size != size:
+                continue
+            if sha and sha256_path(path) == sha:
+                return path
+            if not sha and name and _uploaded_name(path.name) == _uploaded_name(name):
+                return path
+        return None
+
+
+def _book_folders(export: Path, tx) -> dict[int, str]:
+    """Each document goes to the Books folder of the subject with most of its topics."""
+    uses: dict[int, dict[int, int]] = {}
+    for topic in _load(export, "curriculum_topics"):
+        if topic.get("document_id") and tx.get("subjects", topic.get("subject_id")):
+            counts = uses.setdefault(topic["document_id"], {})
+            counts[topic["subject_id"]] = counts.get(topic["subject_id"], 0) + 1
+    return {document_id: layout.for_subject(tx, max(sorted(counts), key=counts.get), layout.BOOKS)
+            for document_id, counts in uses.items()}
+
+
+def import_export(store, export: Path, report: Report, books_from=()) -> Report:
     manifest = json.loads((export / "manifest.json").read_text(encoding="utf-8"))
     prior_imports = [op for op in store.all("operation_receipts") if op["id"].startswith("import-hosted-")]
     occupied = {t: len(store.all(t)) for t in ENTITY_TABLES if store.all(t)}
     if occupied and not prior_imports:
         raise RuntimeError(f"The database already holds data {occupied}; import into a new database")
     files = store.files
+    sources = BookSources(books_from)
 
-    def simple(table, source, columns, rename=None):
+    def simple(table, source, columns, rename=None, extra=None):
         rows = _load(export, source)
         report.count(table, source=len(rows))
         for index, part in chunks(rows):
@@ -54,15 +88,18 @@ def import_export(store, export: Path, report: Report) -> Report:
                     values = _pick(row, *columns)
                     for old, new in (rename or {}).items():
                         values[new] = values.pop(old)
-                    tx.insert(table, values)
+                    tx.insert(table, {**values, **(extra(tx, values) if extra else {})})
             staged(store, f"import-hosted-{table}-{index:03d}", f"Import {table} ({index + 1})", work, report)
 
     simple("children", "children", ("id", "name", "nickname", "color", "grade_year", "created_at"))
+    simple("subjects", "subjects", ("id", "child_id", "name", "weight", "slot_type", "end_date", "created_at"),
+           extra=lambda tx, v: {"folder": layout.subject_folder(tx.get("children", v["child_id"]), v["name"])})
 
     documents = _load(export, "documents")
     report.count("documents", source=len(documents))
 
     def import_documents(tx):
+        folders = _book_folders(export, tx)
         for row in documents:
             book = manifest.get("books", {}).get(str(row["id"]), {})
             sha = book.get("sha256") or row.get("sha256")
@@ -79,12 +116,21 @@ def import_export(store, export: Path, report: Report) -> Report:
                     existing, sha = copy["path"], sha256_bytes(files.read(copy["path"]))
                     report.notes.append(f"Document {row['id']} matched {copy['path']} by name and size "
                                         "(no checksum was recorded)")
+            copy = None if existing or book.get("file") else \
+                sources.find(sha, row.get("size_bytes"), row.get("original_filename"))
             if existing:
                 path, source = existing, "drive"
-            elif book.get("file"):
-                data = (export / "books" / book["file"]).read_bytes()
-                path, _ = tx.add_blob(data, "Books", row["original_filename"], "application/pdf")
-                source = "migrated"
+            elif book.get("file") or copy:
+                data = (export / "books" / book["file"]).read_bytes() if book.get("file") else copy.read_bytes()
+                target = folders.get(row["id"], layout.UNASSIGNED_BOOKS)
+                name = re.sub(r"^[0-9a-f]{32}_", "", row["original_filename"])
+                path, copied_sha = tx.add_blob(data, target, name, "application/pdf")
+                if sha and copied_sha != sha:
+                    report.conflict("book_checksum", f"Document {row['id']}: the copy differs from its checksum",
+                                    recorded=sha, found=copied_sha)
+                sha, source = copied_sha, "migrated"
+                if copy:
+                    report.notes.append(f"Document {row['id']} copied from {copy} into {target}")
             else:
                 path, source = None, "missing"
                 report.conflict("book_missing", f"No bytes were exported for document {row['id']}",
@@ -95,7 +141,6 @@ def import_export(store, export: Path, report: Report) -> Report:
                                     "legacy_blob_path": row.get("blob_path")})
     staged(store, "import-hosted-documents-000", "Import documents", import_documents, report)
 
-    simple("subjects", "subjects", ("id", "child_id", "name", "weight", "slot_type", "end_date", "created_at"))
     simple("topics", "curriculum_topics", ("id", "subject_id", "title", "page_start", "page_end", "complexity",
                                            "completed", "completed_at", "language", "chapter_order", "pdf_filename",
                                            "document_id", "pdf_page_offset", "is_core", "created_at"))
@@ -112,7 +157,8 @@ def import_export(store, export: Path, report: Report) -> Report:
         def work(tx, part=part):
             for row in part:
                 name = f"enrichment-topic{row['topic_id']}-p{row['page_start']}-{row['page_end']}-{row['content_type']}.txt"
-                path, sha = tx.add_blob(row["content"].encode("utf-8"), "Tutor Content", name, "text/plain")
+                folder = layout.for_topic(tx, row["topic_id"], layout.LESSON_CONTENT)
+                path, sha = tx.add_blob(row["content"].encode("utf-8"), folder, name, "text/plain")
                 tx.insert("enrichment", {**_pick(row, "id", "topic_id", "page_start", "page_end", "content_type",
                                                  "created_at"), "content_path": path, "content_sha256": sha})
         staged(store, f"import-hosted-enrichment-{index:03d}", "Import enrichment", work, report)
@@ -143,7 +189,8 @@ def import_export(store, export: Path, report: Report) -> Report:
                                    "page_number": row["page_number"], "strokes": strokes},
                                   separators=(",", ":"), sort_keys=True).encode()
                 name = f"annotations-child{row['child_id']}-doc{row['document_id']}-p{row['page_number']}-r{row['revision']}.json"
-                path, sha = tx.add_blob(body, "Annotations", name, "application/json")
+                folder = layout.for_child_document(tx, row["child_id"], row["document_id"], layout.HANDWRITING)
+                path, sha = tx.add_blob(body, folder, name, "application/json")
                 tx.insert("annotations", {**_pick(row, "id", "child_id", "document_id", "page_number", "created_at"),
                                           "file_path": path, "sha256": sha, "stroke_count": len(strokes)},
                           revision=row["revision"], updated_at=parse_time(row.get("updated_at")))
@@ -158,12 +205,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--export", required=True, type=Path)
     parser.add_argument("--dry-run", action="store_true", help="Import into a throwaway copy; change nothing")
+    parser.add_argument("--books-from", action="append", type=Path, default=[],
+                        help="A folder outside the Drive folder with copies of the books (read only; repeatable)")
     args = parser.parse_args(argv)
     report = Report("import-hosted" + ("-dry-run" if args.dry_run else ""))
     from app_context import AppContext
     context = AppContext(start_worker=False)
     context.files.require()
-    import_export(dry_run_store(context) if args.dry_run else context.store, args.export, report)
+    import_export(dry_run_store(context) if args.dry_run else context.store, args.export, report, args.books_from)
     path = report.write(Path(args.export) / "reports")
     print(json.dumps(report.as_dict()["counts"], indent=2))
     print(f"Report: {path} ({'clean' if not report.conflicts else f'{len(report.conflicts)} conflicts'})")

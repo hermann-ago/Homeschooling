@@ -6,8 +6,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("HOMESCHOOLING_SKIP_APP", "1")
-# Tests must never read or write the real narration ledger.
-os.environ["LOCALAPPDATA"] = str(Path(__file__).resolve().parent / ".tmp-localappdata")
+# Tests must never read or write the real data folder (database, narration ledger).
+os.environ["HOMESCHOOLING_DATA"] = str(Path(__file__).resolve().parent / ".tmp-data")
 
 
 class Harness:

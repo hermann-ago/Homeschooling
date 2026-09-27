@@ -78,12 +78,22 @@ class AppContext:
         if self.files.available and start_worker:  # tools (e.g. the dry run) leave the Drive folder untouched
             self.files.ensure_folders()
         self.store = Store(self.config.database_path, self.files).load()
+        self._assign_subject_folders()
         self.last_export = None
         self.worker = Housekeeping(self) if start_worker else None
         if self.worker:
             self.worker.start()
         from tutoring.service import TutorService
         self.tutor = TutorService(self)
+
+    def _assign_subject_folders(self):
+        """Fix the Kid/Grade/Subject folder of subjects created before folders were recorded."""
+        from storage import layout
+        missing = [s for s in self.store.all("subjects") if not s.get("folder")]
+        if missing:
+            with self.store.transaction(kind="subjects.folders", summary="Recorded subject folders") as tx:
+                for subject in missing:
+                    tx.update("subjects", subject["id"], {"folder": layout.subject_base(tx, subject)})
 
     def announce(self):
         """Record this server instance for the launcher (only the server process calls this)."""

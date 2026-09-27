@@ -1,16 +1,17 @@
 """One-command migration dry run on the host computer. Changes nothing.
 
     python -m migration.dry_run [--history <Lucas - History folder>] [--export <export folder>]
+                                [--books-from <folder with copies of the books>]
 
 1. When no --export is given and POSTGRES_URL is set (backend/.env), exports the
-   hosted data read-only into %LOCALAPPDATA%\\Homeschooling\\migration.
+   hosted data read-only into the project's data\\migration folder.
 2. Imports the hosted export and the History project into a throwaway copy of
    the database. Files the import would add go to a temporary folder, not to
    Google Drive, and the History folder is only read.
 3. Reconciles the copy against both sources and writes one report.
 
 Paste the printed summary back for review. The full report is saved under
-%LOCALAPPDATA%\\Homeschooling\\migration-reports.
+the project's data\\migration-reports folder.
 """
 from __future__ import annotations
 
@@ -54,6 +55,8 @@ def main(argv=None):
     parser.add_argument("--history", type=Path, help="The Lucas - History folder (default: inside the Drive folder)")
     parser.add_argument("--export", type=Path, help="An existing hosted export folder")
     parser.add_argument("--no-hosted", action="store_true", help="Skip the hosted app's data")
+    parser.add_argument("--books-from", action="append", type=Path, default=[],
+                        help="A folder outside the Drive folder with copies of the books (read only; repeatable)")
     args = parser.parse_args(argv)
     try:
         from dotenv import load_dotenv
@@ -77,7 +80,7 @@ def main(argv=None):
 
     export = None if args.no_hosted else (args.export or export_now(context, report))
     if export:
-        import_export(store, export, report)
+        import_export(store, export, report, args.books_from)
     if history.is_dir():
         import_history(store, history, report)
     else:
@@ -92,6 +95,11 @@ def main(argv=None):
     report.count("result", **{name: len(store.all(name)) for name in (
         "children", "subjects", "documents", "topics", "chapters", "tutor_sessions", "checkpoints", "attempts",
         "reviews", "passages", "audio_tracks", "evidence_files", "question_maps")})
+    folders: dict[str, int] = {}
+    for relative in store.files.written:
+        folder = relative.rsplit("/", 1)[0]
+        folders[folder] = folders.get(folder, 0) + 1
+    report.count("drive_files_by_folder", **dict(sorted(folders.items())))
     path = report.write(context.config.dir / "migration-reports")
     print("=== Homeschooling migration dry run: paste everything below ===")
     print(json.dumps(summary(report), indent=1, ensure_ascii=False, default=str))

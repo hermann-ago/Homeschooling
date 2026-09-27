@@ -9,7 +9,7 @@ from app_context import request_operation as write
 from dependencies import context, require_member, store
 from schemas import CanvasAIRequest, CanvasAIResponse, CanvasInsertCreate, CanvasInsertResponse, CanvasSlotResponse
 from services import ai_enrichment
-from storage import FileUnavailable
+from storage import FileUnavailable, layout
 from utils import completion_by_slot, get_or_404
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,8 @@ def generate_ai_content(payload: CanvasAIRequest):
     content = json.dumps(raw_result, ensure_ascii=False) if isinstance(raw_result, (list, dict)) else str(raw_result)
     with write("enrichment.generate") as tx:
         name = f"enrichment-topic{payload.topic_id}-p{payload.page_start}-{payload.page_end}-{payload.content_type}.txt"
-        path, sha = tx.add_blob(content.encode("utf-8"), "Tutor Content", name, "text/plain")
+        folder = layout.for_topic(tx, payload.topic_id, layout.LESSON_CONTENT)
+        path, sha = tx.add_blob(content.encode("utf-8"), folder, name, "text/plain")
         row = tx.insert("enrichment", {"topic_id": payload.topic_id, "page_start": payload.page_start,
                                        "page_end": payload.page_end, "content_type": payload.content_type,
                                        "content_path": path, "content_sha256": sha})

@@ -7,7 +7,7 @@
     python launcher/homeschooling.py pair-agent [--name "Codex"]
 
 The launcher records the exact process it started (PID, creation time,
-command line and a per-instance token) under %LOCALAPPDATA%\\Homeschooling\\run.
+command line and a per-instance token) in the project's data\\run folder.
 ``stop`` only ever stops that recorded process: it never kills whatever
 happens to be using a port. Ending a lesson does not stop the server; other
 devices keep using it until a parent stops it here.

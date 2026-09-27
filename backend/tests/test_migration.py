@@ -48,7 +48,7 @@ def test_hosted_export_imports_with_ids_timestamps_revisions_and_book_dedupe(har
 def test_missing_book_is_copied_into_books(harness, tmp_path):
     store, history, *_ = migrate(harness, tmp_path, drive_has_book=False)
     document = store.get("documents", 3)
-    assert document["file_path"] == "Books/Story of the World V.2.pdf" and document["source"] == "migrated"
+    assert document["file_path"] == "Lucas/4th Grade/History/Books/Story of the World V.2.pdf" and document["source"] == "migrated"
     assert (harness.drive / document["file_path"]).read_bytes() == history["book"]
     # The History import reuses that book (same checksum) instead of adding another.
     assert sum(1 for d in store.all("documents") if d["sha256"] == history["book_sha"]) == 1
@@ -84,7 +84,7 @@ def test_books_found_only_in_the_history_folder_are_copied_into_books(harness, t
     assert store.get("documents", 4)["file_path"] == "Lucas - History/SOTW2_Tests.pdf"
     import_history(store, source, Report("import-history"))
     moved = store.get("documents", 4)
-    assert moved["file_path"].startswith("Books/") and (harness.drive / moved["file_path"]).read_bytes() == tests_pdf
+    assert moved["file_path"].startswith("Lucas/4th Grade/History/Books/") and (harness.drive / moved["file_path"]).read_bytes() == tests_pdf
 
 
 def test_history_import_preserves_unfinished_genghis_and_evidence(harness, tmp_path):
@@ -106,8 +106,8 @@ def test_history_import_preserves_unfinished_genghis_and_evidence(harness, tmp_p
     q1 = store.get("attempts", "2026-09-11-01-Q01")
     assert q1["independence"] == "independent"
     # Evidence photos are copied into Student Work; the originals stay in the History folder.
-    assert q1["evidence_paths"] == ["Student Work/2026-09-11-01-page-71.jpg"]
-    assert (harness.drive / "Student Work" / "2026-09-11-01-page-71.jpg").is_file()
+    assert q1["evidence_paths"] == ["Lucas/4th Grade/History/Student Work/2026-09-11-01-page-71.jpg"]
+    assert (harness.drive / "Lucas/4th Grade/History" / "Student Work" / "2026-09-11-01-page-71.jpg").is_file()
     assert (source / "evidence" / "2026-09-11" / "page-71.jpg").is_file()
     assert store.get("reviews", "2026-09-14-01-R01")["status"] == "Open"
     assert any("superseded" in s for s in imported.skipped)
@@ -237,7 +237,7 @@ def test_app_copy_of_the_textbook_is_merged_as_the_same_book(harness, tmp_path):
     topics = store.find("topics", subject_id=subject["id"])
     assert len(topics) == 7  # nothing duplicated
     merged = store.get("documents", book["id"])
-    assert merged["sha256"] == history["book_sha"] and merged["file_path"].startswith("Books/")
+    assert merged["sha256"] == history["book_sha"] and merged["file_path"].startswith("Lucas/History/Books/")
     genghis = store.get("topics", app["Genghis Khan, Emperor of All Men"]["id"])
     assert genghis["source_key"] == "C21-T01" and (genghis["page_start"], genghis["page_end"]) == (4, 5)
     assert store.get("topics", app["Robin Hood"]["id"])["source_key"] == "C19-T03"
@@ -251,9 +251,9 @@ def test_app_copy_of_the_textbook_is_merged_as_the_same_book(harness, tmp_path):
 def test_backup_is_verified_against_the_live_database(harness, tmp_path):
     store, *_ = migrate(harness, tmp_path)
     backup = create_backup(store, tmp_path / "backups")
-    result = verify(harness.ctx, harness.drive / "Backups" / backup["name"])
+    result = verify(harness.ctx, harness.drive / "_App Backups" / backup["name"])
     assert result["integrity"] and result["matches_live"], result
-    restored = Store(harness.drive / "Backups" / backup["name"]).load()
+    restored = Store(harness.drive / "_App Backups" / backup["name"]).load()
     for table in ("children", "attempts", "checkpoints", "annotations", "passages"):
         assert restored.all(table) == store.all(table)
 
@@ -284,3 +284,23 @@ def test_dry_run_changes_nothing(harness, tmp_path, monkeypatch, capsys):
     assert code == 0 and summary["clean"], summary["conflicts"]
     assert summary["counts"]["result"]["tutor_sessions"] == 3
     assert summary["counts"]["history_answers"] == {"source": 2, "database": 2}
+
+
+def test_books_are_recovered_from_an_old_upload_folder(harness, tmp_path):
+    """--books-from: a read-only folder outside Drive (the first app's uploads) supplies missing books,
+    which are copied into the Books folder of the subject that uses them."""
+    history = build_history_folder(tmp_path / "unused-history")
+    export = build_hosted_export(tmp_path / "export", history["book"])
+    manifest = json.loads((export / "manifest.json").read_text())
+    manifest["books"] = {}  # nothing downloaded from Blob
+    (export / "manifest.json").write_text(json.dumps(manifest))
+    old = tmp_path / "homeschooling_data" / "uploads" / "5"
+    old.mkdir(parents=True)
+    (old / "868611f67d194b3c92e828917ff80707_Story of the World V.2.pdf").write_bytes(history["book"])
+    report = import_export(harness.ctx.store, export, Report("import-hosted"), [tmp_path / "homeschooling_data"])
+    document = harness.ctx.store.get("documents", 3)
+    assert document["file_path"] == "Lucas/4th Grade/History/Books/Story of the World V.2.pdf"
+    assert document["sha256"] == history["book_sha"] and document["source"] == "migrated"
+    assert not [c for c in report.conflicts if c["kind"] == "book_missing"], report.conflicts
+    assert (old / "868611f67d194b3c92e828917ff80707_Story of the World V.2.pdf").is_file()  # only read
+    assert harness.ctx.store.get("subjects", 5)["folder"] == "Lucas/4th Grade/History"

@@ -28,6 +28,7 @@ import sqlite3
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
+from storage import layout
 from tutoring import passages
 from tutoring.service import RESULTS
 
@@ -192,8 +193,10 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
         subjects = [s for s in tx.find("subjects", child_id=child["id"]) if "history" in s["name"].lower()]
         if len(subjects) > 1:
             raise RuntimeError("Several History subjects exist for this learner; choose one explicitly")
-        subject = subjects[0] if subjects else tx.insert("subjects", {"child_id": child["id"],
-                                                                      "name": config.get("subject", "History")})
+        name = config.get("subject", "History")
+        subject = subjects[0] if subjects else tx.insert("subjects", {
+            "child_id": child["id"], "name": name, "folder": layout.subject_folder(child, name)})
+        books = layout.for_subject(tx, subject["id"], layout.BOOKS)
         docs = {}
         for key, sha, path in (("textbook", textbook_sha, textbook_path), ("tests", tests_sha, tests_path)):
             existing = next((d for d in tx.all("documents") if d["sha256"] == sha), None)
@@ -201,7 +204,7 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                 docs[key] = existing
                 continue
             name = path.name if path.suffix.lower() == ".pdf" else path.name + ".pdf"
-            relative, copied = tx.add_blob(path.read_bytes(), "Books", name, "application/pdf")
+            relative, copied = tx.add_blob(path.read_bytes(), books, name, "application/pdf")
             if copied != sha:
                 report.conflict("book_checksum", f"{path.name} changed while it was being copied")
             if existing:  # the app has this book, but without a file or only inside the History folder
@@ -450,7 +453,8 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                 photo = photo.strip()
                 if not photo:
                     continue
-                copied = copy_source_file(tx, source, photo, "Student Work", f"{_text(row['Session ID'])}-")
+                copied = copy_source_file(tx, source, photo, layout.for_subject(tx, ids["subject"], layout.STUDENT_WORK),
+                                          f"{_text(row['Session ID'])}-")
                 if not copied:
                     report.conflict("evidence_missing", f"Photo {photo} was not found in the History folder")
                     continue
@@ -589,6 +593,7 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
     reading = source / "assets" / "reading"
 
     def audio(tx):
+        audio_folder = layout.for_subject(tx, ids["subject"], layout.AUDIO)
         verified = {}
         for key, topic_id in topic_ids.items():
             rows = [p for p in tx.find("passages", topic_id=topic_id) if p["status"] == "verified"]
@@ -607,7 +612,7 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                 continue
             tracks, missing = [], []
             for track in manifest["tracks"]:
-                copied = copy_source_file(tx, source, track["src"], "Audio")
+                copied = copy_source_file(tx, source, track["src"], audio_folder)
                 if not copied:
                     missing.append(track["src"])
                     continue
@@ -623,7 +628,7 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
                             "passageHash": passages.passage_sha256(verified[match]["passage"]) if synchronized
                             else f"legacy:{manifest['passageHash']}",
                             "generatedAt": manifest.get("generatedAt"), "tracks": tracks}
-            manifest_path, _ = tx.add_blob(json.dumps(new_manifest).encode(), "Audio",
+            manifest_path, _ = tx.add_blob(json.dumps(new_manifest).encode(), audio_folder,
                                            f"migrated-{path.name}", "application/json")
             tx.insert("audio_tracks", {
                 "id": f"history:{path.stem}", "topic_id": topic_ids[key], "provider": "google-neural2",
@@ -638,12 +643,13 @@ def import_history(store, source: Path, report: Report, *, create_unmatched: boo
         if eleven:
             parts = []
             for part in eleven:
-                path, sha = copy_source_file(tx, source, f"assets/reading/{part.name}", "Audio")
+                path, sha = copy_source_file(tx, source, f"assets/reading/{part.name}", audio_folder)
                 parts.append({"path": path, "sha256": sha, "mime": "audio/mpeg"})
             if parts:
                 manifest_path, _ = tx.add_blob(json.dumps({"version": 2, "provider": "ElevenLabs", "tracks": parts,
                                                          "note": "Preserved legacy audio; never regenerate"}).encode(),
-                                             "Audio", "migrated-robin-hood-elevenlabs-manifest.json", "application/json")
+                                             audio_folder, "migrated-robin-hood-elevenlabs-manifest.json",
+                                             "application/json")
                 tx.insert("audio_tracks", {
                     "id": "history:robin-hood-elevenlabs", "topic_id": topic_ids["C19-T03"], "provider": "elevenlabs",
                     "voice": "ElevenLabs (Robin Hood)", "manifest_path": manifest_path, "status": "legacy",

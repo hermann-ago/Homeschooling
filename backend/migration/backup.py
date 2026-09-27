@@ -4,11 +4,11 @@
     python -m migration.backup verify [<backup.sqlite3>]
 
 A backup is an integrity-checked copy of the SQLite database written to the
-Homeschooling folder's ``Backups`` (Google Drive keeps it off the computer) and
-to %LOCALAPPDATA%\\Homeschooling\\backups. ``verify`` opens a copy of a backup on
-its own, never the live database, and compares its row counts with the live
+Homeschooling folder's ``_App Backups`` (Google Drive keeps it off the computer)
+and to the project's data\\backups. ``verify`` opens a copy of a backup on its
+own, never the live database, and compares its row counts with the live
 database. To restore, stop the server and copy the backup over
-%LOCALAPPDATA%\\Homeschooling\\homeschooling.sqlite3 (keep the old file).
+data\\homeschooling.sqlite3 in the project folder (keep the old file).
 """
 from __future__ import annotations
 
@@ -17,12 +17,13 @@ import json
 from pathlib import Path
 
 from storage.backups import create_backup, verify_restore
+from storage.layout import BACKUPS
 
 
 def find_backup(context, name: str | None) -> Path | None:
     folders = [context.config.backup_dir]
     if context.files.available:
-        folders.insert(0, context.files.root / "Backups")
+        folders.insert(0, context.files.root / BACKUPS)
     if name and Path(name).is_file():
         return Path(name)
     candidates = sorted((p for folder in folders if folder.exists() for p in folder.glob("homeschooling-*.sqlite3")),

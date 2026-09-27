@@ -20,7 +20,7 @@ import re
 import threading
 from datetime import date, datetime, timedelta, timezone
 
-from storage import StoreError
+from storage import StoreError, layout
 
 from . import audio as audio_mod
 from . import passages
@@ -425,7 +425,8 @@ class TutorService:
         if not mime_type.startswith("image/") and mime_type != "application/pdf":
             raise TutorError("Attach a photo or PDF of the learner's work")
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", filename)[:80] or "work.jpg"
-        path, sha = tx.add_blob(data, "Student Work", f"{session_id}-{safe}", mime_type)
+        path, sha = tx.add_blob(data, layout.for_session(tx, session_id, layout.STUDENT_WORK), f"{session_id}-{safe}",
+                                mime_type)
         number = len(tx.find("evidence_files", session_id=session_id)) + 1
         row = tx.insert("evidence_files", {"id": f"{session_id}-E{number}", "child_id": session["child_id"],
                                            "session_id": session_id, "file_path": path, "sha256": sha,

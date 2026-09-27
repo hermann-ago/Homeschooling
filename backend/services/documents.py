@@ -6,6 +6,8 @@ import io
 
 from pypdf import PdfReader
 
+from storage import layout
+
 MAX_PDF_BYTES = 262_144_000
 
 
@@ -26,13 +28,17 @@ def find_by_checksum(db, sha256: str) -> dict | None:
     return next((d for d in db.all("documents") if d["sha256"] == sha256), None)
 
 
-def add_uploaded_document(tx, data: bytes, filename: str, page_count: int) -> dict:
-    """Save the book into Books (Drive for desktop uploads it); reuse an identical book."""
+def add_uploaded_document(tx, data: bytes, filename: str, page_count: int, subject_id: int) -> dict:
+    """Save the book into the subject's Books folder (Drive for desktop uploads it).
+
+    An identical book already in the app is reused where it is, even if another
+    child's subject added it first.
+    """
     sha = hashlib.sha256(data).hexdigest()
     existing = find_by_checksum(tx, sha)
     if existing:
         return existing
-    path, sha = tx.add_blob(data, "Books", filename, "application/pdf")
+    path, sha = tx.add_blob(data, layout.for_subject(tx, subject_id, layout.BOOKS), filename, "application/pdf")
     return tx.insert("documents", {"file_path": path, "original_filename": filename, "size_bytes": len(data),
                                    "page_count": page_count, "sha256": sha, "source": "uploaded"})
 

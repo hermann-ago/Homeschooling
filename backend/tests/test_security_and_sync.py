@@ -85,7 +85,7 @@ def test_parent_can_back_up_and_export_from_settings(harness):
     harness.call("POST", "/api/children", json={"name": "Lucas"})
     backup = harness.call("POST", "/api/storage/backup").json()
     assert backup["counts"]["children"] == 1
-    assert (harness.drive / "Backups" / backup["name"]).exists()
+    assert (harness.drive / "_App Backups" / backup["name"]).exists()
     export = harness.call("POST", "/api/storage/export").json()
     assert (harness.drive / export["path"]).exists()
     status = harness.call("GET", "/api/storage/status").json()

@@ -3,9 +3,9 @@
 * Timings come only from the provider (Google TTS SSML-mark timepoints) or from
   validated cached manifests. Tracks whose passage hash or sentence count do not
   match are played, if at all, without highlighting; timings are never guessed.
-* Every generation reserves characters in the shared HomeTutor ledger at
-  ``%LOCALAPPDATA%\\HomeTutor\\google\\<project>\\usage.json`` (the file the
-  History tools already use). The monthly guard is 150,000 characters; going
+* Every generation reserves characters in the shared narration ledger at
+  ``data\\home-tutor\\google\\<project>\\usage.json`` in the project folder
+  (one ledger for every subject). The monthly guard is 150,000 characters; going
   over it requires an explicit parent approval for that request.
 * A reservation for a request whose outcome is uncertain stays counted and is
   never retried automatically.
@@ -23,6 +23,8 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+from storage import layout
 
 MONTHLY_LIMIT = 150_000
 DEFAULT_VOICE = "en-US-Neural2-J"
@@ -213,6 +215,7 @@ def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, en
     if dry_run:
         return {**estimate, "dry_run": True}
     engine = engine or GoogleTTS(project)
+    folder = layout.for_topic(tx, topic["id"], layout.AUDIO)
     tracks = []
     for part, (first, count, ssml, part_characters) in enumerate(chunks, start=1):
         request_id = f"{key[:24]}-part-{part}"
@@ -229,13 +232,13 @@ def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, en
         starts = [marks[f"s{index}"] for index in range(first, first + count)]
         audio = base64.b64decode(response["audioContent"])
         name = f"narration-{key[:24]}-google-neural2-part-{part}.mp3"
-        path, sha = tx.add_blob(audio, "Audio", name, "audio/mpeg")
+        path, sha = tx.add_blob(audio, folder, name, "audio/mpeg")
         ledger.mark(month, request_id, "completed")
         tracks.append({"path": path, "sha256": sha, "startSentence": first, "sentenceStarts": starts})
     manifest = {"version": 2, "cacheKey": key, "provider": "Google Cloud Text-to-Speech", "voice": voice,
                 "speakingRate": rate, "characterCount": characters, "sentenceCount": len(sentences),
                 "passageHash": passage["passage_sha256"], "generatedAt": _now(), "tracks": tracks}
-    manifest_path, _ = tx.add_blob(json.dumps(manifest).encode(), "Audio", f"narration-{key[:24]}-manifest.json",
+    manifest_path, _ = tx.add_blob(json.dumps(manifest).encode(), folder, f"narration-{key[:24]}-manifest.json",
                                  "application/json")
     values = {"topic_id": topic["id"], "passage_sha256": passage["passage_sha256"], "provider": "google-neural2",
               "voice": voice, "speaking_rate": rate, "manifest_path": manifest_path, "status": "ready",

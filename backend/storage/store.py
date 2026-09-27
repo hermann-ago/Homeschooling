@@ -9,9 +9,9 @@ the only writer, so a committed change is saved; there is no sync queue.
 Operation IDs make retries safe: a repeated operation ID is recognised from
 its receipt instead of being applied twice.
 
-The database file lives under %LOCALAPPDATA%\\Homeschooling (never in a synced
+The database file lives in the project's ``data`` folder (never in a synced
 folder, where syncing a live SQLite file can corrupt it). Verified backups are
-copied into the Drive folder's Backups folder.
+copied into the Drive folder's ``_App Backups`` folder.
 """
 from __future__ import annotations
 
