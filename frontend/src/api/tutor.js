@@ -6,6 +6,9 @@ export const tutorApi = {
     if (session) params.set('session', session);
     return fetchApi(`/tutor/reader?${params}`);
   },
+  buildNarration: (learner, topic, dryRun = true) => fetchApi('/tutor/reader/narration', {
+    method: 'POST', body: JSON.stringify({ learner: Number(learner), topic: Number(topic), dry_run: dryRun }),
+  }),
   readerState: (session) => fetchApi(`/tutor/reader/${encodeURIComponent(session)}/state`),
   audioManifest: (trackId) => fetchApi(`/tutor/audio/${encodeURIComponent(trackId)}/manifest`),
   audioPart: async (trackId, index) => {

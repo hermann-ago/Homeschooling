@@ -13,7 +13,7 @@ const DEVICE = 'device';
  * per-sentence events. Tracks without verified timings play without
  * highlighting and say so.
  */
-export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex, disabled }) {
+export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex, disabled, language = 'en-US' }) {
   const sentences = passage?.sentences || [];
   const usable = (tracks || []).filter((t) => t.status === 'ready' || t.status === 'legacy');
   const [source, setSource] = useState(() => usable.find((t) => t.synchronized)?.track_id || usable[0]?.track_id || DEVICE);
@@ -84,7 +84,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
       speechIndex.current = index;
       const utterance = new SpeechSynthesisUtterance(sentences[index].text);
       utterance.rate = speed;
-      utterance.lang = 'en-US';
+      utterance.lang = language;
       utterance.onstart = () => onActiveIndex(index); // the device reports when this sentence starts
       utterance.onend = () => {
         if (speechIndex.current === index) speakRef.current?.(index + 1);
@@ -93,7 +93,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
       window.speechSynthesis.speak(utterance);
       setPlaying(true);
     };
-  }, [onActiveIndex, sentences, speed, stopSpeech]);
+  }, [language, onActiveIndex, sentences, speed, stopSpeech]);
 
   const seekTo = (index) => {
     onActiveIndex(index);

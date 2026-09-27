@@ -416,6 +416,7 @@ const Curriculum = ({ activeChildId }) => {
                                         )}
                                         onClick={() => setSelectedTopicForViewer({
                                           id: topic.id,
+                                          topic_id: topic.id,
                                           document_id: topic.document_id,
                                           page_from: topic.page_start,
                                           page_to: topic.page_end,

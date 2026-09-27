@@ -133,6 +133,9 @@ def load(ctx, topic: dict) -> dict:
     document = store.get("documents", topic["document_id"]) if topic.get("document_id") else None
     if document is None:
         return student_package(topic, None, {"passage": ""}, NEEDS_REVIEW, ["This topic has no linked book"])
+    if not document.get("file_path"):
+        return student_package(topic, document, {"passage": ""}, NEEDS_REVIEW,
+                               ["The book's file is missing from the Homeschooling folder"])
     pdf_start, pdf_end = pdf_range(topic)
     rows = [r for r in store.find("passages", topic_id=topic["id"]) if r["status"] == VERIFIED]
     for row in sorted(rows, key=lambda r: r["reviewed_at"] or r["updated_at"], reverse=True):

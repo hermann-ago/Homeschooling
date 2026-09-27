@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Headphones, X } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
 import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
@@ -149,9 +149,18 @@ const PageViewer = ({ slot, childId, onClose, highlightSentence = null, requeste
           <p className="text-xs text-text-secondary truncate">{slot.topic_title || `Assigned pages ${start}-${end}`}</p>
         </div>
         {!hideClose && (
-          <button type="button" aria-label="Close PDF viewer" onClick={closeViewer} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-200 flex-shrink-0">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {slot.topic_id && childId && (
+              <a href={`/lesson?${new URLSearchParams({ learner: childId, topic: slot.topic_id })}`}
+                className="h-11 px-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-sky-700 hover:bg-sky-50">
+                <Headphones className="w-5 h-5" />
+                Read along
+              </a>
+            )}
+            <button type="button" aria-label="Close PDF viewer" onClick={closeViewer} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-200">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         )}
       </div>
 

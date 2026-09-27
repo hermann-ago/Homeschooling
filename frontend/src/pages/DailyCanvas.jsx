@@ -304,6 +304,7 @@ const DailyCanvas = ({ activeChildId }) => {
                             {insert.insert_document_id && (
                               <div style={{ height: '420px' }}>
                                 <PageViewer slot={{
+                                  topic_id: insert.insert_topic_id,
                                   document_id: insert.insert_document_id,
                                   page_from: insert.insert_page_start,
                                   page_to: insert.insert_page_end,

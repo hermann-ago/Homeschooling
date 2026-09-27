@@ -1,5 +1,7 @@
-"""Narration for reviewed passages.
+"""Narration for lesson passages, reviewed or drafted automatically from the book.
 
+* A track belongs to the exact passage text it was generated for (its hash), so
+  the reader, the app and the tutor all reuse it until that text changes.
 * Timings come only from the provider (Google TTS SSML-mark timepoints) or from
   validated cached manifests. Tracks whose passage hash or sentence count do not
   match are played, if at all, without highlighting; timings are never guessed.
@@ -28,6 +30,7 @@ from storage import layout
 
 MONTHLY_LIMIT = 150_000
 DEFAULT_VOICE = "en-US-Neural2-J"
+DEFAULT_VOICES = {"en-US": DEFAULT_VOICE, "pt-BR": "pt-BR-Neural2-A"}
 DEFAULT_RATE = 0.9
 MAX_SSML_BYTES = 4800
 TTS_URL = "https://texttospeech.googleapis.com/v1beta1/text:synthesize"
@@ -124,6 +127,11 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def language_for(subject_name: str | None) -> str:
+    """The narration language of a subject: Portuguese subjects are read in Brazilian Portuguese."""
+    return "pt-BR" if "portug" in (subject_name or "").lower() else "en-US"
+
+
 def month_key(moment: datetime | None = None) -> str:
     return (moment or datetime.now(timezone.utc)).strftime("%Y-%m")
 
@@ -196,9 +204,9 @@ class GoogleTTS:
 
 def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, engine=None,
              overage_approval: dict | None = None, dry_run: bool = False) -> dict:
-    """Generate one narrator for a verified passage, reusing a validated cache."""
-    if passage["status"] != "verified":
-        raise ValueError("Review the passage against the original pages before generating narration")
+    """Generate one narrator for a passage, reusing a validated cache."""
+    if not passage["sentences"]:
+        raise ValueError("This lesson has no text to narrate")
     key = cache_key(passage["passage_sha256"], "google-neural2", voice, rate)
     existing = tx.get("audio_tracks", key)
     if existing and existing["status"] == "ready":

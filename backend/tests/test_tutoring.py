@@ -157,30 +157,29 @@ def test_passage_respects_partial_page_boundaries(harness):
     assert package["passage"].startswith("Genghis Khan, Emperor of All Men")
     assert "He was allowed to stay" not in package["passage"]
     assert "Kublai" not in package["passage"] and "One man spoke up." in package["passage"]
-    assert package["status"] == "needs_review"  # drafts never feed narration
+    assert package["status"] == "needs_review"
     assert package["pdf_pages"] == {"start": 2, "end": 3}
 
 
-def test_narration_requires_review_and_guards_monthly_characters(harness, tmp_path, monkeypatch):
+class FakeTTS:
+    """Google TTS stand-in: one fake MP3 per request and a timepoint for every sentence mark."""
+    def synthesize(self, ssml, voice, rate):
+        import base64
+        import re
+        marks = re.findall(r'<mark name="(s\d+)"/>', ssml)
+        return {"audioContent": base64.b64encode(b"ID3fake").decode(),
+                "timepoints": [{"markName": m, "timeSeconds": i * 2.5} for i, m in enumerate(marks)]}
+
+
+def test_narration_guards_monthly_characters(harness, tmp_path, monkeypatch):
     s = seed_history(harness)
     topic = harness.ctx.store.get("topics", s["genghis"]["id"])
     draft = passages.load(harness.ctx, topic)
-    blocked = harness.call("POST", "/api/tutor/audio/generate", role="tutor",
-                           json={"topic_id": topic["id"], "dry_run": False})
-    assert blocked.status_code == 400 and "Review" in blocked.json()["detail"]
     review = harness.call("POST", f"/api/tutor/passages/{topic['id']}/review", role="tutor", json={
         "reviewed_pdf_pages": [2, 3], "notes": "Checked both pages", "passage_sha256": draft["passage_sha256"]})
     assert review.status_code == 200, review.text
     verified = passages.load(harness.ctx, topic)
     assert verified["status"] == "verified"
-
-    class FakeTTS:
-        def synthesize(self, ssml, voice, rate):
-            import base64
-            import re
-            marks = re.findall(r'<mark name="(s\d+)"/>', ssml)
-            return {"audioContent": base64.b64encode(b"ID3fake").decode(),
-                    "timepoints": [{"markName": m, "timeSeconds": i * 2.5} for i, m in enumerate(marks)]}
 
     ledger_root = tmp_path / "HomeTutor"
     monkeypatch.setattr("config.home_tutor_dir", lambda: ledger_root)
@@ -199,6 +198,56 @@ def test_narration_requires_review_and_guards_monthly_characters(harness, tmp_pa
     assert tracks[0]["synchronized"] is True and tracks[0]["voice"] == "en-US-Neural2-J"
     manifest = harness.call("GET", f"/api/tutor/audio/{tracks[0]['track_id']}/manifest", role="learner").json()
     assert manifest["tracks"][0]["sentenceStarts"][:2] == [0.0, 2.5]
+
+
+def test_any_device_builds_a_lessons_voice_that_the_tutor_reuses(harness, tmp_path, monkeypatch):
+    s = seed_history(harness)
+    topic = harness.ctx.store.get("topics", s["genghis"]["id"])
+    monkeypatch.setattr("config.home_tutor_dir", lambda: tmp_path / "HomeTutor")
+    monkeypatch.setattr(audio_mod, "GoogleTTS", lambda project: FakeTTS())
+    body = {"learner": s["lucas"]["id"], "topic": topic["id"]}
+    estimate = harness.call("POST", "/api/tutor/reader/narration", role="learner", json=body)
+    assert estimate.status_code == 200, estimate.text
+    assert estimate.json()["dry_run"] is True and estimate.json()["characters"] > 0
+    assert harness.ctx.store.find("audio_tracks", topic_id=topic["id"]) == []
+    built = harness.call("POST", "/api/tutor/reader/narration", role="learner", json={**body, "dry_run": False})
+    assert built.status_code == 200, built.text
+    assert built.json()["reused"] is False
+    reader = harness.call("GET", "/api/tutor/reader", role="learner", params=body).json()
+    assert reader["passage"]["status"] == "needs_review"  # built from the unreviewed book text
+    assert [t["synchronized"] for t in reader["audio"]] == [True]
+    tutor = harness.call("POST", "/api/tutor/audio/generate", role="tutor",
+                         json={"topic_id": topic["id"], "dry_run": False})
+    assert tutor.json()["reused"] is True and tutor.json()["track_id"] == reader["audio"][0]["track_id"]
+    other = harness.call("POST", "/api/tutor/reader/narration", role="learner",
+                         json={"learner": s["lucas"]["id"] + 99, "topic": topic["id"]})
+    assert other.status_code == 400
+
+
+def test_portuguese_lessons_are_read_in_portuguese(harness):
+    s = seed_history(harness)
+    topic = harness.ctx.store.get("topics", s["genghis"]["id"])
+    with harness.ctx.store.transaction() as tx:
+        tx.update("subjects", topic["subject_id"], {"name": "Português"})
+        tx.insert("preferences", {"id": f"{s['lucas']['id']}:narrator", "child_id": s["lucas"]["id"],
+                                  "key": "narrator", "value": {"voice": "en-US-Neural2-J", "rate": 0.9}})
+    body = {"learner": s["lucas"]["id"], "topic": topic["id"]}
+    reader = harness.call("GET", "/api/tutor/reader", role="learner", params=body).json()
+    assert reader["language"] == "pt-BR"
+    estimate = harness.call("POST", "/api/tutor/reader/narration", role="learner", json=body).json()
+    assert estimate["voice"] == "pt-BR-Neural2-A" and estimate["rate"] == 0.9  # the English preference is skipped
+
+
+def test_reader_explains_a_missing_book_file(harness):
+    s = seed_history(harness)
+    topic = harness.ctx.store.get("topics", s["genghis"]["id"])
+    with harness.ctx.store.transaction() as tx:
+        tx.update("documents", topic["document_id"], {"file_path": None})
+    reader = harness.call("GET", "/api/tutor/reader", role="learner",
+                          params={"learner": s["lucas"]["id"], "topic": topic["id"]})
+    assert reader.status_code == 200
+    assert reader.json()["passage"]["sentences"] == []
+    assert "missing" in reader.json()["passage"]["issues"][0]
 
 
 def test_reader_and_audio_never_complete_the_lesson_and_finish_needs_next_topic(harness):

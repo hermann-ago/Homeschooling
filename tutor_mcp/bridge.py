@@ -218,8 +218,9 @@ TOOLS = {
                        _schema({"topic_id": INT, "reviewed_pdf_pages": {"type": "array", "items": INT},
                                 "notes": STR, "passage": STR, "passage_sha256": STR, "operation_id": OPERATION},
                                ("topic_id", "reviewed_pdf_pages", "notes", "operation_id")), None),
-    "narration": ("Estimate (dry_run true, default) or generate one narrator for a reviewed passage. Respects the "
-                  "shared 150,000-character monthly guard; overage needs a parent.",
+    "narration": ("Estimate (dry_run true, default) or generate one narrator for the lesson's passage; a voice already "
+                  "built for the same text (for example from the app's reader) is reused. Respects the shared "
+                  "150,000-character monthly guard; overage needs a parent.",
                   _schema({"topic_id": INT, "dry_run": {"type": "boolean"}, "voice": STR,
                            "operation_id": OPERATION}, ("topic_id", "operation_id")), None),
     "save_preference": ("Save a preference the learner or parent confirmed (e.g. narrator).",

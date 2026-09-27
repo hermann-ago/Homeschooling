@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getDocument } from 'pdfjs-dist';
+import { ArrowLeft } from 'lucide-react';
 import PageViewer from '../components/PageViewer';
 import ReadAlong from '../components/ReadAlong';
+import VoiceBuilder from '../components/VoiceBuilder';
 import { getDocumentData } from '../api/documents';
 import { tutorApi } from '../api/tutor';
 import { locateSentences } from '../utils/readAlong';
@@ -19,10 +21,10 @@ async function pageTexts(documentId, start, end) {
 }
 
 /**
- * The lesson reader opened by the tutor: /lesson?learner=&topic=&session=.
- * It shows the original PDF pages (layout, maps, illustrations), the exact
- * assigned boundaries, handwriting tools and the read-along passage. Opening
- * it or finishing the audio never completes the lesson.
+ * The lesson reader: /lesson?learner=&topic=, plus &session= when the tutor
+ * opens it for a lesson. It shows the original PDF pages (layout, maps,
+ * illustrations), the exact assigned boundaries, handwriting tools and the
+ * read-along passage. Opening it or finishing the audio never completes the lesson.
  */
 export default function LessonReader() {
   const [params] = useSearchParams();
@@ -34,8 +36,9 @@ export default function LessonReader() {
   const [activeIndex, setActiveIndex] = useState(null);
   const [sentencePages, setSentencePages] = useState([]);
   const [closed, setClosed] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!learner || !topic) {
       setError('This lesson link is incomplete.');
       return;
@@ -45,6 +48,8 @@ export default function LessonReader() {
       setClosed(data.reader_state === 'closed');
     }).catch((e) => setError(e.message.replace(/^\/[^:]+: /, '')));
   }, [learner, topic, session]);
+
+  useEffect(load, [load]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -71,6 +76,9 @@ export default function LessonReader() {
   if (!lesson) return <main className="min-h-screen grid place-items-center">Opening the lesson…</main>;
 
   const reviewed = passage.status === 'verified';
+  const hasText = passage.sentences.length > 0;
+  const voiceReady = lesson.audio.some((t) => t.synchronized);
+  const goBack = () => (window.history.length > 1 ? navigate(-1) : navigate('/'));
   const boundary = [
     passage.start_at && `Start at “${passage.start_at}” (book page ${passage.printed_pages.start}).`,
     passage.stop_before && `Stop before “${passage.stop_before}” (book page ${passage.printed_pages.end}).`,
@@ -80,12 +88,25 @@ export default function LessonReader() {
   return (
     <div className="h-screen flex flex-col bg-background">
       <header className="px-4 py-3 border-b bg-surface flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs text-text-secondary">{lesson.learner.name} · {lesson.subject_name}</p>
-          <h1 className="font-bold truncate">{passage.title}</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          {!session && (
+            <button type="button" onClick={goBack} aria-label="Back"
+              className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 flex-shrink-0">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
+          <div className="min-w-0">
+            <p className="text-xs text-text-secondary">{lesson.learner.name} · {lesson.subject_name}</p>
+            <h1 className="font-bold truncate">{passage.title}</h1>
+          </div>
         </div>
-        {!reviewed && (
-          <p className="text-xs text-amber-800 max-w-xs">Read from the book pages. The tutor has not checked the extracted text yet, so read-along is off.</p>
+        {!hasText && (
+          <p className="text-xs text-amber-800 max-w-xs">
+            {(passage.issues?.[0] || 'This lesson has no text to read along with').replace(/\.$/, '')}, so read-along is not available.
+          </p>
+        )}
+        {hasText && !reviewed && (
+          <p className="text-xs text-text-secondary max-w-xs">The text was taken from the book automatically. If anything looks different, follow the book pages.</p>
         )}
       </header>
       {closed && (
@@ -96,13 +117,16 @@ export default function LessonReader() {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         <div className="flex-1 min-h-0 min-w-0">
           <PageViewer slot={slot} childId={Number(learner)} hideClose boundaryNote={boundary}
-            highlightSentence={reviewed ? highlight : null}
+            highlightSentence={hasText ? highlight : null}
             requestedPage={activeIndex !== null ? sentencePages[activeIndex] : null} />
         </div>
-        {reviewed && (
-          <aside className="lg:w-[380px] h-72 lg:h-auto border-t lg:border-t-0 lg:border-l bg-surface min-h-0" aria-label="Read along">
-            <ReadAlong passage={passage} tracks={lesson.audio} activeIndex={activeIndex} onActiveIndex={setActiveIndex}
-              disabled={closed} />
+        {hasText && (
+          <aside className="lg:w-[380px] h-72 lg:h-auto border-t lg:border-t-0 lg:border-l bg-surface min-h-0 flex flex-col" aria-label="Read along">
+            {!voiceReady && !closed && <VoiceBuilder learner={learner} topic={topic} onBuilt={load} />}
+            <div className="flex-1 min-h-0">
+              <ReadAlong key={lesson.audio.map((t) => t.track_id).join()} passage={passage} tracks={lesson.audio}
+                activeIndex={activeIndex} onActiveIndex={setActiveIndex} disabled={closed} language={lesson.language} />
+            </div>
           </aside>
         )}
       </div>

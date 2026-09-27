@@ -237,16 +237,29 @@ def generate_audio(payload: AudioRequest, device: Device = Depends(current_devic
     if payload.approve_overage_characters and not device.is_parent:
         raise HTTPException(status_code=403, detail="Only a parent can approve paid narration overage")
     topic = get_or_404(store(), "topics", payload.topic_id, "Topic")
-    package = passages.load(context(), topic)
-    tts = context().config.get("tts", {})
-    preferred = next((p["value"] for p in store().find("preferences", child_id=store().get(
-        "subjects", topic["subject_id"])["child_id"]) if p["key"] == "narrator"), None) or {}
-    voice = payload.voice or preferred.get("voice") or tts.get("voice") or audio_mod.DEFAULT_VOICE
-    rate = payload.speaking_rate or preferred.get("rate") or tts.get("rate") or audio_mod.DEFAULT_RATE
+    voice, rate = _narrator(topic, payload.voice, payload.speaking_rate)
     approval = ({"approved_by_parent": True, "extra_characters": payload.approve_overage_characters,
                  "device": device.name} if payload.approve_overage_characters else None)
+    return _generate(topic, voice, rate, payload.dry_run, approval)
+
+
+def _narrator(topic: dict, voice: str | None = None, rate: float | None = None) -> tuple[str, float]:
+    """The requested voice, else the learner's confirmed narrator preference, else the host default,
+    keeping only voices in the subject's language."""
+    subject = store().get("subjects", topic["subject_id"])
+    language = audio_mod.language_for(subject["name"])
+    tts = context().config.get("tts", {})
+    preferred = next((p["value"] for p in store().find("preferences", child_id=subject["child_id"])
+                      if p["key"] == "narrator"), None) or {}
+    same_language = [v for v in (preferred.get("voice"), tts.get("voice")) if v and v.startswith(language)]
+    return (voice or next(iter(same_language), audio_mod.DEFAULT_VOICES[language]),
+            rate or preferred.get("rate") or tts.get("rate") or audio_mod.DEFAULT_RATE)
+
+
+def _generate(topic: dict, voice: str, rate: float, dry_run: bool, approval: dict | None = None) -> dict:
+    package = passages.load(context(), topic)
     try:
-        if payload.dry_run:
+        if dry_run:
             return audio_mod.generate(context(), store_tx_readonly(), topic, package, voice=voice, rate=rate,
                                       dry_run=True)
         with write("tutor.audio", f"Narration for {topic['title']}") as tx:
@@ -268,6 +281,25 @@ def store_tx_readonly():
 @router.get("/reader", dependencies=[Depends(require_member)])
 def reader(learner: int, topic: int, session: str | None = None):
     return service().reader(learner, topic, session)
+
+
+class ReaderNarrationRequest(BaseModel):
+    learner: int
+    topic: int
+    dry_run: bool = True
+
+
+@router.post("/reader/narration", dependencies=[Depends(require_member)])
+def reader_narration(payload: ReaderNarrationRequest):
+    """Estimate (default) or build the lesson's read-along voice from any paired device.
+
+    It stays within the monthly guard; only a parent can approve paid overage (see /audio/generate).
+    """
+    topic = get_or_404(store(), "topics", payload.topic, "Topic")
+    if store().get("subjects", topic["subject_id"])["child_id"] != payload.learner:
+        raise HTTPException(status_code=400, detail="This lesson is not assigned to that learner")
+    voice, rate = _narrator(topic)
+    return _generate(topic, voice, rate, payload.dry_run)
 
 
 @router.get("/reader/{session_id}/state", dependencies=[Depends(require_member)])

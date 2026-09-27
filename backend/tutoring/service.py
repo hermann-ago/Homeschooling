@@ -526,7 +526,8 @@ class TutorService:
                 raise TutorError("This reader link does not match the lesson")
         package = passages.load(self.ctx, topic)
         return {"learner": {"child_id": child_id, "name": self.store.get("children", child_id)["name"]},
-                "subject_name": subject["name"], "session_id": session_id,
+                "subject_name": subject["name"], "language": audio_mod.language_for(subject["name"]),
+                "session_id": session_id,
                 "reader_state": self.reader_state(session_id) if session_id else "open",
                 "passage": package, "audio": self.audio_tracks(topic, package)}
 

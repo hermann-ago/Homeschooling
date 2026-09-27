@@ -7,11 +7,12 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
 ## What it does
 
 - **Family app:** Today, Weekly, Daily Canvas, Curriculum, Progress, Calendar and Settings. It covers scheduling across children and subjects, completion tracking with timestamps, AI enrichment (quiz, summary, key terms, simple explanation) and handwriting on PDF pages.
-- **Lesson reader:** open it at `/lesson?learner=…&topic=…&session=…`.
+- **Lesson reader:** open it with **Read along** on any lesson's pages, or at `/lesson?learner=…&topic=…` (the tutor adds `&session=…`).
   - It shows the original PDF pages, so layouts, maps and illustrations stay intact.
   - It marks the assigned start and stop headings, including lessons that begin or end partway down a page.
   - It includes the handwriting tools.
   - It has a read-along panel with play, pause, replay, speed and sentence highlighting. The highlighting follows real timing data only: Google TTS timepoints or the device voice's own events. Nothing is estimated.
+  - **Create read-along voice** builds a Google voice for the lesson from any device, within the monthly character guard. It is saved with the lesson and reused by every device and the tutor.
 - **Tutoring records:** sessions, handwritten attempts (first answer, help and revision kept separately), reviews, checkpoints and assignments. They sit in the same database as the rest of the app. Teacher-only keys and grading evidence never reach learner devices.
 - **Safe saving:** each change is one SQLite transaction with an operation receipt, committed before the reply, so it works without internet. Retries with the same key never duplicate records, and edits based on an old revision are refused instead of overwriting newer work. Files are written into the Drive folder before any record refers to them.
 - **Backups:** a verified copy of the database goes to the folder's `_App Backups` every day and whenever the server stops (the newest 30 are kept). A read-only Excel copy of the records, without answer keys, is written next to it.
