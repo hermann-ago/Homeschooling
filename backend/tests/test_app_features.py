@@ -130,6 +130,29 @@ def test_lesson_lists_pages_added_from_other_books_in_order(harness):
     assert harness.call("GET", "/api/canvas/inserts/99999").status_code == 404
 
 
+def test_books_are_revalidated_by_checksum_and_only_text_is_compressed(harness):
+    child, _, document = seed(harness)
+    first = harness.call("GET", f"/api/documents/{document['id']}/content")
+    assert first.status_code == 200 and first.content.startswith(b"%PDF")
+    assert first.headers["etag"] == f'"{document["sha256"]}"'
+    assert "content-encoding" not in first.headers  # book bytes pass through as they are
+    again = harness.client.get(f"/api/documents/{document['id']}/content", headers={"If-None-Match": first.headers["etag"]})
+    assert again.status_code == 304 and again.content == b""
+    listing = harness.client.get(f"/api/checklist/{child['id']}/week", headers={"Accept-Encoding": "gzip"})
+    assert listing.status_code == 200
+
+
+def test_json_responses_are_gzipped_when_large(harness):
+    _, subject, _ = seed(harness)
+    with harness.ctx.store.transaction() as tx:
+        for n in range(60):
+            tx.insert("topics", {"subject_id": subject["id"], "title": f"Chapter {n} with a longer title",
+                                 "page_start": n, "page_end": n})
+    response = harness.client.get(f"/api/subjects/{subject['id']}/topics", headers={"Accept-Encoding": "gzip"})
+    assert response.status_code == 200 and response.headers.get("content-encoding") == "gzip"
+    assert len(response.json()) == 60
+
+
 def stroke(color="#1D4ED8"):
     return {"id": str(uuid4()), "color": color, "width": 0.004, "points": [[0.1, 0.2], [0.3, 0.4]]}
 

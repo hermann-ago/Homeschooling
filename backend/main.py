@@ -1,6 +1,7 @@
 """Homeschooling home server: one process serving the API and the built frontend."""
 import logging
 import os
+import re
 import sys
 import traceback
 from contextlib import asynccontextmanager
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from dependencies import IdempotencyMiddleware, context, set_context
 from routers import annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, \
@@ -30,6 +32,32 @@ def _keep_host_awake(enable: bool):
     import ctypes
     ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
     ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if enable else 0))
+
+
+class CompressText:
+    """Gzip text responses (the app's script, JSON). PDFs and audio are compressed already, and books can be
+    large, so their bytes pass through untouched."""
+
+    SKIP = re.compile(r"^/api/(documents/\d+/content|tutor/audio/[^/]+/parts/)")
+
+    def __init__(self, app):
+        self.app = app
+        self.gzip = GZipMiddleware(app, minimum_size=1024)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and not self.SKIP.match(scope["path"]):
+            return await self.gzip(scope, receive, send)
+        return await self.app(scope, receive, send)
+
+
+class LongCachedAssets(StaticFiles):
+    """Built assets carry a content hash in their names, so browsers may keep them for a year."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 def create_app(app_context=None) -> FastAPI:
@@ -53,6 +81,7 @@ def create_app(app_context=None) -> FastAPI:
     app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(PrivateNetworkMiddleware,
                        extra_hosts=(app_context.config.get("allowed_hosts") if app_context else ()) or ())
+    app.add_middleware(CompressText)
 
     app.include_router(system.router, prefix="/api", tags=["System"])
     app.include_router(children.router, prefix="/api/children", tags=["Children"])
@@ -98,7 +127,7 @@ def create_app(app_context=None) -> FastAPI:
         return {"message": "Homeschooling home server"}
 
     if FRONTEND_DIST.exists():
-        app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
+        app.mount("/assets", LongCachedAssets(directory=FRONTEND_DIST / "assets"), name="assets")
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):

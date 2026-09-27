@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from dependencies import context, require_family, store
@@ -34,13 +34,19 @@ def document_bytes(document: dict) -> bytes:
 
 
 @router.get("/{document_id:int}/content")
-def document_content(document_id: int):
-    """PDF bytes read from the synced Homeschooling folder."""
+def document_content(document_id: int, request: Request):
+    """PDF bytes read from the synced Homeschooling folder.
+
+    The book's checksum is its ETag, so a device that already has the book gets
+    a quick 304 without the file being read (or re-checked) again.
+    """
     document = get_or_404(store(), "documents", document_id, "Document")
-    data = document_bytes(document)
-    return Response(content=data, media_type="application/pdf", headers={
-        "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff",
-        "Content-Disposition": "inline"})
+    etag = f'"{document["sha256"]}"' if document.get("sha256") else None
+    headers = {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff",
+               "Content-Disposition": "inline", **({"ETag": etag} if etag else {})}
+    if etag and etag in request.headers.get("if-none-match", ""):
+        return Response(status_code=304, headers=headers)
+    return Response(content=document_bytes(document), media_type="application/pdf", headers=headers)
 
 
 @router.get("/drive/books", dependencies=[Depends(require_family)])
