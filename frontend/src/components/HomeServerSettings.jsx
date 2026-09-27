@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { systemApi } from '../api/system';
-import HostApprovals from './HostApprovals';
 import { useDevice } from './deviceContext';
 
 function clean(error) {
@@ -14,15 +13,13 @@ function backupTime(name) {
   return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)).toLocaleString();
 }
 
-/** Parent controls for the Drive folder, backups, narration usage and devices. */
+/** Controls for the Drive folder, backups and narration usage. */
 export default function HomeServerSettings() {
   const device = useDevice();
   const [storage, setStorage] = useState(null);
   const [folderPath, setFolderPath] = useState('');
-  const [devices, setDevices] = useState([]);
   const [usage, setUsage] = useState(null);
   const [message, setMessage] = useState('');
-  const isParent = device?.device?.role === 'parent';
   const isHost = Boolean(device?.host);
 
   const load = useCallback(() => {
@@ -30,15 +27,10 @@ export default function HomeServerSettings() {
       setStorage(next);
       setFolderPath((current) => current || next.drive_folder || '');
     }).catch(() => {});
-    if (isParent) {
-      systemApi.devices().then(setDevices).catch(() => {});
-      systemApi.narrationUsage().then(setUsage).catch(() => {});
-    }
-  }, [isParent]);
+    systemApi.narrationUsage().then(setUsage).catch(() => {});
+  }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  if (!isParent) return null;
 
   const run = async (action, success) => {
     setMessage('');
@@ -103,21 +95,6 @@ export default function HomeServerSettings() {
           <p className="text-sm text-text-secondary">{usage.characters.toLocaleString()} of {usage.monthly_limit.toLocaleString()} characters (shared by every subject).</p>
         </div>
       )}
-
-      <div className="space-y-2">
-        <h3 className="font-semibold">Paired devices</h3>
-        <ul className="text-sm divide-y">
-          {devices.map((d) => (
-            <li key={d.id} className="py-2 flex items-center justify-between">
-              <span>{d.name} <span className="text-text-secondary">· {d.role}</span></span>
-              {d.id !== device?.device?.id && (
-                <button type="button" onClick={() => window.confirm(`Remove ${d.name}?`) && run(() => systemApi.revokeDevice(d.id), 'Device removed.')} className="text-red-700 text-xs">Remove</button>
-              )}
-            </li>
-          ))}
-        </ul>
-        <HostApprovals compact />
-      </div>
 
       {message && <p className="text-sm" role="status">{message}</p>}
     </section>

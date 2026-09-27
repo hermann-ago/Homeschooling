@@ -24,7 +24,7 @@ class Harness:
         self.ctx = AppContext(self.config, start_worker=False)
         self.app = create_app(self.ctx)
         self.client = TestClient(self.app)
-        self.tokens = {role: self.ctx.devices.issue(f"test {role}", role) for role in ("parent", "learner", "tutor")}
+        self.tokens = {"tutor": self.ctx.devices.issue("test tutor", "tutor")}
 
     def add_file(self, data: bytes, relative: str) -> str:
         """Put a file into the test Drive folder, as Drive for desktop would."""
@@ -33,13 +33,14 @@ class Harness:
         path.write_bytes(data)
         return relative
 
-    def headers(self, role="parent", key=None):
-        headers = {"Authorization": f"Bearer {self.tokens[role]}"}
+    def headers(self, role="family", key=None):
+        """Family devices send no credential; only the tutor's bridge does."""
+        headers = {"Authorization": f"Bearer {self.tokens[role]}"} if role == "tutor" else {}
         if key:
             headers["Idempotency-Key"] = key
         return headers
 
-    def call(self, method, path, role="parent", key=None, **kwargs):
+    def call(self, method, path, role="family", key=None, **kwargs):
         return self.client.request(method, path, headers=self.headers(role, key), **kwargs)
 
     def restart(self):

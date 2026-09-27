@@ -165,7 +165,6 @@ def test_drive_folder_books_are_listed_and_linked_by_path(harness, monkeypatch):
     harness.add_file(make_pdf([["Chapter 1"], ["Chapter 2"]]), "Science/Book.pdf")
     books = harness.call("GET", "/api/documents/drive/books").json()
     assert {b["path"]: b["linked"] for b in books} == {"Books/language-arts.pdf": True, "Science/Book.pdf": False}
-    assert harness.call("GET", "/api/documents/drive/books", role="learner").status_code == 403
     r = harness.call("POST", f"/api/subjects/{subject['id']}/documents/from-drive", json={"path": "Science/Book.pdf"})
     assert r.status_code == 200, r.text
     linked = [d for d in harness.ctx.store.all("documents") if d["file_path"] == "Science/Book.pdf"]

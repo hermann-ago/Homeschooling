@@ -4,40 +4,51 @@ from security.network import allowed_host, is_private
 from storage import SAVED
 
 
-def test_pairing_requires_host_approval_and_issues_role_token(harness):
-    client = harness.client
-    request = client.post("/api/pairing/request", json={"device_name": "Kitchen tablet", "role": "learner"}).json()
-    assert client.post("/api/pairing/poll", json={"request_id": request["request_id"],
-                                                  "poll_secret": request["poll_secret"]}).json()["status"] == "waiting"
-    waiting = client.get("/api/pairing/waiting").json()
-    assert waiting[0]["code"] == request["code"]
-    wrong = client.post("/api/pairing/approve", json={"request_id": request["request_id"], "code": "000000"})
-    assert wrong.status_code == 403 or request["code"] == "000000"
-    client.post("/api/pairing/approve", json={"request_id": request["request_id"], "code": request["code"]})
-    result = client.post("/api/pairing/poll", json={"request_id": request["request_id"],
-                                                    "poll_secret": request["poll_secret"]}).json()
-    assert result["status"] == "approved" and result["role"] == "learner"
-    session = client.get("/api/session", headers={"Authorization": f"Bearer {result['token']}"}).json()
-    assert session["device"]["role"] == "learner"
-    # The token is released exactly once.
-    assert client.post("/api/pairing/poll", json={"request_id": request["request_id"],
-                                                  "poll_secret": request["poll_secret"]}).json()["status"] == "expired"
+def test_every_home_device_has_full_access_without_pairing(harness):
+    home = harness.client  # no credential, like any browser on the home network
+    assert home.get("/api/session").json()["device"]["role"] == "family"
+    assert home.post("/api/children", json={"name": "Ana"}).status_code in (200, 201)
+    assert home.post("/api/storage/backup").status_code == 200
+    assert home.get("/api/tutor/learners").status_code == 200
+    stale = {"Authorization": "Bearer hs_from-an-old-pairing"}  # browsers paired before keep working
+    assert home.get("/api/session", headers=stale).json()["device"]["role"] == "family"
+    assert home.post("/api/pairing/request", json={"device_name": "Tablet", "role": "learner"}).status_code in (404, 405)
 
 
-def test_unpaired_and_learner_devices_are_limited(harness):
-    assert harness.client.get("/api/children").status_code == 401
-    assert harness.call("POST", "/api/children", role="learner", json={"name": "X"}).status_code == 403
-    assert harness.call("POST", "/api/storage/backup", role="learner").status_code == 403
-    assert harness.call("GET", "/api/tutor/learners", role="learner").status_code == 403
+def test_the_tutor_is_identified_by_its_credential(harness):
+    assert harness.call("GET", "/api/session", role="tutor").json()["device"]["role"] == "tutor"
     assert harness.call("GET", "/api/tutor/learners", role="tutor").status_code == 200
     assert harness.call("POST", "/api/storage/backup", role="tutor").status_code == 403
-    assert harness.call("POST", "/api/storage/drive-folder", role="learner", json={"path": "/tmp"}).status_code == 403
+
+
+def test_old_learner_and_parent_pairings_are_forgotten(tmp_path):
+    import hashlib
+    from security.devices import DeviceRegistry
+    digest = lambda token: hashlib.sha256(token.encode()).hexdigest()
+    (tmp_path / "devices.json").write_text(json.dumps({"devices": {
+        "a": {"id": "a", "name": "Office Computer", "role": "learner", "token_hash": digest("old"),
+              "created_at": 1, "last_seen": None},
+        "t": {"id": "t", "name": "Claude Desktop", "role": "tutor", "token_hash": digest("agent"),
+              "created_at": 1, "last_seen": None}}}))
+    registry = DeviceRegistry(tmp_path)
+    assert registry.authenticate("old") is None and registry.authenticate("agent").role == "tutor"
+    assert list(json.loads((tmp_path / "devices.json").read_text())["devices"]) == ["t"]
+
+
+def test_changes_from_other_websites_are_refused(harness):
+    evil = harness.client.post("/api/children", json={"name": "X"}, headers={"Origin": "http://evil.example"})
+    assert evil.status_code == 403 and "Homeschooling app" in evil.json()["detail"]
+    sandboxed = harness.client.post("/api/children", json={"name": "X"}, headers={"Origin": "null"})
+    assert sandboxed.status_code == 403
+    app_page = harness.client.post("/api/children", json={"name": "Ana"}, headers={"Origin": "http://testserver"})
+    assert app_page.status_code in (200, 201)
+    assert harness.client.get("/api/health", headers={"Origin": "http://evil.example"}).status_code == 200
 
 
 def test_no_google_credentials_are_needed_or_exposed(harness):
     from security.secrets import write_secret
     write_secret(harness.config.secrets_dir / "tutor-agent.bin", b"agent-secret")
-    for path in ("/api/storage/status", "/api/session", "/api/devices"):
+    for path in ("/api/storage/status", "/api/session"):
         body = harness.call("GET", path).text
         assert "agent-secret" not in body and "client_secret" not in body
     assert not list(harness.config.dir.rglob("google-token*"))

@@ -19,7 +19,7 @@ Everything the computer keeps for the app lives in the project's **`data` folder
 |---|---|
 | `homeschooling.sqlite3` | the database (the one authoritative record) |
 | `backups\` | local copies of the daily backups |
-| `secrets\` | paired devices and the tutor credential |
+| `secrets\` | the tutor credential |
 | `home-tutor\` | the narration usage ledger |
 | `migration\`, `migration-reports\` | the Supabase export and migration reports |
 | `run\`, `responses\`, `cache\` | server bookkeeping |
@@ -35,13 +35,11 @@ The server refuses to start if this folder is inside Google Drive or OneDrive, b
 
 While the server runs, it asks Windows not to sleep. Keep the computer on and connected when others need the app. Ending a lesson does not stop the server.
 
-## 3. Pair devices
+## 3. Devices
 
-1. On any device, open the address and choose **A learner** or **A parent**. The device then shows a 6-digit code.
-2. On the host computer, open the app. The **Devices waiting to pair** list shows the request. Type the code and approve it.
-3. The device now holds a Homeschooling credential. It never receives Google credentials.
+Any device on the home network opens the address in a browser and uses the whole app: there is nothing to pair or sign in to, so a child can hand a tablet to a parent mid-activity. Devices never receive Google credentials.
 
-Parent devices can change settings, children, subjects, schedules and backups. Learner devices can use lessons, reading, handwriting and checklists, but never see teacher-only material. You can remove devices in **Settings → Home server → Paired devices**.
+The server refuses devices outside the home network, and it accepts changes only from the app's own pages, so a web page from anywhere else cannot change the family's records. Anyone who joins the home Wi-Fi can use the app, including the tutor's answer keys, so keep the Wi-Fi password to the family (a separate guest network for visitors helps).
 
 ## 4. The Homeschooling Drive folder
 

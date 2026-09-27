@@ -233,7 +233,7 @@ class AudioRequest(BaseModel):
 
 @router.post("/audio/generate", dependencies=teacher)
 def generate_audio(payload: AudioRequest, device: Device = Depends(current_device)):
-    """Estimate (default) or generate one narrator. Paid overage needs a parent device's approval."""
+    """Estimate (default) or generate one narrator. Paid overage needs a family device's approval; the tutor cannot approve it."""
     if payload.approve_overage_characters and not device.is_parent:
         raise HTTPException(status_code=403, detail="Only a parent can approve paid narration overage")
     topic = get_or_404(store(), "topics", payload.topic_id, "Topic")

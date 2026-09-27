@@ -1,4 +1,4 @@
-"""Pairing, storage status, backups and host controls."""
+"""Health, the tutor credential, storage status, backups and host controls."""
 from __future__ import annotations
 
 import signal
@@ -19,58 +19,7 @@ def health():
     return {"status": "ok"}
 
 
-# ── Pairing ──────────────────────────────────────────────────────────────────
-
-class PairingRequest(BaseModel):
-    device_name: str = Field(..., min_length=1, max_length=60)
-    role: str = Field(..., pattern="^(parent|learner)$")
-
-
-class PairingPoll(BaseModel):
-    request_id: str
-    poll_secret: str
-
-
-class PairingApproval(BaseModel):
-    request_id: str
-    code: str = Field(..., pattern=r"^\d{6}$")
-    role: str | None = Field(None, pattern="^(parent|learner)$")
-
-
-@router.post("/pairing/request")
-def pairing_request(payload: PairingRequest):
-    try:
-        return context().devices.request(payload.device_name, payload.role)
-    except PermissionError as exc:
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
-
-
-@router.post("/pairing/poll")
-def pairing_poll(payload: PairingPoll):
-    return context().devices.poll(payload.request_id, payload.poll_secret)
-
-
-@router.get("/pairing/waiting", dependencies=[Depends(require_host)])
-def pairing_waiting():
-    """Codes waiting for approval, visible only on the host computer."""
-    return context().devices.waiting()
-
-
-@router.post("/pairing/approve", dependencies=[Depends(require_host)])
-def pairing_approve(payload: PairingApproval):
-    try:
-        return context().devices.approve(payload.request_id, payload.code, payload.role)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-
-@router.post("/pairing/deny/{request_id}", dependencies=[Depends(require_host)])
-def pairing_deny(request_id: str):
-    context().devices.deny(request_id)
-    return {"status": "denied"}
-
+# ── The tutor's credential ────────────────────────────────────────────────────
 
 class AgentPairing(BaseModel):
     name: str = Field("Desktop tutor", min_length=1, max_length=60)
@@ -87,19 +36,6 @@ def session(request: Request, device: Device = Depends(current_device)):
     client = request.client.host if request.client else None
     return {"device": {"id": device.id, "name": device.name, "role": device.role},
             "host": is_loopback(client) or client == "testclient"}
-
-
-@router.get("/devices", dependencies=[Depends(require_parent)])
-def devices():
-    return context().devices.list()
-
-
-@router.delete("/devices/{device_id}", status_code=204, dependencies=[Depends(require_parent)])
-def revoke_device(device_id: str):
-    try:
-        context().devices.revoke(device_id)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 # ── Storage: database, Drive folder, backups ────────────────────────────────

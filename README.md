@@ -13,7 +13,7 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
   - It includes the handwriting tools.
   - It has a read-along panel with play, pause, replay, speed and sentence highlighting. The highlighting follows real timing data only: Google TTS timepoints or the device voice's own events. Nothing is estimated.
   - **Create read-along voice** builds a Google voice for the lesson from any device, within the monthly character guard. It is saved with the lesson and reused by every device and the tutor.
-- **Tutoring records:** sessions, handwritten attempts (first answer, help and revision kept separately), reviews, checkpoints and assignments. They sit in the same database as the rest of the app. Teacher-only keys and grading evidence never reach learner devices.
+- **Tutoring records:** sessions, handwritten attempts (first answer, help and revision kept separately), reviews, checkpoints and assignments. They sit in the same database as the rest of the app. The lesson reader never shows answer keys or grading evidence.
 - **Safe saving:** each change is one SQLite transaction with an operation receipt, committed before the reply, so it works without internet. Retries with the same key never duplicate records, and edits based on an old revision are refused instead of overwriting newer work. Files are written into the Drive folder before any record refers to them.
 - **Backups:** a verified copy of the database goes to the folder's `_App Backups` every day and whenever the server stops (the newest 30 are kept). A read-only Excel copy of the records, without answer keys, is written next to it.
 
@@ -21,8 +21,8 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
 
 | Path | Contents |
 |---|---|
-| `data/` | Local only, never committed: the database, local backups, paired devices, the narration ledger and migration exports. |
-| `backend/` | FastAPI home server. `storage/` holds the SQLite store, the Drive-folder file access and its Kid → Grade → Subject layout (`layout.py`), backups, `security/` pairing, the network guard and DPAPI secrets, `tutoring/` the tutor service, passages and narration, `routers/` the API, and `migration/` the one-time migration tools. |
+| `data/` | Local only, never committed: the database, local backups, the tutor credential, the narration ledger and migration exports. |
+| `backend/` | FastAPI home server. `storage/` holds the SQLite store, the Drive-folder file access and its Kid → Grade → Subject layout (`layout.py`), backups, `security/` the network guard, the tutor credential and DPAPI secrets, `tutoring/` the tutor service, passages and narration, `routers/` the API, and `migration/` the one-time migration tools. |
 | `frontend/` | React + Vite UI, served by the home server after `npm run build`. |
 | `launcher/` | `homeschooling.py start / stop / status / pair-agent / autostart`. It only stops the process it recorded. |
 | `tutor_mcp/bridge.py` | Portable stdio MCP bridge for desktop AI clients (standard library only). |
@@ -31,7 +31,7 @@ A desktop AI tutor (Codex, Claude Desktop or any MCP client) runs lessons in its
 
 ## Getting started
 
-See [SETUP_GUIDE.md](SETUP_GUIDE.md) for the Windows host, the Drive folder and device pairing. See [docs/MCP.md](docs/MCP.md) for connecting a desktop AI tutor, and [docs/MIGRATION.md](docs/MIGRATION.md) for moving data from the previous hosted app and the History project.
+See [SETUP_GUIDE.md](SETUP_GUIDE.md) for the Windows host, the Drive folder and using the app on other devices. See [docs/MCP.md](docs/MCP.md) for connecting a desktop AI tutor, and [docs/MIGRATION.md](docs/MIGRATION.md) for moving data from the previous hosted app and the History project.
 
 ## Development
 

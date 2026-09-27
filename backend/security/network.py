@@ -2,13 +2,16 @@
 
 Requests from public addresses are refused, and the Host header must name this
 computer, localhost or a private IP address (which blocks DNS-rebinding pages
-on the internet from reaching the server through a family browser).
+on the internet from reaching the server through a family browser). Every home
+device has full access, so a change sent by a browser must also come from the
+app's own pages: a web page from anywhere else cannot change family records.
 """
 from __future__ import annotations
 
 import ipaddress
 import json
 import socket
+from urllib.parse import urlsplit
 
 
 def _address(value: str | None):
@@ -54,6 +57,11 @@ def allowed_host(host_header: str | None, extra: list[str] | tuple[str, ...] = (
     return host in names
 
 
+def same_origin(origin: str, host_header: str) -> bool:
+    """Whether a browser's Origin header names the server it is talking to."""
+    return bool(host_header) and urlsplit(origin).netloc.lower() == host_header.strip().lower()
+
+
 class PrivateNetworkMiddleware:
     def __init__(self, app, extra_hosts=()):
         self.app = app
@@ -69,6 +77,10 @@ class PrivateNetworkMiddleware:
             return await _deny(send, "This server only accepts devices on the home network")
         if not allowed_host(host, self.extra_hosts):
             return await _deny(send, "Unrecognised server address")
+        origin = headers.get(b"origin")
+        changing = scope.get("method") in ("POST", "PUT", "PATCH", "DELETE")
+        if changing and origin is not None and not same_origin(origin.decode("latin-1"), host):
+            return await _deny(send, "Changes must come from the Homeschooling app")
         return await self.app(scope, receive, send)
 
 

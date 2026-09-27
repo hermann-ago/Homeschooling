@@ -12,7 +12,7 @@ All commands run on the host computer from `backend\` with `venv\Scripts\python 
 
 ## 0. Prepare the host
 
-1. Complete SETUP_GUIDE.md: install, start, pair a parent device and check the Drive folder (**Settings → Home server** shows it as Available).
+1. Complete SETUP_GUIDE.md: install, start and check the Drive folder (**Settings → Home server** shows it as Available).
 2. Mark the Homeschooling folder **Available offline** (the import reads the History folder's files and books).
 3. Install the migration extras:
    ```powershell

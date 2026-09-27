@@ -1,29 +1,5 @@
 export const API_BASE_URL = '/api';
-const TOKEN_KEY = 'homeschool:device-token:v1';
 const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-
-export function getDeviceToken() {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-export function setDeviceToken(token) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {
-    // Pairing lasts for this page only when storage is unavailable.
-  }
-  window.dispatchEvent(new Event('device:changed'));
-}
-
-export async function getAuthHeaders() {
-  const token = getDeviceToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
 
 function newOperationId() {
   return (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`).replace(/[^A-Za-z0-9-]/g, '');
@@ -45,7 +21,7 @@ function publishSync(response) {
  */
 export async function request(endpoint, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
-  const headers = { ...(await getAuthHeaders()), ...options.headers };
+  const headers = { ...options.headers };
   if (!(options.body instanceof FormData) && options.body !== undefined) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
   }
@@ -56,7 +32,6 @@ export async function request(endpoint, options = {}) {
     try {
       const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, method, headers });
       publishSync(response);
-      if (response.status === 401) window.dispatchEvent(new Event('auth:expired'));
       return response;
     } catch (error) {
       lastError = error;

@@ -1,14 +1,14 @@
-"""FastAPI dependencies: the app context, paired-device roles and idempotent writes."""
+"""FastAPI dependencies: the app context, who is calling (a family device or the tutor) and idempotent writes."""
 from __future__ import annotations
 
 import hashlib
 import json
 import uuid
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request
 
 import request_context
-from security.devices import Device
+from security.devices import FAMILY, Device
 from security.network import is_loopback
 from storage import SAVED
 
@@ -40,10 +40,8 @@ def _bearer(request: Request) -> str | None:
 
 
 def current_device(request: Request) -> Device:
-    device = context().devices.authenticate(_bearer(request))
-    if device is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Pair this device first")
-    return device
+    """The tutor when its bridge credential is presented, otherwise a family device on the home network."""
+    return context().devices.authenticate(_bearer(request)) or FAMILY
 
 
 def require_member(device: Device = Depends(current_device)) -> Device:
@@ -52,13 +50,13 @@ def require_member(device: Device = Depends(current_device)) -> Device:
 
 def require_parent(device: Device = Depends(current_device)) -> Device:
     if not device.is_parent:
-        raise HTTPException(status_code=403, detail="A parent device is required")
+        raise HTTPException(status_code=403, detail="Not available to the tutor")
     return device
 
 
 def require_teacher(device: Device = Depends(current_device)) -> Device:
     if not device.sees_teacher_content:
-        raise HTTPException(status_code=403, detail="Teacher-only content is not available on learner devices")
+        raise HTTPException(status_code=403, detail="Teacher-only content")
     return device
 
 

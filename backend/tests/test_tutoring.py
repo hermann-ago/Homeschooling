@@ -132,17 +132,13 @@ def test_repeated_saves_do_not_duplicate_and_stale_revision_conflicts(harness):
                         json=rewrite).status_code == 400
 
 
-def test_learner_views_exclude_teacher_keys(harness):
+def test_the_reader_never_shows_teacher_keys(harness):
     s = seed_history(harness)
     session_id, _ = _session(harness, s)
-    reader = harness.call("GET", "/api/tutor/reader", role="learner",
+    reader = harness.call("GET", "/api/tutor/reader",
                           params={"learner": s["lucas"]["id"], "topic": s["genghis"]["id"], "session": session_id})
     assert reader.status_code == 200
     assert "SECRET-KEY-ANSWER" not in reader.text and "felt tents." not in str(reader.json().get("grading"))
-    for path in ("/api/tutor/context", f"/api/tutor/sessions/{session_id}", "/api/tutor/learners"):
-        assert harness.call("GET", path, role="learner", params={
-            "child_id": s["lucas"]["id"], "subject_id": s["history"]["id"], "phase": "grading",
-            "questions": "1"}).status_code == 403
     grading = harness.call("GET", "/api/tutor/context", role="tutor", params={
         "child_id": s["lucas"]["id"], "subject_id": s["history"]["id"], "phase": "grading", "questions": "1"}).json()
     assert grading["grading"]["items"][0]["key_answer"] == "SECRET-KEY-ANSWER"
