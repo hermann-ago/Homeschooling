@@ -238,6 +238,54 @@ def test_subject_folder_is_fixed_at_creation_and_books_go_there(harness, monkeyp
     assert harness.ctx.store.get("subjects", subject["id"])["folder"] == "Lucas/3rd Grade/Science"
 
 
+def test_each_subject_has_its_own_grade_and_folders_are_made_when_it_moves_up(harness, monkeypatch):
+    import routers.subjects
+    monkeypatch.setattr(routers.subjects, "analyze_curriculum", lambda text, pages: {
+        "topics": [{"title": "Chapter 1", "page_start": 1, "page_end": 1}], "language": "en"})
+    child = harness.call("POST", "/api/children", json={"name": "Lucas", "grade_year": "3rd"}).json()
+    math = harness.call("POST", "/api/subjects", json={"child_id": child["id"], "name": "Math"}).json()
+    history = harness.call("POST", "/api/subjects", json={"child_id": child["id"], "name": "History"}).json()
+    assert (math["grade"], math["folder"]) == ("3rd", "Lucas/3rd Grade/Math")
+    for kind in ("Books", "Handwriting", "Student Work", "Audio", "Lesson Content"):
+        assert (harness.drive / "Lucas/3rd Grade/Math" / kind).is_dir()  # ready for books right away
+
+    old_book = harness.call("POST", f"/api/subjects/{math['id']}/documents",
+                            files={"file": ("Math 3.pdf", make_pdf([["Chapter 1"]]), "application/pdf")})
+    assert old_book.status_code == 200, old_book.text
+
+    # Lucas starts 4th grade Math while still finishing 3rd grade History.
+    moved = harness.call("PUT", f"/api/subjects/{math['id']}", json={"grade": "4th"}).json()
+    assert (moved["grade"], moved["folder"]) == ("4th", "Lucas/4th Grade/Math")
+    assert (harness.drive / "Lucas/4th Grade/Math/Books").is_dir()
+    assert harness.ctx.store.get("subjects", history["id"])["folder"] == "Lucas/3rd Grade/History"
+    assert harness.ctx.store.all("documents")[0]["file_path"] == "Lucas/3rd Grade/Math/Books/Math 3.pdf"  # stays
+    new_book = harness.call("POST", f"/api/subjects/{math['id']}/documents",
+                            files={"file": ("Math 4.pdf", make_pdf([["Chapter 1", "Fractions"]]), "application/pdf")})
+    assert new_book.status_code == 200, new_book.text
+    assert any(d["file_path"] == "Lucas/4th Grade/Math/Books/Math 4.pdf" for d in harness.ctx.store.all("documents"))
+
+    # Other edits keep the folder; a subject can also be started at another grade, or with none.
+    assert harness.call("PUT", f"/api/subjects/{math['id']}", json={"weight": 1.5}).json()["folder"] == "Lucas/4th Grade/Math"
+    ahead = harness.call("POST", "/api/subjects", json={"child_id": child["id"], "name": "Latin", "grade": "5th"}).json()
+    assert ahead["folder"] == "Lucas/5th Grade/Latin"
+    art = harness.call("POST", "/api/subjects", json={"child_id": child["id"], "name": "Art", "grade": ""}).json()
+    assert (art["grade"], art["folder"]) == ("N/A", "Lucas/Art")
+
+
+def test_subjects_get_their_grade_from_their_folder_at_start_once(harness):
+    with harness.ctx.store.transaction() as tx:
+        lucas = tx.insert("children", {"name": "Lucas", "grade_year": "4th"})
+        joshua = tx.insert("children", {"name": "Joshua", "grade_year": "N/A"})
+        tx.insert("subjects", {"child_id": lucas["id"], "name": "History", "folder": "Lucas/3rd Grade/History"})
+        tx.insert("subjects", {"child_id": joshua["id"], "name": "Reading"})
+    harness.restart()
+    grades = {s["name"]: (s["grade"], s["folder"]) for s in harness.ctx.store.all("subjects")}
+    assert grades == {"History": ("3rd", "Lucas/3rd Grade/History"), "Reading": ("N/A", "Joshua/Reading")}
+    receipts = len(harness.ctx.store.all("operation_receipts"))
+    harness.restart()
+    assert len(harness.ctx.store.all("operation_receipts")) == receipts  # nothing left to fix
+
+
 def test_subjects_without_a_folder_get_one_at_start(harness):
     with harness.ctx.store.transaction() as tx:
         mila = tx.insert("children", {"name": "Mila", "grade_year": "1st"})

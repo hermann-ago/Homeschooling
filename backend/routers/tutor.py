@@ -347,7 +347,7 @@ def reader_guide(payload: ReaderGuideRequest):
     configured = context().config.get("ai", {}).get("guide_model")
     models = (configured, *guide_mod.DEFAULT_MODELS) if configured else guide_mod.DEFAULT_MODELS
     text = guide_mod.prompt(package, subject=subject["name"], learner=child.get("nickname") or child["name"],
-                            grade=child.get("grade_year"), language=language)
+                            grade=subject.get("grade") or child.get("grade_year"), language=language)
     try:
         plan, model = guide_mod.write_plan(text, models)  # outside the transaction: it can take a while
         built = guide_mod.build(package["sentences"], plan)

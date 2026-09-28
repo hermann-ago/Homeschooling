@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import date, datetime, timezone
 from typing import List
 
@@ -14,6 +15,8 @@ from services.completion_tracking import mark_topic_completed, mark_topic_incomp
 from services.documents import MAX_PDF_BYTES, add_drive_document, add_uploaded_document, inspect_pdf
 from storage import FileUnavailable, OutsideBoundary, layout
 from utils import get_or_404
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -66,11 +69,24 @@ def list_subjects(child_id: int):
     return sorted(store().find("subjects", child_id=child_id), key=lambda s: s["name"])
 
 
+def _make_folders(folder: str) -> None:
+    """Create a subject's folders in the Drive folder now; when it is unavailable they appear with the first file."""
+    try:
+        context().files.ensure_subject_folders(folder)
+    except (FileUnavailable, OSError) as exc:
+        logger.warning("Could not create %s yet: %s", folder, exc)
+
+
 @router.post("", response_model=SubjectResponse, status_code=201, dependencies=[Depends(require_family)])
 def create_subject(subject: SubjectCreate):
+    """A new subject starts at the child's grade unless another grade is given, with its folders created."""
     child = get_or_404(store(), "children", subject.child_id, "Child")
+    grade = layout.stored_grade(subject.grade if subject.grade is not None else child.get("grade_year"))
     with write("subjects.create") as tx:
-        return tx.insert("subjects", {**subject.model_dump(), "folder": layout.subject_folder(child, subject.name)})
+        created = tx.insert("subjects", {**subject.model_dump(), "grade": grade,
+                                         "folder": layout.subject_folder(child, subject.name, grade)})
+    _make_folders(created["folder"])
+    return created
 
 
 @router.delete("/{subject_id}", status_code=204, dependencies=[Depends(require_family)])
@@ -88,9 +104,22 @@ def get_subject(subject_id: int):
 
 @router.put("/{subject_id}", response_model=SubjectResponse, dependencies=[Depends(require_family)])
 def update_subject(subject_id: int, updates: SubjectUpdate):
-    _subject(subject_id)
+    """Moving a subject to another grade gives it that grade's folder (created now) for new files; files
+    already saved stay where they are, since their records point to them."""
+    current = _subject(subject_id)
+    changes = updates.model_dump(exclude_unset=True)
+    moved = "grade" in changes and layout.stored_grade(changes["grade"]) != current.get("grade")
+    if moved:
+        changes["grade"] = layout.stored_grade(changes["grade"])
+        child = store().get("children", current["child_id"])
+        changes["folder"] = layout.subject_folder(child, changes.get("name") or current["name"], changes["grade"])
+    elif "grade" in changes:
+        changes.pop("grade")
     with write("subjects.update") as tx:
-        return tx.update("subjects", subject_id, updates.model_dump(exclude_unset=True))
+        updated = tx.update("subjects", subject_id, changes)
+    if moved:
+        _make_folders(updated["folder"])
+    return updated
 
 
 # ─── Topics ──────────────────────────────────────────────────────────

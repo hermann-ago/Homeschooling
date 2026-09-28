@@ -87,13 +87,16 @@ class AppContext:
         self.tutor = TutorService(self)
 
     def _assign_subject_folders(self):
-        """Fix the Kid/Grade/Subject folder of subjects created before folders were recorded."""
+        """Record the Kid/Grade/Subject folder of subjects created before folders were recorded, and the grade
+        of subjects created before each subject had its own (read from its folder)."""
         from storage import layout
-        missing = [s for s in self.store.all("subjects") if not s.get("folder")]
+        missing = [s for s in self.store.all("subjects") if not s.get("folder") or s.get("grade") is None]
         if missing:
-            with self.store.transaction(kind="subjects.folders", summary="Recorded subject folders") as tx:
+            with self.store.transaction(kind="subjects.folders", summary="Recorded subject folders and grades") as tx:
                 for subject in missing:
-                    tx.update("subjects", subject["id"], {"folder": layout.subject_base(tx, subject)})
+                    folder = layout.subject_base(tx, subject)
+                    grade = layout.grade_of_folder(folder)
+                    tx.update("subjects", subject["id"], {"folder": folder, "grade": layout.stored_grade(grade)})
 
     def announce(self):
         """Record this server instance for the launcher (only the server process calls this)."""

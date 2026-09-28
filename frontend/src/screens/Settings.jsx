@@ -6,14 +6,17 @@ import clsx from 'clsx';
 import { useLearner } from '../app/learnerContext';
 import useReplanAction from '../app/useReplanAction';
 import { childrenApi } from '../api/children';
+import { subjectsApi } from '../api/subjects';
 import { calendarApi } from '../api/calendar';
 import { systemApi } from '../api/system';
 import { timeWindowsApi } from '../api/timeWindows';
-import { keys, useAutoReplan, useFamilyProgress, useNarrationUsage, useSchoolYear, useStorageStatus, useTimeWindows } from '../api/queries';
+import { keys, useAutoReplan, useFamilyProgress, useNarrationUsage, useSchoolYear, useStorageStatus, useSubjects, useTimeWindows } from '../api/queries';
 import { useDevice } from '../components/deviceContext';
+import GradeSelect from '../components/GradeSelect';
 import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { shortTime } from '../utils/lessons';
+import { folderLabel, gradeLabel, sameGrade } from '../utils/grades';
 
 const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const COLOURS = ['#4A90D9', '#E88AB5', '#7BC67E', '#F5A623', '#8E7CC3', '#E0685C', '#3BA99C', '#6B9E8A'];
@@ -33,9 +36,9 @@ function Section({ id, title, action, children }) {
 
 /* ── Family ────────────────────────────────────────────────────────────── */
 
-function LearnerDialog({ learner, onClose }) {
+function LearnerDialog({ learner, onClose, onGradeChanged }) {
   const [form, setForm] = useState({
-    name: learner?.name || '', nickname: learner?.nickname || '', grade_year: learner?.grade_year || '', color: learner?.color || COLOURS[0],
+    name: learner?.name || '', nickname: learner?.nickname || '', grade_year: learner?.grade_year || 'N/A', color: learner?.color || COLOURS[0],
   });
   const [saving, setSaving] = useState(false);
   const client = useQueryClient();
@@ -43,7 +46,7 @@ function LearnerDialog({ learner, onClose }) {
   const set = (changes) => setForm((current) => ({ ...current, ...changes }));
   const save = async () => {
     setSaving(true);
-    const data = { ...form, name: form.name.trim(), nickname: form.nickname.trim() || null, grade_year: form.grade_year.trim() || null };
+    const data = { ...form, name: form.name.trim(), nickname: form.nickname.trim() || null, grade_year: form.grade_year || 'N/A' };
     try {
       if (learner) await childrenApi.update(learner.id, data);
       else await childrenApi.create(data);
@@ -51,6 +54,7 @@ function LearnerDialog({ learner, onClose }) {
       await client.invalidateQueries({ queryKey: ['progress'] });
       toast(learner ? `${data.name} saved.` : `${data.name} added.`);
       onClose();
+      if (learner && !sameGrade(learner.grade_year, data.grade_year)) onGradeChanged?.({ ...learner, ...data });
     } catch (error) {
       toast({ tone: 'problem', message: `Not saved: ${clean(error)}` });
       setSaving(false);
@@ -65,7 +69,8 @@ function LearnerDialog({ learner, onClose }) {
           <Field label="Name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
           <Field label="Nickname (optional)" value={form.nickname} onChange={(e) => set({ nickname: e.target.value })} />
         </div>
-        <Field label="Grade" placeholder="e.g. 3rd" value={form.grade_year} onChange={(e) => set({ grade_year: e.target.value })} />
+        <GradeSelect value={form.grade_year} onChange={(grade_year) => set({ grade_year })}
+          hint="New subjects start at this grade. Each subject keeps its own grade, so a learner can be ahead in one subject and still finishing another." />
         <div className="flex flex-col gap-2">
           <span className="text-[13px] font-semibold text-muted">Colour</span>
           <div role="radiogroup" aria-label="Colour" className="flex flex-wrap items-center gap-2">
@@ -89,9 +94,62 @@ function LearnerDialog({ learner, onClose }) {
   );
 }
 
+/** After a learner's grade changes: choose which subjects move up now (the rest keep their grade). */
+function MoveUpDialog({ learner, onClose }) {
+  const { data: subjects = [] } = useSubjects(learner.id);
+  const [chosen, setChosen] = useState(() => new Set());
+  const [saving, setSaving] = useState(false);
+  const client = useQueryClient();
+  const toast = useToast();
+  const candidates = subjects.filter((s) => !sameGrade(s.grade, learner.grade_year));
+  const toggle = (id) => setChosen((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const move = async () => {
+    setSaving(true);
+    try {
+      for (const id of chosen) await subjectsApi.update(id, { grade: learner.grade_year });
+      await client.invalidateQueries({ queryKey: keys.subjects(learner.id) });
+      await client.invalidateQueries({ queryKey: ['progress'] });
+      toast(`Moved ${chosen.size} ${chosen.size === 1 ? 'subject' : 'subjects'} to ${gradeLabel(learner.grade_year)}; their folders are ready in Drive.`);
+      onClose();
+    } catch (error) {
+      toast({ tone: 'problem', message: `Not all subjects moved: ${clean(error)}` });
+      setSaving(false);
+    }
+  };
+  if (!candidates.length) return null;
+  return (
+    <Dialog open onClose={onClose} title={`Which of ${learner.name}'s subjects move to ${gradeLabel(learner.grade_year)} now?`}
+      description="Tick the subjects that start the new grade. The others keep their grade until you move them (Curriculum › Edit subject)."
+      footer={<><Button onClick={onClose}>Not now</Button>
+        <Button variant="primary" disabled={!chosen.size || saving} onClick={move}>{saving ? 'Moving…' : `Move ${chosen.size || ''} to ${gradeLabel(learner.grade_year)}`}</Button></>}>
+      <ul className="flex flex-col gap-2">
+        {candidates.map((subject) => (
+          <li key={subject.id}>
+            <label className="flex items-start gap-3 p-3 rounded-xl border border-line cursor-pointer hover:bg-paper">
+              <input type="checkbox" className="mt-0.5 w-5 h-5 accent-[var(--color-action)]" checked={chosen.has(subject.id)} onChange={() => toggle(subject.id)} />
+              <span className="flex flex-col gap-0.5">
+                <span className="text-[15px] font-semibold">{subject.name} <span className="font-normal text-muted">· now {gradeLabel(subject.grade)}</span></span>
+                <span className="text-[13px] text-muted">
+                  {chosen.has(subject.id) ? `New files go in ${folderLabel(learner.name, learner.grade_year, subject.name)}` : `Stays in ${(subject.folder || '').split('/').join(' › ')}`}
+                </span>
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-[13px] text-subtle">Books, audio and handwriting already saved stay where they are.</p>
+    </Dialog>
+  );
+}
+
 function Family() {
   const { learners } = useLearner();
   const [editing, setEditing] = useState(null);
+  const [movingUp, setMovingUp] = useState(null);
   return (
     <Section id="family" title="Family" action={<Button size="sm" icon={Plus} onClick={() => setEditing('new')}>Add learner</Button>}>
       <ul className="flex flex-col divide-y divide-line-soft">
@@ -104,14 +162,15 @@ function Family() {
               </span>
               <span className="flex-1 text-[15px] font-semibold">
                 {child.name}
-                {child.grade_year && child.grade_year !== 'N/A' && <span className="font-normal text-muted"> · {child.grade_year} grade</span>}
+                <span className="font-normal text-muted"> · {gradeLabel(child.grade_year)}</span>
               </span>
               <Button size="sm" variant="quiet" onClick={() => setEditing(child)}>Edit</Button>
             </li>
           );
         })}
       </ul>
-      {editing && <LearnerDialog learner={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
+      {editing && <LearnerDialog learner={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onGradeChanged={setMovingUp} />}
+      {movingUp && <MoveUpDialog learner={movingUp} onClose={() => setMovingUp(null)} />}
     </Section>
   );
 }

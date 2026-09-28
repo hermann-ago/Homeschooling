@@ -14,10 +14,14 @@
       _Unassigned Books/     books no subject uses yet (from the migration)
       _Archive/              retired folders, never read by the app
 
-A subject's folder is decided when the subject is created and kept in
-``subjects.folder``. Renaming a child or moving up a grade never moves files
-that records already point to; next year's subjects get next year's grade.
-A child without a grade (for example "N/A") has no grade level in the path.
+Each subject has its own grade (``subjects.grade``), because a child can be in
+4th grade for Math while still finishing 3rd grade History. A new subject starts
+at the child's grade. The subject's folder is kept in ``subjects.folder``; when a
+subject moves to another grade it gets that grade's folder (created at once,
+with its Books, Handwriting, … folders) and new files go there. Files already
+saved never move: their records keep pointing at them. Renaming a child or a
+subject does not move folders either. No grade (for example "N/A") means no
+grade level in the path.
 
 ``db`` below is the store or an open transaction (both offer ``get``/``find``).
 """
@@ -60,9 +64,30 @@ def child_folder(child: dict) -> str:
     return "/".join(p for p in (safe_name(child["name"]), grade_folder(child.get("grade_year"))) if p)
 
 
-def subject_folder(child: dict, subject_name: str) -> str:
-    """The folder a new subject gets, e.g. ``Lucas/3rd Grade/History``."""
-    return f"{child_folder(child)}/{safe_name(subject_name)}"
+_CHILDS_GRADE = object()
+
+
+def subject_folder(child: dict, subject_name: str, grade=_CHILDS_GRADE) -> str:
+    """A subject's folder, e.g. ``Lucas/3rd Grade/History``: at ``grade`` (None: no grade level), or at the
+    child's grade when none is given."""
+    level = grade_folder(child.get("grade_year") if grade is _CHILDS_GRADE else grade)
+    return "/".join(p for p in (safe_name(child["name"]), level, safe_name(subject_name)) if p)
+
+
+def stored_grade(grade: str | None) -> str:
+    """How a grade is recorded: as typed ('4th', 'Pre-K'), or 'N/A' for no grade level."""
+    text = (grade or "").strip()
+    return "N/A" if text.lower() in _NO_GRADE else text
+
+
+def grade_of_folder(folder: str | None) -> str | None:
+    """The grade a recorded folder is at: 'Lucas/3rd Grade/History' → '3rd', 'Olivia/Pre-K/Math' → 'Pre-K',
+    'Joshua/Reading' → None."""
+    parts = (folder or "").split("/")
+    if len(parts) < 3:
+        return None
+    level = parts[1]
+    return level[:-len(" Grade")] if level.endswith(" Grade") else level
 
 
 def subject_base(db, subject: dict) -> str:

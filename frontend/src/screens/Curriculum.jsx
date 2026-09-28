@@ -10,11 +10,13 @@ import useReplanAction from '../app/useReplanAction';
 import { subjectsApi } from '../api/subjects';
 import { keys, refreshPlan, useChildProgress, useSlots, useSubjects, useTopics } from '../api/queries';
 import DriveBookPicker from '../components/DriveBookPicker';
+import GradeSelect from '../components/GradeSelect';
 import {
   Badge, Button, CheckButton, Dialog, Field, IconButton, ProgressBar, SegmentedControl, useConfirm, useToast,
 } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { isoDay, lessonPath } from '../utils/lessons';
+import { folderLabel, gradeLabel, sameGrade } from '../utils/grades';
 
 const PRINTED = 'Printed book';
 // The planner numbers the study days: A subjects get the 1st, 3rd, 5th…, B the 2nd, 4th, 6th…
@@ -56,13 +58,14 @@ function useChange(subjectId, childId) {
 
 function AddSubjectDialog({ child, onClose, onAdded }) {
   const [name, setName] = useState('');
+  const [grade, setGrade] = useState(child.grade_year || 'N/A');
   const [saving, setSaving] = useState(false);
   const client = useQueryClient();
   const toast = useToast();
   const save = async () => {
     setSaving(true);
     try {
-      const subject = await subjectsApi.create({ name: name.trim(), weight: 1, child_id: child.id });
+      const subject = await subjectsApi.create({ name: name.trim(), weight: 1, child_id: child.id, grade });
       await client.invalidateQueries({ queryKey: keys.subjects(child.id) });
       await client.invalidateQueries({ queryKey: ['progress'] });
       onAdded(subject);
@@ -74,8 +77,12 @@ function AddSubjectDialog({ child, onClose, onAdded }) {
   return (
     <Dialog open onClose={onClose} title={`Add a subject for ${child.name}`}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!name.trim() || saving} onClick={save}>Add subject</Button></>}>
-      <Field label="Name" autoFocus placeholder="e.g. Math, Science, Português" value={name}
-        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && save()} />
+      <div className="flex flex-col gap-4">
+        <Field label="Name" autoFocus placeholder="e.g. Math, Science, Português" value={name}
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && name.trim() && save()} />
+        <GradeSelect value={grade} onChange={setGrade}
+          hint={`Its books and files go in ${folderLabel(child.name, grade, name.trim() || 'Subject')}.`} />
+      </div>
     </Dialog>
   );
 }
@@ -83,7 +90,9 @@ function AddSubjectDialog({ child, onClose, onAdded }) {
 function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   const [form, setForm] = useState({
     name: subject.name, weight: subject.weight ?? 1, slot_type: subject.slot_type || 'A', end_date: subject.end_date || '',
+    grade: subject.grade || 'N/A',
   });
+  const toast = useToast();
   const change = useChange(subject.id, child.id);
   const confirm = useConfirm();
   const replan = useReplanAction();
@@ -92,8 +101,13 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
     || (form.end_date || null) !== (subject.end_date || null);
 
   const save = async () => {
-    const ok = await change(() => subjectsApi.update(subject.id, { ...form, name: form.name.trim(), end_date: form.end_date || null }), 'Subject saved.');
-    if (!ok) return;
+    const gradeChanged = !sameGrade(form.grade, subject.grade);
+    const saved = await change(() => subjectsApi.update(subject.id, { ...form, name: form.name.trim(), end_date: form.end_date || null }),
+      gradeChanged ? null : 'Subject saved.');
+    if (!saved) return;
+    if (gradeChanged) {
+      toast(`${saved.name} is now ${gradeLabel(saved.grade)}. New books and files go in ${(saved.folder || '').split('/').join(' › ')}.`);
+    }
     onClose();
     if (scheduleChanged) replan.run([child]);
   };
@@ -115,6 +129,10 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
       </>}>
       <div className="flex flex-col gap-5">
         <Field label="Name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
+        <GradeSelect value={form.grade} onChange={(grade) => set({ grade })}
+          hint={sameGrade(form.grade, subject.grade)
+            ? `Books and files go in ${(subject.folder || '').split('/').join(' › ')}.`
+            : `New books and files will go in ${folderLabel(child.name, form.grade, form.name.trim() || subject.name)} (created now). Files already saved stay where they are.`} />
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold text-muted">Days</span>
           <SegmentedControl label="Days" size="sm" value={form.slot_type} onChange={(slot_type) => set({ slot_type })}
@@ -303,6 +321,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
         <div className="flex flex-col gap-2.5">
           <h1 className="font-display text-3xl md:text-4xl font-medium">{subject.name}</h1>
           <div className="flex flex-wrap gap-2">
+            <Badge tone="action">{gradeLabel(subject.grade)}</Badge>
             <Badge>{DAYS[subject.slot_type || 'A'].label}</Badge>
             <Badge>{paceLabel(subject.weight ?? 1)}</Badge>
             <Badge>{subject.end_date ? `Finish by ${format(parseISO(subject.end_date), 'd MMM yyyy')}` : 'Ends with the school year'}</Badge>
@@ -408,7 +427,10 @@ export default function Curriculum() {
                 className={clsx('flex flex-col gap-2 p-3.5 rounded-xl text-left border',
                   selected ? 'bg-surface border-line' : 'border-transparent hover:bg-surface/60')}>
                 <span className="flex justify-between gap-2 text-[15px]">
-                  <span className={selected ? 'font-bold' : 'font-semibold'}>{s.name}</span>
+                  <span className={selected ? 'font-bold' : 'font-semibold'}>
+                    {s.name}
+                    {!sameGrade(s.grade, child.grade_year) && <span className="ml-1.5 text-xs font-semibold text-action">{gradeLabel(s.grade)}</span>}
+                  </span>
                   <span className={clsx('text-sm font-semibold', !p?.total_pages ? 'text-attention' : complete ? 'text-action' : 'text-muted')}>
                     {!p ? '' : !p.total_pages ? 'No book yet' : complete ? 'Complete' : `${Math.round(p.progress_percent)}%`}
                   </span>

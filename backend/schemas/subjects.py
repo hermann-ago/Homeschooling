@@ -7,6 +7,7 @@ class SubjectBase(BaseModel):
     weight: float = Field(default=1.0, ge=0)
     slot_type: str = Field(default="A", max_length=1)
     end_date: Optional[date] = None
+    grade: Optional[str] = Field(None, max_length=20)  # this subject's grade; empty: no grade level
 
     @field_validator('slot_type', mode='before')
     @classmethod
@@ -23,6 +24,7 @@ class SubjectUpdate(BaseModel):
     weight: Optional[float] = Field(None, ge=0)
     slot_type: Optional[str] = Field(None, max_length=1)
     end_date: Optional[date] = None
+    grade: Optional[str] = Field(None, max_length=20)
 
 class SubjectResponse(SubjectBase):
     id: int

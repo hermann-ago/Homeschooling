@@ -193,3 +193,13 @@ def test_layout_is_kid_grade_subject():
     assert layout.subject_folder({"name": "Mila", "grade_year": "1st"}, "Português") == "Mila/1st Grade/Português"
     assert layout.subject_folder({"name": "Joshua", "grade_year": "N/A"}, "Reading") == "Joshua/Reading"
     assert layout.subject_folder({"name": "Olivia", "grade_year": "Pre-K"}, "Math: Counting") == "Olivia/Pre-K/Math_ Counting"
+
+
+def test_a_subjects_folder_can_follow_its_own_grade():
+    from storage import layout
+    lucas = {"name": "Lucas", "grade_year": "3rd"}
+    assert layout.subject_folder(lucas, "Math", "4th") == "Lucas/4th Grade/Math"
+    assert layout.subject_folder(lucas, "Math", "N/A") == "Lucas/Math"
+    assert [layout.grade_of_folder(f) for f in ("Lucas/3rd Grade/History", "Olivia/Pre-K/Math", "Joshua/Reading", None)] \
+        == ["3rd", "Pre-K", None, None]
+    assert [layout.stored_grade(g) for g in ("4th ", "", None, "n/a", "Pre-K")] == ["4th", "N/A", "N/A", "N/A", "Pre-K"]

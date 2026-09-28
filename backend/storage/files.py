@@ -73,6 +73,19 @@ class DriveFolder:
                 created.append(name)
         return created
 
+    def ensure_subject_folders(self, subject_folder: str) -> list[str]:
+        """Create a subject's folder with its Books, Handwriting, Student Work, Audio and Lesson Content
+        folders, so books can be dropped in before the app writes anything there."""
+        from .layout import FILE_KINDS, check_folder
+        created = []
+        for kind in FILE_KINDS:
+            relative = check_folder(f"{subject_folder}/{kind}")
+            folder = self.resolve(relative)
+            if not folder.exists():
+                folder.mkdir(parents=True)
+                created.append(relative)
+        return created
+
     def resolve(self, relative: str) -> Path:
         """The absolute path for a stored reference, refusing anything outside the folder."""
         self.require()

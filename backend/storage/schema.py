@@ -52,7 +52,7 @@ TABLES: dict[str, Table] = {t.name: t for t in [
     }, required=("name",), defaults={"color": "#6B9E8A"}),
     _t("subjects", "Subjects", {
         "child_id": "int", "name": "str", "weight": "float", "slot_type": "str", "end_date": "date",
-        "folder": "str", "created_at": "datetime",
+        "folder": "str", "grade": "str", "created_at": "datetime",
     }, foreign_keys=(ForeignKey("child_id", "children"),), required=("child_id", "name"),
         defaults={"weight": 1.0, "slot_type": "A"}),
     _t("documents", "Documents", {
