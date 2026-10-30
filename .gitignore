@@ -21,6 +21,7 @@ env/
 # It must NEVER be committed.
 data/
 backend/tests/.tmp-data/
+.tmp-data/
 backend/homeschool.db
 backend/*.db
 *.sqlite3
@@ -50,3 +51,7 @@ desktop.ini
 node_modules/
 
 .env*
+
+# Local screenshots, lesson exports, provider replies and browser attachments
+tmp/
+.codex-remote-attachments/

@@ -23,7 +23,7 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None) -> Schedu
     today = today or date.today()
 
     # ── 1. Gather subjects and remaining topics ─────────────────────
-    subjects = sorted(tx.find("subjects", child_id=child_id), key=lambda s: s["id"])
+    subjects = sorted((s for s in tx.find("subjects", child_id=child_id) if s.get("purpose") not in ("library", "library_paused")), key=lambda s: s["id"])
     if not subjects:
         return ScheduleResult(slots_created=0, warnings=[ScheduleWarning(message="No subjects found.")])
 

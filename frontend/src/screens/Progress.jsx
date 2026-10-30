@@ -7,6 +7,9 @@ import { useLearner } from '../app/learnerContext';
 import { useFamilyProgress, useSchoolYear } from '../api/queries';
 import { Button, ProgressBar } from '../ui';
 import { learnerTones } from '../utils/colors';
+import LessonRecords from '../components/LessonRecords';
+import WorkbookProgress from '../components/WorkbookProgress';
+import LearningSummary from '../components/LearningSummary';
 
 /** How far through the school year today is, 0–100. */
 function yearPercent(year, today = new Date()) {
@@ -105,6 +108,7 @@ export default function Progress() {
           <div className="flex flex-col gap-1.5">
             <h1 className="font-display text-3xl md:text-4xl font-medium">Progress</h1>
             <p className="text-[15px] text-muted">Pages done in each subject's main book, against how far the school year has gone.</p>
+            <Link to="/records" className="text-sm font-semibold text-action">Open learning records table</Link>
           </div>
           {marker != null && (
             <span className="flex items-center gap-2.5 text-[13px] text-muted">
@@ -120,6 +124,9 @@ export default function Progress() {
           ))}
         </div>
 
+        {entries.map(({ child }) => <LessonRecords key={child.id} child={child} />)}
+        {entries.map(({ child }) => <LearningSummary key={child.id} child={child} />)}
+        {entries.map(({ child }) => <WorkbookProgress key={child.id} child={child} />)}
         {late.length > 0 && (
           <section className="flex flex-wrap items-center gap-4 md:gap-5 px-6 py-5 rounded-2xl bg-attention-soft">
             <span className="w-10 h-10 shrink-0 rounded-xl bg-surface text-attention grid place-items-center">

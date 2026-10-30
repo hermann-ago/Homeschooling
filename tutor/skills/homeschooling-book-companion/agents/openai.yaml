@@ -1,0 +1,4 @@
+interface:
+  display_name: "Homeschooling book JSON"
+  short_description: "Convert PDF books to validated lesson source JSON"
+  default_prompt: "Use $homeschooling-book-companion to prepare a validated book JSON from this PDF, preserving text, visual structure and exercise identities."

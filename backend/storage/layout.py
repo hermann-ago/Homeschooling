@@ -28,6 +28,7 @@ grade level in the path.
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 
 from .files import safe_name
 
@@ -35,13 +36,19 @@ BOOKS = "Books"
 HANDWRITING = "Handwriting"
 STUDENT_WORK = "Student Work"
 AUDIO = "Audio"
+PRIVATE_AUDIO = ContextVar('private_learner_audio', default=False)
 LESSON_CONTENT = "Lesson Content"
-FILE_KINDS = (BOOKS, HANDWRITING, STUDENT_WORK, AUDIO, LESSON_CONTENT)
+TEACHING_SKILL = "Teaching Skill"
+SUBJECT_KNOWLEDGE = "Subject Knowledge"
+FILE_KINDS = (BOOKS, HANDWRITING, STUDENT_WORK, AUDIO, LESSON_CONTENT, TEACHING_SKILL, SUBJECT_KNOWLEDGE)
 
 BACKUPS = "_App Backups"
 UNASSIGNED_BOOKS = "_Unassigned Books"
+INCOMING_BOOKS = "Incoming Books"
+MATERIAL_SKILLS = "Material Skills"
+FAMILY_TEACHING_SKILLS = "Teaching Skills"
 ARCHIVE = "_Archive"
-TOP_LEVEL = (BACKUPS, UNASSIGNED_BOOKS)
+TOP_LEVEL = (BACKUPS, UNASSIGNED_BOOKS, INCOMING_BOOKS, MATERIAL_SKILLS, FAMILY_TEACHING_SKILLS)
 
 _NO_GRADE = {"", "n/a", "na", "none", "-"}
 
@@ -99,7 +106,12 @@ def for_subject(db, subject_id: int, kind: str) -> str:
 
 
 def for_topic(db, topic_id: int, kind: str) -> str:
-    return for_subject(db, db.get("topics", topic_id)["subject_id"], kind)
+    subject_id = db.get("topics", topic_id)["subject_id"]
+    if kind == AUDIO and not PRIVATE_AUDIO.get():
+        reading = next(iter(db.find("library_readings", subject_id=subject_id)), None)
+        if reading:
+            return f"Family Library/{reading['book_id']}/{AUDIO}"
+    return for_subject(db, subject_id, kind)
 
 
 def for_session(db, session_id: str, kind: str) -> str:

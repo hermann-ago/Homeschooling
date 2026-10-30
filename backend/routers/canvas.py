@@ -126,7 +126,14 @@ def generate_ai_content(payload: CanvasAIRequest):
     Gemini call. New content is saved as a file in the Drive folder's Tutor
     Content and indexed in the enrichment table.
     """
-    _topic(payload.topic_id)
+    topic = _topic(payload.topic_id)
+    from tutoring import library_materials
+    if library_materials.book_for(store(), topic['subject_id']):
+        try:
+            row, reused = library_materials.enrichment(context(), topic, payload)
+            return _response(row, reused)
+        except ValueError as exc:
+            raise HTTPException(502, f"Book practice preparation failed: {exc}") from exc
     cached = store().first("enrichment", topic_id=payload.topic_id, page_start=payload.page_start,
                            page_end=payload.page_end, content_type=payload.content_type)
     if cached:

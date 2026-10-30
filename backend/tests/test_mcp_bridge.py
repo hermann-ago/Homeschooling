@@ -74,3 +74,20 @@ def test_stdio_is_utf8_whatever_the_locale_code_page(tmp_path):
                                capture_output=True, env=env, timeout=30)
     replies = [json.loads(line) for line in completed.stdout.decode("utf-8").splitlines()]
     assert [r["error"]["message"] for r in replies] == ["Method not found: Álbum", "Method not found: Português"]
+
+
+def test_bridge_exposes_subject_skill_and_can_finish_final_topic(harness):
+    s = seed_history(harness)
+    bridge = make_bridge(harness)
+    error, packet = call(bridge, "lesson_context", {"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"]})
+    assert not error and "History teaching skill" in packet["teaching_skill"]["content"]
+    with harness.ctx.store.transaction() as tx:
+        tx.update("topics", s["conquest"]["id"], {"completed": True})
+    _, started = call(bridge, "start_lesson", {"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"],
+                                             "operation_id": "final-start"})
+    session = started["result"]
+    error, finished = call(bridge, "finish_lesson", {"session_id": session["session_id"], "expected_revision": session["revision"],
+        "end_of_subject": True, "learner_explained": "He united the tribes.", "understanding": "Independent",
+        "complete_topic": True, "operation_id": "final-finish"})
+    assert not error, finished
+    assert finished["result"]["next_topic_id"] is None and finished["result"]["topic_completed"]

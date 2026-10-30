@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app_context import request_operation as write
 from dependencies import context, require_family, store
 from schemas import AIAnalysisResult, SubjectCreate, SubjectResponse, SubjectUpdate, TopicResponse, TopicUpdate
+from schemas.topics import TopicBase
 from services.ai_analyzer import analyze_curriculum
 from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
 from services.documents import MAX_PDF_BYTES, add_drive_document, add_uploaded_document, inspect_pdf
@@ -33,32 +34,52 @@ def _topic(subject_id: int, topic_id: int) -> dict:
     return topic
 
 
+def _book_topics(db, subject_id, filename, document_id=None):
+    rows = db.find('topics', subject_id=subject_id, pdf_filename=filename)
+    if document_id is not None:
+        rows = [t for t in rows if t['document_id'] == document_id]
+    elif len({t['document_id'] for t in rows}) > 1:
+        raise HTTPException(409, 'Several books have this filename. Refresh and select the intended book.')
+    if not rows:
+        raise HTTPException(404, 'Book not found in this subject')
+    return rows
+
+
 # ─── Books Management ────────────────────────────────────────────────
 
 @router.put("/{subject_id}/books/set-main-book", response_model=dict, dependencies=[Depends(require_family)])
-def set_main_book(subject_id: int, pdf_filename: str):
+def set_main_book(subject_id: int, pdf_filename: str, document_id: int | None = None):
     _subject(subject_id)
     with write("books.set_main") as tx:
+        selected = _book_topics(tx, subject_id, pdf_filename, document_id)
+        selected_ids = {t['id'] for t in selected}
+        selected_documents = {t['document_id'] for t in selected}
+        for book in tx.find("subject_books", subject_id=subject_id):
+            if book["document_id"] in selected_documents:
+                if book["role"] in ("workbook", "test", "answer_key"):
+                    raise HTTPException(400, "Choose a textbook to drive the reading schedule")
+                tx.update("subject_books", book["id"], {"role": "combined" if book["role"] == "combined" else "textbook"})
         for topic in tx.find("topics", subject_id=subject_id):
-            tx.update("topics", topic["id"], {"is_core": topic["pdf_filename"] == pdf_filename})
+            tx.update("topics", topic["id"], {"is_core": topic['id'] in selected_ids})
     return {"message": "Main book updated"}
 
 
 @router.put("/{subject_id}/books/set-book-offset", response_model=dict, dependencies=[Depends(require_family)])
-def set_book_offset(subject_id: int, pdf_filename: str, offset: int):
+def set_book_offset(subject_id: int, pdf_filename: str, offset: int, document_id: int | None = None):
     _subject(subject_id)
     with write("books.set_offset") as tx:
-        topics = tx.find("topics", subject_id=subject_id, pdf_filename=pdf_filename)
+        topics = _book_topics(tx, subject_id, pdf_filename, document_id)
         for topic in topics:
-            tx.update("topics", topic["id"], {"pdf_page_offset": offset})
+            changed = tx.update("topics", topic["id"], {"pdf_page_offset": offset})
+            context().books.reading_changed(tx, changed)
     return {"message": "Book page offset updated", "updated_topics": len(topics)}
 
 
 @router.delete("/{subject_id}/books", status_code=204, dependencies=[Depends(require_family)])
-def delete_book(subject_id: int, pdf_filename: str):
+def delete_book(subject_id: int, pdf_filename: str, document_id: int | None = None):
     _subject(subject_id)
     with write("books.delete") as tx:
-        for topic in tx.find("topics", subject_id=subject_id, pdf_filename=pdf_filename):
+        for topic in _book_topics(tx, subject_id, pdf_filename, document_id):
             tx.delete("topics", topic["id"])
     return None
 
@@ -66,7 +87,9 @@ def delete_book(subject_id: int, pdf_filename: str):
 @router.get("/by-child/{child_id}", response_model=List[SubjectResponse])
 def list_subjects(child_id: int):
     get_or_404(store(), "children", child_id, "Child")
-    return sorted(store().find("subjects", child_id=child_id), key=lambda s: s["name"])
+    readings = {r['subject_id']: r['book_id'] for r in store().find('library_readings', child_id=child_id)}
+    return sorted(({**s, 'library_book_id': readings.get(s['id'])} for s in store().find("subjects", child_id=child_id)
+                   if s.get("purpose") != "library_paused"), key=lambda s: s["name"])
 
 
 def _make_folders(folder: str) -> None:
@@ -85,6 +108,8 @@ def create_subject(subject: SubjectCreate):
     with write("subjects.create") as tx:
         created = tx.insert("subjects", {**subject.model_dump(), "grade": grade,
                                          "folder": layout.subject_folder(child, subject.name, grade)})
+        from tutoring import skills
+        skills.save(tx, created, skills.template(tx, created), 0)
     _make_folders(created["folder"])
     return created
 
@@ -100,6 +125,42 @@ def delete_subject(subject_id: int):
 @router.get("/{subject_id}", response_model=SubjectResponse)
 def get_subject(subject_id: int):
     return _subject(subject_id)
+
+
+class SkillSaveRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=30000)
+    expected_version: int = Field(..., ge=0)
+
+
+@router.get("/{subject_id}/teaching-skill", dependencies=[Depends(require_family)])
+def teaching_skill(subject_id: int):
+    from tutoring import skills
+    subject = _subject(subject_id)
+    row = skills.current(store(), subject_id)
+    return skills.view(row) if row else {"version": 0, "content": skills.template(store(), subject)}
+
+
+@router.put("/{subject_id}/teaching-skill", dependencies=[Depends(require_family)])
+def save_teaching_skill(subject_id: int, payload: SkillSaveRequest):
+    from tutoring import skills
+    with write("skills.save", "Saved subject teaching instructions") as tx:
+        row = skills.save(tx, _subject(subject_id), payload.content, payload.expected_version)
+    return skills.view(row)
+
+
+@router.get("/{subject_id}/teaching-skill/history", dependencies=[Depends(require_family)])
+def teaching_skill_history(subject_id: int):
+    from tutoring import skills
+    _subject(subject_id)
+    return [skills.view(r) for r in sorted(store().find("subject_skills", subject_id=subject_id),
+                                          key=lambda r: r["version"], reverse=True)]
+
+
+@router.post("/{subject_id}/teaching-skill/export", dependencies=[Depends(require_family)])
+def export_teaching_skill(subject_id: int):
+    from tutoring import skills
+    _subject(subject_id)
+    return skills.view(skills.export(context(), subject_id))
 
 
 @router.put("/{subject_id}", response_model=SubjectResponse, dependencies=[Depends(require_family)])
@@ -127,7 +188,33 @@ def update_subject(subject_id: int, updates: SubjectUpdate):
 @router.get("/{subject_id}/topics", response_model=List[TopicResponse])
 def list_topics(subject_id: int):
     _subject(subject_id)
-    return sorted(store().find("topics", subject_id=subject_id), key=lambda t: t["chapter_order"] or 0)
+    return sorted((t for t in store().find("topics", subject_id=subject_id) if not t.get("archived")), key=lambda t: t["chapter_order"] or 0)
+
+
+@router.post("/{subject_id}/topics", response_model=TopicResponse, status_code=201,
+             dependencies=[Depends(require_family)])
+def create_topic(subject_id: int, payload: TopicBase):
+    """Add an assigned lesson from an existing subject book, without reimporting it."""
+    _subject(subject_id)
+    db = store()
+    document = db.get('documents', payload.document_id) if payload.document_id else None
+    sources = db.find('subject_books', subject_id=subject_id)
+    bindings = db.find('subject_collections', subject_id=subject_id)
+    collections = {b['collection_id'] for b in bindings}
+    sources += [b for b in db.all('collection_books') if b['collection_id'] in collections]
+    if not document or not any(b['document_id'] == document['id']
+            and b['role'] in ('textbook', 'combined') and not b.get('archived') for b in sources):
+        raise HTTPException(400, 'Choose a teaching book belonging to this subject')
+    first = payload.page_start + payload.pdf_page_offset
+    last = payload.page_end + payload.pdf_page_offset
+    if not 1 <= first <= last <= document['page_count']:
+        raise HTTPException(400, 'The lesson pages are outside this book')
+    if payload.completed:
+        raise HTTPException(400, 'Create the lesson before marking it complete')
+    values = payload.model_dump(exclude={'pdf_filename'})
+    with write('topics.create', 'Added an assigned lesson from an existing subject book') as tx:
+        return tx.insert('topics', {**values, 'subject_id': subject_id,
+                                   'pdf_filename': document['original_filename']})
 
 
 @router.post("/{subject_id}/generate-chapters", response_model=List[TopicResponse], dependencies=[Depends(require_family)])
@@ -150,8 +237,14 @@ def update_topic(subject_id: int, topic_id: int, updates: TopicUpdate):
     elif completed is False:
         mark_topic_incomplete(topic)
     with write("topics.update") as tx:
-        return tx.update("topics", topic_id, {**changes, "completed": topic["completed"],
-                                              "completed_at": topic["completed_at"]})
+        if any(k in changes for k in ("page_start", "page_end", "pdf_page_offset", "start_at", "stop_before")):
+            context().books.reading_changed(tx, topic)
+        saved = save_topic(tx,topic,completion_requested=completed is not None,**changes)
+        if topic.get('document_id') and any(k in changes for k in
+                ('title', 'page_start', 'page_end', 'pdf_page_offset', 'start_at', 'stop_before', 'chapter_order', 'language')):
+            from tutoring.library_materials import remember_topics
+            remember_topics(tx, subject_id, topic['document_id'])
+        return saved
 
 
 @router.delete("/{subject_id}/topics/{topic_id}", status_code=204, dependencies=[Depends(require_family)])
@@ -194,7 +287,10 @@ def complete_previous(subject_id: int, topic_id: int):
     recorded_at = datetime.now(timezone.utc).replace(microsecond=0)
     with write("topics.complete_previous") as tx:
         topics = [t for t in tx.find("topics", subject_id=subject_id)
-                  if (t["chapter_order"] or 0) <= (target["chapter_order"] or 0)]
+                  if (t["chapter_order"] or 0) <= (target["chapter_order"] or 0)
+                  and not t.get('archived')
+                  and (t['document_id'] == target['document_id'] if target['document_id'] is not None
+                       else t['document_id'] is None and t['pdf_filename'] == target['pdf_filename'])]
         for topic in topics:
             if not topic["completed"]:
                 save_topic(tx, mark_topic_completed(topic, recorded_at))
@@ -253,6 +349,21 @@ def _finish_upload(subject_id, data, filename, page_count, analysis):
 
 class DriveBookRequest(BaseModel):
     path: str = Field(..., min_length=5, max_length=400)
+
+
+from tutoring.source_restore import RestoreSource
+
+
+@router.put('/{subject_id}/documents/{document_id}/restore-source',dependencies=[Depends(require_family)])
+def restore_original_source(subject_id:int,document_id:int,payload:RestoreSource):
+    from tutoring.source_restore import inspect,save
+    _subject(subject_id)
+    try:
+        verified=inspect(context(),subject_id,document_id,payload)
+        with write('documents.restore_original','Restored original book and checked page locators without replacing learner history') as tx:
+            return save(context(),tx,subject_id,document_id,payload,verified)
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from exc
 
 
 @router.post("/{subject_id}/documents/from-drive", response_model=AIAnalysisResult,

@@ -98,14 +98,6 @@ class UsageLedger:
             if request_id in entry["requests"]:
                 raise LedgerError(f"Request {request_id} already reserved or sent; reconcile its cache before retrying.")
             total = entry["characters"] + characters
-            if total > MONTHLY_LIMIT:
-                approved = overage_approval and overage_approval.get("approved_by_parent") \
-                    and total <= MONTHLY_LIMIT + int(overage_approval.get("extra_characters", 0))
-                if not approved:
-                    raise LedgerError(f"Local monthly ceiling exceeded ({total} > {MONTHLY_LIMIT}); no request sent. "
-                                      "Paid overage needs explicit parent approval.")
-                entry.setdefault("overage_approvals", []).append({**overage_approval, "request": request_id,
-                                                                  "at": _now()})
             entry["characters"] = total
             entry["requests"][request_id] = {"characters": characters, "status": "reserved", "at": _now()}
             self._write(value)
@@ -148,9 +140,33 @@ def validate_manifest(manifest: dict, passage_sha: str, sentence_count: int) -> 
         return False, "Audio sentence count does not match the passage"
     covered = 0
     for track in manifest.get("tracks", []):
+        if manifest.get('version')==4 and track.get('fallback') is True:
+            count=track.get('sentenceCount')
+            if (track.get('timing')!='device' or track.get('duration')!=0 or track.get('path')
+                    or track.get('sentenceStarts') or track.get('startSentence')!=covered
+                    or isinstance(count,bool) or not isinstance(count,int) or count<1):
+                return False,'Text-only audio sections have invalid coverage'
+            covered+=count
+            continue
+        if manifest.get("version") == 3 and manifest.get("timing") == "passage":
+            count = track.get("sentenceCount")
+            fallback = track.get("fallback") is True and track.get("timing") == "device" and track.get("duration") == 0 and not track.get("path")
+            if track.get("startSentence") != covered or not isinstance(count, int) or count < 1 or (not fallback and track.get("duration", 0) <= 0):
+                return False, "Audio passages do not cover every sentence in order"
+            covered += count
+            continue
         starts = track.get("sentenceStarts") or []
         if track.get("startSentence") != covered or not starts:
             return False, "Audio tracks do not cover every sentence in order"
+        if manifest.get('version') == 4:
+            import math
+            duration = track.get('duration')
+            if (track.get('sentenceCount') != len(starts) or not isinstance(duration, (int, float))
+                    or not math.isfinite(duration) or duration <= 0
+                    or any(isinstance(t, bool) or not isinstance(t, (int, float)) or not math.isfinite(t) for t in starts)
+                    or abs(starts[0]) > .000001 or starts[-1] >= duration
+                    or any(b <= a for a, b in zip(starts, starts[1:]))):
+                return False, 'Locally aligned audio contains invalid sentence timings'
         if any(b < a for a, b in zip(starts, starts[1:])):
             return False, "Audio timings are not increasing"
         covered += len(starts)
@@ -164,11 +180,14 @@ def _ssml_chunks(sentences: list[dict]) -> list[tuple[int, int, str, int]]:
     chunks, current, first, characters = [], [], 0, 0
     for index, sentence in enumerate(sentences):
         piece = f'<mark name="s{index}"/>{html.escape(sentence["text"], quote=False)} '
-        if current and len("<speak>" + "".join(current) + piece + "</speak>") > MAX_SSML_BYTES:
+        if current and len(("<speak>" + "".join(current) + piece + "</speak>").encode("utf-8")) > MAX_SSML_BYTES:
             chunks.append((first, len(current), "<speak>" + "".join(current) + "</speak>", characters))
             current, first, characters = [], index, 0
         current.append(piece)
         characters += len(sentence["text"])
+        if sentence.get("pause_after"):
+            chunks.append((first, len(current), "<speak>" + "".join(current) + "</speak>", characters))
+            current, first, characters = [], index + 1, 0
     if current:
         chunks.append((first, len(current), "<speak>" + "".join(current) + "</speak>", characters))
     return chunks
@@ -219,7 +238,8 @@ def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, en
     ledger = UsageLedger(home_tutor_dir(), project)
     month = month_key()
     estimate = {"track_id": key, "characters": characters, "parts": len(chunks), "month": month,
-                "used_this_month": ledger.used(month), "monthly_limit": MONTHLY_LIMIT, "voice": voice, "rate": rate}
+                "used_this_month": ledger.used(month), "monthly_limit": None, "tracking_only": True,
+                "allowed": True, "voice": voice, "rate": rate}
     if dry_run:
         return {**estimate, "dry_run": True}
     engine = engine or GoogleTTS(project)
@@ -227,12 +247,25 @@ def generate(ctx, tx, topic: dict, passage: dict, *, voice: str, rate: float, en
     tracks = []
     for part, (first, count, ssml, part_characters) in enumerate(chunks, start=1):
         request_id = f"{key[:24]}-part-{part}"
-        ledger.reserve(month, request_id, part_characters, overage_approval)
+        # Retained Neural2 compatibility also respects the new USD voice guard.
+        # Charge the conservative paid rate rather than assuming free allowance
+        # remains available across the Google billing account.
+        from services.ai_budget import token_cost
+        usd_request = f"neural2:{request_id}"
+        ctx.ai.ledger.reserve(usd_request, "voice", max(1, token_cost(part_characters, 0, 16, 0)), ctx.ai.limits,
+                              provider="google-neural2", model=voice, operation="narration")
+        try:
+            ledger.reserve(month, request_id, part_characters, overage_approval)
+        except Exception:
+            ctx.ai.ledger.mark(usd_request, "rejected")
+            raise
         try:
             response = engine.synthesize(ssml, voice, rate)
         except Exception:
             ledger.mark(month, request_id, "uncertain")  # stays counted; never auto-retried
+            ctx.ai.ledger.mark(usd_request, "uncertain")
             raise
+        ctx.ai.ledger.settle(usd_request, token_cost(part_characters, 0, 16, 0), {"characters": part_characters})
         marks = {tp["markName"]: tp["timeSeconds"] for tp in response.get("timepoints", [])}
         if any(f"s{index}" not in marks for index in range(first, first + count)):
             ledger.mark(month, request_id, "completed")

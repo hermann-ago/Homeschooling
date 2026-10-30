@@ -1,24 +1,32 @@
-import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { addDays, format, isToday, parseISO } from 'date-fns';
-import { BookOpen, CheckCheck, ChevronDown, ChevronRight, FolderOpen, Plus, Printer, Star, Trash2, Upload } from 'lucide-react';
+import { BookOpen, CheckCheck, ChevronDown, ChevronRight, Plus, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import ScreenHeader from '../app/ScreenHeader';
 import { useLearner } from '../app/learnerContext';
 import useReplanAction from '../app/useReplanAction';
 import { subjectsApi } from '../api/subjects';
 import { keys, refreshPlan, useChildProgress, useSlots, useSubjects, useTopics } from '../api/queries';
-import DriveBookPicker from '../components/DriveBookPicker';
+import BookImportDialog from '../components/BookImportDialog';
+import SubjectResources from '../components/SubjectResources';
+import SubjectBookCollection from '../components/SubjectBookCollection';
+import LessonPreparation from '../components/LessonPreparation';
+import { CurriculumPreparationCells, CurriculumPreparationDialog } from '../components/CurriculumLessonPrep';
+import { useCurriculumPreparation } from '../api/preparation';
 import GradeSelect from '../components/GradeSelect';
+import TeachingSkillEditor from '../components/TeachingSkillEditor';
+import SourceNotes from '../components/SourceNotes';
 import {
   Badge, Button, CheckButton, Dialog, Field, IconButton, ProgressBar, SegmentedControl, useConfirm, useToast,
 } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { isoDay, lessonPath } from '../utils/lessons';
 import { folderLabel, gradeLabel, sameGrade } from '../utils/grades';
+import { PRINTED, bookTitle, curriculumBooks } from '../utils/curriculumBooks';
+import { BookReading } from './Books';
 
-const PRINTED = 'Printed book';
 // The planner numbers the study days: A subjects get the 1st, 3rd, 5th…, B the 2nd, 4th, 6th…
 const DAYS = {
   A: { label: 'Every other day · 1st', short: '1st days', hint: 'Planned on the 1st, 3rd, 5th… study day, taking turns with “2nd” subjects.' },
@@ -30,8 +38,6 @@ const PACES = [
 ];
 const paceLabel = (weight) => PACES.find((p) => p.value === weight)?.label.concat(' pace') ?? `${weight}× pace`;
 const clean = (error) => (error?.message || String(error)).replace(/^\/[^:]+: /, '');
-const bookOf = (topic) => topic.pdf_filename || PRINTED;
-const bookTitle = (name) => name.replace(/\.pdf$/i, '');
 
 /** Shared "do it, refresh, tell the parent" wrapper for curriculum changes. */
 function useChange(subjectId, childId) {
@@ -154,68 +160,14 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   );
 }
 
-function AddBookDialog({ subject, child, onClose, onAdded }) {
-  const [mode, setMode] = useState(null);
-  const [chapters, setChapters] = useState(10);
-  const [busy, setBusy] = useState('');
-  const input = useRef(null);
-  const change = useChange(subject.id, child.id);
-
-  const run = async (label, action, success) => {
-    setBusy(label);
-    const ok = await change(action, success);
-    setBusy('');
-    if (ok) { onAdded(); onClose(); }
-  };
-  const upload = (file) => file && run('Reading the book to find its chapters… this can take a minute.',
-    () => subjectsApi.uploadPdf(subject.id, file), `${file.name} added and its chapters found.`);
-  const link = (book) => { setMode(null); run('Reading the book to find its chapters… this can take a minute.',
-    () => subjectsApi.linkDriveBook(subject.id, book.path), `${book.name} linked and its chapters found.`); };
-  const printed = () => run('Adding chapters…', () => subjectsApi.generateChapters(subject.id, chapters), `${chapters} chapters added.`);
-
-  const Option = ({ icon: Icon, title, text, onClick }) => (
-    <button type="button" onClick={onClick} disabled={Boolean(busy)}
-      className="flex items-start gap-3.5 p-4 rounded-xl border border-line text-left hover:border-action hover:bg-action-soft/40 disabled:opacity-50">
-      <Icon aria-hidden="true" className="w-5 h-5 mt-0.5 text-action shrink-0" />
-      <span className="flex flex-col gap-0.5"><span className="text-[15px] font-semibold">{title}</span><span className="text-[13px] text-muted">{text}</span></span>
-    </button>
-  );
-
-  return (
-    <>
-      <Dialog open={mode !== 'drive'} onClose={busy ? undefined : onClose} title={`Add a book to ${subject.name}`}
-        footer={mode === 'printed'
-          ? <><Button onClick={() => setMode(null)} disabled={Boolean(busy)}>Back</Button><Button variant="primary" disabled={Boolean(busy) || chapters < 1} onClick={printed}>Add chapters</Button></>
-          : <Button onClick={onClose} disabled={Boolean(busy)}>Cancel</Button>}>
-        {busy ? (
-          <p className="py-4 text-[15px]" role="status">{busy}</p>
-        ) : mode === 'printed' ? (
-          <Field label="How many chapters?" type="number" min={1} max={100} value={chapters}
-            onChange={(e) => setChapters(Math.max(1, Math.min(100, Number(e.target.value) || 1)))}
-            hint="Numbered chapters are added so a printed book can be planned and ticked off." />
-        ) : (
-          <div className="flex flex-col gap-2.5">
-            <Option icon={FolderOpen} title="From the Drive folder" text="A PDF already in the Homeschooling folder." onClick={() => setMode('drive')} />
-            <Option icon={Upload} title="Upload a PDF" text="Copied into this subject's Books folder." onClick={() => input.current?.click()} />
-            <Option icon={Printer} title="A printed book" text="No PDF: plan it by chapter numbers." onClick={() => setMode('printed')} />
-            <input ref={input} type="file" accept=".pdf,application/pdf" className="hidden"
-              onChange={(e) => { upload(e.target.files[0]); e.target.value = ''; }} />
-          </div>
-        )}
-      </Dialog>
-      {mode === 'drive' && <DriveBookPicker onClose={() => setMode(null)} onPick={link} />}
-    </>
-  );
-}
-
-function OffsetDialog({ subject, child, book, offset, onClose }) {
+function OffsetDialog({ subject, child, book, label, document, offset, onClose }) {
   const [value, setValue] = useState(offset);
   const change = useChange(subject.id, child.id);
   const save = async () => {
-    if (await change(() => subjectsApi.setBookOffset(subject.id, book, value), 'Page offset saved.')) onClose();
+    if (await change(() => subjectsApi.setBookOffset(subject.id, book, value, document), 'Page offset saved.')) onClose();
   };
   return (
-    <Dialog open onClose={onClose} title="Page offset" description={bookTitle(book)}
+    <Dialog open onClose={onClose} title="Page offset" description={label || bookTitle(book)}
       footer={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" onClick={save}>Save</Button></>}>
       <Field label="Pages before page 1" type="number" value={value} onChange={(e) => setValue(Number(e.target.value) || 0)}
         hint="If the book's page 1 is the PDF's page 5, the offset is 4. Lessons then open on the right pages." />
@@ -238,12 +190,16 @@ function whenLabel(topic, planned) {
   return { text: isToday(day) ? 'Today' : format(day, 'EEE d MMM'), tone: isToday(day) ? 'today' : 'next' };
 }
 
-function ChapterRow({ topic, when, tones, onToggle, onOpen, onEarlier, onDelete }) {
+function ChapterRow({ topic, when, tones, onToggle, onOpen, onEarlier, onDelete, preparation, onPrepare }) {
   return (
     <div className="flex flex-wrap md:flex-nowrap items-center gap-x-4 gap-y-1 px-5 py-3 border-b border-line-soft last:border-b-0">
       <CheckButton size={32} done={topic.completed} current={when.tone === 'today'} color={tones.strong}
         label={topic.title} onToggle={onToggle} />
-      <span className={clsx('flex-1 min-w-[12rem] text-[15px] font-semibold', topic.completed && 'text-subtle line-through')}>{topic.title}</span>
+      <div className="flex-1 min-w-[12rem] flex flex-col gap-2">
+        <span className={clsx('text-[15px] font-semibold', topic.completed && 'text-subtle line-through')}>{topic.title}</span>
+        {topic.completed&&topic.completion_source==='manual'&&<span className="block text-xs text-muted">Completed by you</span>}
+        <div className="flex flex-wrap gap-x-3 gap-y-2"><CurriculumPreparationCells topic={topic} status={preparation} onPrepare={onPrepare}/></div>
+      </div>
       <span className="w-24 text-sm text-muted">
         {topic.page_start === topic.page_end ? `p. ${topic.page_start}` : `${topic.page_start}–${topic.page_end}`}
       </span>
@@ -263,6 +219,7 @@ function ChapterRow({ topic, when, tones, onToggle, onOpen, onEarlier, onDelete 
 }
 
 function SubjectDetail({ subject, child, onDeleted }) {
+  const [section, setSection] = useState('books');
   const { data: topics = [], isLoading } = useTopics(subject.id);
   const { data: missed = [] } = useSlots(child.id, 'missed');
   const { data: upcoming = [] } = useSlots(child.id, { start: isoDay(new Date()), end: isoDay(addDays(new Date(), 400)) });
@@ -274,18 +231,12 @@ function SubjectDetail({ subject, child, onDeleted }) {
   const navigate = useNavigate();
   const tones = learnerTones(child.color);
 
-  const books = [...topics.reduce((map, t) => {
-    const name = bookOf(t);
-    const book = map.get(name) || { name, core: false, count: 0, offset: t.pdf_page_offset || 0, document: t.document_id };
-    book.core = book.core || Boolean(t.is_core);
-    book.count += 1;
-    return map.set(name, book);
-  }, new Map()).values()].sort((a, b) => Number(b.core) - Number(a.core));
-  const book = books.find((b) => b.name === chosenBook) || books[0];
-  const chapters = topics.filter((t) => book && bookOf(t) === book.name)
-    .sort((a, b) => (a.chapter_order ?? 0) - (b.chapter_order ?? 0) || a.page_start - b.page_start);
+  const books = curriculumBooks(topics);
+  const book = books.find((b) => b.key === chosenBook) || books[0];
+  const chapters = book?.chapters || [];
   const finished = chapters.filter((t) => t.completed);
   const open = chapters.filter((t) => !t.completed);
+  const preparation=useCurriculumPreparation(child.id,subject.id,chapters);
 
   const planned = new Map();
   for (const slot of missed) if (!slot.is_completed && slot.topic_id) {
@@ -301,6 +252,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
 
   const row = (topic) => (
     <ChapterRow key={topic.id} topic={topic} when={whenLabel(topic, planned)} tones={tones}
+      preparation={preparation.statuses.get(topic.id)} onPrepare={target=>setDialog({type:'prepare',topic,target})}
       onToggle={() => change(() => subjectsApi.toggleTopicComplete(subject.id, topic.id))}
       onOpen={topic.document_id ? () => navigate(lessonPath({ topic_id: topic.id }, child.id)) : null}
       onEarlier={async () => {
@@ -330,14 +282,22 @@ function SubjectDetail({ subject, child, onDeleted }) {
         <Button onClick={() => setDialog({ type: 'edit' })}>Edit subject</Button>
       </div>
 
+      <SegmentedControl label="Subject view" value={section} onChange={setSection}
+        options={[{ value: 'books', label: 'Books & lessons' }, { value: 'skill', label: 'Teaching skill' }]} />
+      {section === 'skill' && <><TeachingSkillEditor key={subject.id} subject={subject} /><SourceNotes key={`notes-${subject.id}`} subject={subject}/></>}
+      {section === 'books' && <>
+      <SubjectBookCollection key={subject.id} subject={subject} onAdd={() => setDialog({ type: 'book' })} />
+      <SubjectResources subject={subject} topics={topics} />
+      <LessonPreparation key={`preparation-${subject.id}`} subject={subject} topics={topics} />
       <div className="flex flex-col gap-2.5">
         {books.map((b) => (
-          <div key={b.name} className={clsx('flex flex-wrap items-center gap-3.5 px-4 py-3 rounded-2xl bg-surface border',
-            b.name === book?.name ? 'border-action' : 'border-line')}>
-            <button type="button" onClick={() => setChosenBook(b.name)} className="flex-1 min-w-0 flex items-center gap-3.5 text-left">
+          <div key={b.key} className={clsx('flex flex-wrap items-center gap-3.5 px-4 py-3 rounded-2xl bg-surface border',
+            b.key === book?.key ? 'border-action' : 'border-line')}>
+            <button type="button" onClick={() => setChosenBook(b.key)} className="flex-1 min-w-0 flex items-center gap-3.5 text-left">
               <span aria-hidden="true" className="w-8 h-10 shrink-0 rounded-[4px]" style={{ background: b.core ? tones.strong : 'var(--color-line)' }} />
               <span className="min-w-0 flex flex-col gap-0.5">
-                <span className="text-[15px] font-bold truncate">{bookTitle(b.name)}</span>
+                <span className="text-[15px] font-bold truncate">{b.title}</span>
+                {b.detail && <span className="text-sm font-semibold text-action">{b.detail}</span>}
                 <span className="text-[13px] text-muted">
                   {b.core ? 'Main book · planned' : 'Extra book · not planned'} · {b.count} {b.count === 1 ? 'chapter' : 'chapters'}
                 </span>
@@ -345,15 +305,15 @@ function SubjectDetail({ subject, child, onDeleted }) {
             </button>
             <div className="flex gap-1">
               {!b.core && b.name !== PRINTED && (
-                <IconButton icon={Star} size="sm" label={`Make ${bookTitle(b.name)} the main book`}
-                  onClick={() => change(() => subjectsApi.setMainBook(subject.id, b.name), `${bookTitle(b.name)} is now the main book.`)} />
+                <IconButton icon={Star} size="sm" label={`Make ${b.label} the main book`}
+                  onClick={() => change(() => subjectsApi.setMainBook(subject.id, b.name, b.document), `${b.title} is now the main book.`)} />
               )}
               {b.document && <Button size="sm" onClick={() => setDialog({ type: 'offset', book: b })}>Offset {b.offset}</Button>}
               {b.name !== PRINTED && (
-                <IconButton icon={Trash2} size="sm" variant="quiet" className="text-muted" label={`Delete the book ${bookTitle(b.name)}`}
+                <IconButton icon={Trash2} size="sm" variant="quiet" className="text-muted" label={`Delete the book ${b.label}`}
                   onClick={async () => {
-                    if (await confirm({ title: `Delete the book "${bookTitle(b.name)}"?`, description: 'Its chapters and planned lessons are removed. The PDF stays in the Drive folder.', confirmLabel: 'Delete book', danger: true })) {
-                      change(() => subjectsApi.deleteBook(subject.id, b.name), 'Book deleted.');
+                    if (await confirm({ title: `Delete the book "${b.label}"?`, description: 'Its chapters and planned lessons are removed. The PDF stays in the Drive folder.', confirmLabel: 'Delete book', danger: true })) {
+                      change(() => subjectsApi.deleteBook(subject.id, b.name, b.document), 'Book deleted.');
                     }
                   }} />
               )}
@@ -363,18 +323,19 @@ function SubjectDetail({ subject, child, onDeleted }) {
         <button type="button" onClick={() => setDialog({ type: 'book' })}
           className="h-12 rounded-2xl border border-dashed border-line flex items-center justify-center gap-2 text-sm font-semibold hover:border-action">
           <Plus aria-hidden="true" className="w-[18px] h-[18px]" />
-          Add a book
-          <span className="font-medium text-muted">· from Drive, upload, or printed</span>
+          Add books
+          <span className="font-medium text-muted">· incoming folder, upload, or printed</span>
         </button>
       </div>
 
       <div className="bg-surface border border-line rounded-2xl overflow-hidden">
         <div className="hidden md:flex items-center gap-4 px-5 py-3 border-b border-line-soft text-xs font-bold tracking-[0.6px] uppercase text-muted">
-          <span className="w-8" /><span className="flex-1">Chapter</span><span className="w-24">Pages</span><span className="w-40">When</span><span className="w-32" />
+          <span className="w-8" /><span className="flex-1">Chapter &amp; preparation</span><span className="w-24">Pages</span><span className="w-40">When</span><span className="w-32" />
         </div>
+        {preparation.error&&<p role="alert" className="px-5 py-3 text-sm text-problem">Could not check lesson preparation: {clean(preparation.error)} <button className="underline" onClick={()=>preparation.refetch()}>Try again</button></p>}
         {isLoading && <p className="px-5 py-4 text-muted">Loading…</p>}
         {!isLoading && !chapters.length && (
-          <p className="px-5 py-6 text-muted">No chapters yet. Add a book to plan {subject.name}.</p>
+          <p className="px-5 py-6 text-muted">No reading lessons planned yet. Add or review the books above to choose lesson ranges for {subject.name}.</p>
         )}
         {finished.length > 0 && (
           <button type="button" onClick={() => setShowDone(!showDone)}
@@ -383,14 +344,15 @@ function SubjectDetail({ subject, child, onDeleted }) {
             {showDone ? 'Hide' : 'Show'} {finished.length} finished {finished.length === 1 ? 'chapter' : 'chapters'}
           </button>
         )}
-        {showDone && finished.map(row)}
-        {open.map(row)}
+        {(showDone ? chapters : open).map(row)}
       </div>
 
+      </>}
       {dialog?.type === 'edit' && <EditSubjectDialog subject={subject} child={child} onClose={() => setDialog(null)} onDeleted={onDeleted} />}
-      {dialog?.type === 'book' && <AddBookDialog subject={subject} child={child} onClose={() => setDialog(null)} onAdded={() => setChosenBook(null)} />}
+      {dialog?.type === 'prepare'&&<CurriculumPreparationDialog learner={child.id} topic={dialog.topic} target={dialog.target} status={preparation.statuses.get(dialog.topic.id)} onClose={()=>setDialog(null)}/>}
+      {dialog?.type === 'book' && <BookImportDialog subject={subject} onClose={() => setDialog(null)} onAdded={() => setChosenBook(null)} />}
       {dialog?.type === 'offset' && (
-        <OffsetDialog subject={subject} child={child} book={dialog.book.name} offset={dialog.book.offset} onClose={() => setDialog(null)} />
+        <OffsetDialog subject={subject} child={child} book={dialog.book.name} label={dialog.book.label} document={dialog.book.document} offset={dialog.book.offset} onClose={() => setDialog(null)} />
       )}
     </section>
   );
@@ -429,10 +391,10 @@ export default function Curriculum() {
                 <span className="flex justify-between gap-2 text-[15px]">
                   <span className={selected ? 'font-bold' : 'font-semibold'}>
                     {s.name}
-                    {!sameGrade(s.grade, child.grade_year) && <span className="ml-1.5 text-xs font-semibold text-action">{gradeLabel(s.grade)}</span>}
+                    {s.library_book_id ? <span className="ml-1.5 text-xs font-semibold text-action">Book</span> : !sameGrade(s.grade, child.grade_year) && <span className="ml-1.5 text-xs font-semibold text-action">{gradeLabel(s.grade)}</span>}
                   </span>
                   <span className={clsx('text-sm font-semibold', !p?.total_pages ? 'text-attention' : complete ? 'text-action' : 'text-muted')}>
-                    {!p ? '' : !p.total_pages ? 'No book yet' : complete ? 'Complete' : `${Math.round(p.progress_percent)}%`}
+                    {!p ? '' : !p.total_pages ? 'No lessons yet' : complete ? 'Complete' : `${Math.round(p.progress_percent)}%`}
                   </span>
                 </span>
                 {p?.total_pages > 0 && (
@@ -442,9 +404,10 @@ export default function Curriculum() {
             );
           })}
           <Button icon={Plus} className="mt-2 border-dashed" onClick={() => setAdding(true)}>Add subject</Button>
+          <Button as={Link} to="/books" icon={BookOpen}>Add book from repository</Button>
         </nav>
         {subject ? (
-          <SubjectDetail key={subject.id} subject={subject} child={child} onDeleted={() => setChosen(null)} />
+          subject.library_book_id ? <BookReading embedded key={`${subject.id}-${child.id}`} bookId={subject.library_book_id} child={child} /> : <SubjectDetail key={subject.id} subject={subject} child={child} onDeleted={() => setChosen(null)} />
         ) : !isLoading && (
           <div className="flex-1 grid place-items-center p-10 text-center rounded-2xl border border-dashed border-line">
             <div className="flex flex-col items-center gap-3">

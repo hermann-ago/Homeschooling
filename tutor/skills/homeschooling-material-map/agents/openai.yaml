@@ -1,0 +1,4 @@
+interface:
+  display_name: "Homeschooling Material Map"
+  short_description: "Review source links across books and answer keys"
+  default_prompt: "Use $homeschooling-material-map to review source-grounded relationships between books, exercises and answer keys."

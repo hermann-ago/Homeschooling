@@ -24,7 +24,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 PROTOCOL = "2025-06-18"
 
 
@@ -161,11 +161,22 @@ REVISION = {"type": "integer", "description": "Session revision from the last re
 MUTATION = ("operation_id",)
 
 TOOLS = {
+    "list_activity_definitions": ("Provider-neutral teaching activities, validated content schemas and completion rules. Showing a card returns a pending handle, never a learner answer.",
+        _schema({}), None),
+    "get_activity_result": ("Read the current activity and actual learner responses for a family-authorized lesson. Use event_cursor to retrieve later events; do not invent a response while awaiting_input.",
+        _schema({"session_id": STR, "after": {"type": "integer", "minimum": 0}}, ("session_id",)), None),
+    "get_workbook_exercises": ("Eligible workbook exercises with source pages and reading dependencies (learner-safe).",
+        _schema({"session_id": STR}, ("session_id",)), None),
+    "assign_exercises": ("Assign stable workbook exercise IDs through the same tutoring service.",
+        _schema({"session_id": STR, "expected_revision": REVISION, "exercise_ids": {"type": "array", "items": STR},
+            "operation_id": OPERATION}, ("session_id", "expected_revision", "exercise_ids", "operation_id")), None),
+    "exercise_grading_context": ("TEACHER-ONLY original exercise instructions, sources and keys for assigned items.",
+        _schema({"session_id": STR, "item_ids": {"type": "array", "items": STR}}, ("session_id", "item_ids")), None),
     "list_learners": ("List learners and their subjects.", _schema({}), None),
     "lesson_context": ("Phase-specific lesson context. phase=start|reading|closeout. Use grading_context for keys.",
                        _schema({"child_id": INT, "subject_id": INT, "phase": {"type": "string",
                                 "enum": ["start", "reading", "closeout"]}}, ("child_id", "subject_id")), None),
-    "start_lesson": ("Start or resume today's lesson (an unfinished session is always resumed first). Returns the "
+    "start_lesson": ("Start the selected topic or resume its saved session. Other unfinished topics do not block it. Without topic_id, resume saved work or select the next chapter. Returns the "
                      "reader URL to open and visually verify before handing off.",
                      _schema({"child_id": INT, "subject_id": INT, "topic_id": INT, "operation_id": OPERATION},
                              ("child_id", "subject_id", "operation_id")), None),
@@ -201,15 +212,16 @@ TOOLS = {
                              "operation_id": OPERATION},
                             ("session_id", "expected_revision", "file_path", "operation_id")), None),
     "finish_lesson": ("Finish after actual completion: what the learner explained, difficulty, help, "
-                      "understanding, explicit next_topic_id; closes the reader (not the home server).",
+                      "understanding, explicit next_topic_id or end_of_subject=true for the final topic; closes the reader (not the home server).",
                       _schema({"session_id": STR, "expected_revision": REVISION, "next_topic_id": INT,
+                               "end_of_subject": {"type": "boolean"},
                                "learner_explained": STR, "difficulty": STR, "help_that_worked": STR,
                                "next_action": STR, "parent_observation": STR, "understanding": {
                                    "type": "string", "enum": ["Independent", "With help", "Needs help", "Not assessed"]},
                                "next_step": STR, "complete_topic": {"type": "boolean"}, "minutes": INT,
                                "session_type": STR, "chapter_updates": {"type": "array", "items": {"type": "object"}},
                                "operation_id": OPERATION},
-                              ("session_id", "expected_revision", "next_topic_id", "learner_explained",
+                              ("session_id", "expected_revision", "learner_explained",
                                "operation_id")), None),
     "close_reader": ("Close this lesson's reader session. The home server keeps running.",
                      _schema({"session_id": STR}, ("session_id",)), None),
@@ -235,6 +247,11 @@ TOOLS = {
 def run_tool(server: HomeServer, name: str, args: dict):
     op = args.get("operation_id")
     body = {k: v for k, v in args.items() if k not in ("operation_id", "session_id", "topic_id")}
+    if name == "list_activity_definitions":
+        return server.call("GET", "/api/tutor/activity-definitions")
+    if name == "get_activity_result":
+        session = urllib.parse.quote(str(args["session_id"]), safe="")
+        return server.call("GET", f"/api/tutor/sessions/{session}/activity-state", query={"after": args.get("after", 0)})
     if name == "list_learners":
         return server.call("GET", "/api/tutor/learners")
     if name == "lesson_context":
@@ -254,6 +271,12 @@ def run_tool(server: HomeServer, name: str, args: dict):
                                       "ready. An open reader is not evidence of reading.")
         return response
     session = args.get("session_id")
+    if name == "get_workbook_exercises":
+        return server.call("GET", f"/api/tutor/sessions/{session}/exercises")
+    if name == "assign_exercises":
+        return server.call("POST", f"/api/tutor/sessions/{session}/exercises", key=op, json_body=body)
+    if name == "exercise_grading_context":
+        return server.call("GET", f"/api/tutor/sessions/{session}/exercise-grading", query={"item_ids": ",".join(args["item_ids"])})
     if name == "get_assignments":
         return server.call("GET", f"/api/tutor/sessions/{session}/assignments")
     if name == "assign_questions":
@@ -291,6 +314,44 @@ def run_tool(server: HomeServer, name: str, args: dict):
 class Bridge:
     def __init__(self, server: HomeServer | None = None):
         self.server = server or HomeServer()
+        self.activity_tools = {}
+
+    def load_activity_tools(self):
+        """Fetch full canonical schemas without adding a Python runtime dependency.
+
+        Older/offline servers retain their original record tools. Content $defs
+        move to the enclosing schema so local JSON references remain valid.
+        """
+        if self.activity_tools:
+            return
+        try:
+            catalog = self.server.call("GET", "/api/tutor/activity-definitions")
+        except (ToolError, RuntimeError, OSError):
+            return
+        entries = catalog if isinstance(catalog, list) else catalog.get("activities", catalog.get("definitions", []))
+        for entry in entries:
+            name = entry.get("kind") or entry.get("type")
+            if not name or name in TOOLS or not isinstance(entry.get("input_schema"), dict):
+                continue
+            content = json.loads(json.dumps(entry["input_schema"]))
+            definitions = content.pop("$defs", None)
+            schema = _schema({"session_id": STR, "expected_revision": REVISION,
+                "operation_id": OPERATION, "content": content, "parent_activity_id": STR},
+                ("session_id", "expected_revision", "operation_id", "content"))
+            if definitions:
+                schema["$defs"] = definitions
+            self.activity_tools[name] = (f"{entry.get('title', name)}. {entry.get('completion', '')}. "
+                "Renders the app's supported component in an authorized session. Wait for actual learner input; "
+                "retrieve get_activity_result before continuing.", schema, None)
+
+    def invoke_activity(self, name, arguments):
+        session = urllib.parse.quote(str(arguments["session_id"]), safe="")
+        payload = {"operation_id": arguments["operation_id"], "expected_revision": arguments["expected_revision"],
+                   "activity_type": name, "content": arguments["content"]}
+        if arguments.get("parent_activity_id"):
+            payload["parent_activity_id"] = arguments["parent_activity_id"]
+        return self.server.call("POST", f"/api/tutor/sessions/{session}/activities",
+                                key=arguments["operation_id"], json_body=payload)
 
     def handle(self, message: dict) -> dict | None:
         method = message.get("method")
@@ -302,25 +363,33 @@ class Bridge:
                 requested = (message.get("params") or {}).get("protocolVersion") or PROTOCOL
                 result = {"protocolVersion": requested, "capabilities": {"tools": {"listChanged": False}},
                           "serverInfo": {"name": "homeschooling-tutor", "version": VERSION},
-                          "instructions": "Use with the home-tutor skill. The conversation is the classroom; "
-                                          "these tools read context and save evidence through the home server."}
+                          "instructions": "Use with the home-tutor skill. The app controls activity position and input. "
+                                          "Only a family-authorized session accepts activity tools. A displayed "
+                                          "question is pending until get_activity_result returns the child's response."}
             elif method == "ping":
                 result = {}
             elif method == "tools/list":
+                self.load_activity_tools()
                 result = {"tools": [{"name": name, "description": description, "inputSchema": schema}
-                                    for name, (description, schema, _) in TOOLS.items()]}
+                                    for name, (description, schema, _) in {**TOOLS, **self.activity_tools}.items()]}
             elif method == "tools/call":
                 params = message.get("params") or {}
                 name = params.get("name")
                 if name not in TOOLS:
+                    self.load_activity_tools()
+                catalog = {**TOOLS, **self.activity_tools}
+                if name not in catalog:
                     return _error(request_id, -32602, f"Unknown tool {name}")
                 arguments = params.get("arguments") or {}
-                missing = [k for k in TOOLS[name][1]["required"] if k not in arguments]
+                if not isinstance(arguments, dict):
+                    return _error(request_id, -32602, "Tool arguments must be a structured object")
+                missing = [k for k in catalog[name][1]["required"] if k not in arguments]
                 if missing:
                     result = _tool_result({"error": f"Missing {', '.join(missing)}"}, True)
                 else:
                     try:
-                        result = _tool_result(run_tool(self.server, name, arguments), False)
+                        value = self.invoke_activity(name, arguments) if name in self.activity_tools else run_tool(self.server, name, arguments)
+                        result = _tool_result(value, False)
                     except ToolError as error:
                         result = _tool_result({"error": error.detail, "status": error.status}, True)
                     except (RuntimeError, OSError) as error:

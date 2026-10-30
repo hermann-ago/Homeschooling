@@ -124,6 +124,7 @@ def student_package(topic: dict, document: dict | None, content: dict, status: s
         "images": [{k: image.get(k) for k in ("pdf_page", "classification", "alt", "caption", "before_sentence")}
                    for image in content.get("selected_images", [])],
         "passage_id": passage_row["id"] if passage_row else None,
+        "hide_pdf": bool(topic.get("_combined")),
     }
 
 
@@ -131,18 +132,26 @@ def load(ctx, topic: dict) -> dict:
     """The verified passage when current; otherwise a cached or fresh draft needing review."""
     store = ctx.store
     document = store.get("documents", topic["document_id"]) if topic.get("document_id") else None
+    combined = False
     if document is None:
         return student_package(topic, None, {"passage": ""}, NEEDS_REVIEW, ["This topic has no linked book"])
     if not document.get("file_path"):
         return student_package(topic, document, {"passage": ""}, NEEDS_REVIEW,
                                ["The book's file is missing from the Homeschooling folder"])
     pdf_start, pdf_end = pdf_range(topic)
+    from . import library_materials
+    if library_materials.book_for(store, topic['subject_id']):
+        shared = library_materials.load(ctx, library_materials.passage_key(topic, document))
+        if shared:
+            return student_package(topic, document, shared['data'], VERIFIED, [], shared)
     rows = [r for r in store.find("passages", topic_id=topic["id"]) if r["status"] == VERIFIED]
     for row in sorted(rows, key=lambda r: r["reviewed_at"] or r["updated_at"], reverse=True):
         current = (row["document_sha256"] == document["sha256"] and row["pdf_start"] == pdf_start
                    and row["pdf_end"] == pdf_end and (row["start_at"] or None) == (topic.get("start_at") or None)
                    and (row["stop_before"] or None) == (topic.get("stop_before") or None))
         content = json.loads(ctx.file_bytes(row["passage_path"], None))
+        if combined:
+            current = current and bool(safe_text) and _norm(content["passage"]) == _norm(safe_text)
         if current and passage_sha256(content["passage"]) == row["passage_sha256"]:
             return student_package(topic, document, content, VERIFIED, [], row)
         # The book or boundaries changed since review: fall through to a fresh draft.
@@ -150,6 +159,10 @@ def load(ctx, topic: dict) -> dict:
         break
     else:
         stale = []
+    if combined:
+        draft = {"passage": safe_text, "sentences": split_sentences(safe_text)}
+        return student_package(topic, document, draft, NEEDS_REVIEW,
+            stale + ["Review the selected student reading before narration" if safe_text else "Combined-book student reading needs source review"])
     key = cache_key(document["sha256"], pdf_start, pdf_end, topic.get("start_at"), topic.get("stop_before"))
     path = ctx.config.cache_dir / "passages" / f"{key}.json"
     if path.exists():
@@ -161,6 +174,11 @@ def load(ctx, topic: dict) -> dict:
         draft["sentences"] = split_sentences(draft["passage"])
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
+    if draft["issues"] and hasattr(ctx, "books"):
+        indexed_text = ctx.books.topic_text(topic)
+        if indexed_text:
+            draft = {"passage": indexed_text, "sentences": split_sentences(indexed_text),
+                "issues": ["Book preparation transcription: review the original pages before narration"]}
     issues = stale + draft["issues"] + ["Draft extraction: review the original pages before narration"]
     return student_package(topic, document, draft, NEEDS_REVIEW, issues)
 
@@ -191,6 +209,8 @@ def record_review(tx, topic: dict, document: dict, passage: str, reviewed_pages:
               "passage_path": path, "passage_sha256": content["passage_sha256"],
               "sentence_count": len(content["sentences"]), "character_count": len(passage), "review_notes": notes,
               "reviewed_at": reviewed_at or datetime.now(timezone.utc).replace(microsecond=0), "source": source}
+    from .library_materials import remember_passage
+    remember_passage(tx, topic, document, content)
     if tx.get("passages", row_id):
         return tx.update("passages", row_id, values)
     return tx.insert("passages", {"id": row_id, **values})

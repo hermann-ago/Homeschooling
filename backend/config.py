@@ -57,7 +57,10 @@ class HostConfig:
         self.path = self.dir / "config.json"
         self._lock = threading.Lock()
         self.values = {"drive_folder": None, "port": DEFAULT_PORT, "allowed_hosts": [],
-                       "tts": {"voice": "en-US-Neural2-J", "rate": 0.9, "project": "gen-lang-client-0088393168"}}
+                       "ai": {"provider": "openai", "limits": {"teaching": 3, "books": 2, "voice": 2},
+                              "pilot_passed": False},
+                       "tts": {"provider": "google-gemini", "voice": "Achird", "rate": 0.9,
+                               "enabled": False, "project": "gen-lang-client-0088393168"}}
         if self.path.exists():
             self.values.update(json.loads(self.path.read_text(encoding="utf-8")))
         if os.getenv("HOMESCHOOLING_DRIVE_FOLDER"):

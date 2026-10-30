@@ -1,16 +1,24 @@
+import LessonWorkspace from '../components/LessonWorkspace';
+import useViewportHeight from '../app/useViewportHeight';
+import LessonSourcePages from '../components/LessonSourcePages';
+import LessonPreparationBar from '../components/LessonPreparationBar';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { getDocument } from 'pdfjs-dist';
-import { ArrowLeft, BookOpen, Check, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Plus, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import PageViewer from '../components/PageViewer';
 import ReadAlong from '../components/ReadAlong';
 import VoiceBuilder from '../components/VoiceBuilder';
+import InteractiveGuidedLesson from '../components/InteractiveGuidedLesson';
+import OriginalSourcePage from '../components/OriginalSourcePage';
+import { pauseNarration } from '../utils/narration';
 import AIEnrichmentPanel from '../components/AIEnrichmentPanel';
 import InsertPicker from '../components/InsertPicker';
 import { getDocumentData } from '../api/documents';
 import { tutorApi } from '../api/tutor';
+import { modeHref } from '../api/mode';
 import { canvasApi } from '../api/canvas';
 import { keys, useInserts, useSetLessonDone } from '../api/queries';
 import { useLearner } from '../app/learnerContext';
@@ -46,7 +54,7 @@ function useSlotDone(slotId) {
 
 function Tabs({ tabs, value, onChange }) {
   return (
-    <div role="tablist" aria-label="Lesson tools" className="flex gap-1 px-4 pt-3 border-b border-line shrink-0 overflow-x-auto">
+    <div role="tablist" aria-label="Lesson tools" className="flex gap-1 px-4 pt-3 border-b border-line shrink-0 overflow-x-auto overflow-y-hidden">
       {tabs.map((tab) => (
         <button key={tab.id} type="button" role="tab" aria-selected={value === tab.id} onClick={() => onChange(tab.id)}
           className={clsx('h-11 px-3.5 text-[15px] whitespace-nowrap border-b-2 -mb-px',
@@ -113,70 +121,34 @@ function ExtraPages({ topicId, learner, viewing, onView }) {
   );
 }
 
+export function LessonReadMode({ mode, onChange, resumePath }) {
+  return <div className="px-4 pt-3">
+    {resumePath && <Button as={Link} to={modeHref(resumePath)} variant="primary" className="mb-3">Resume this tutoring lesson</Button>}
+    <SegmentedControl label="What to read" size="sm" value={mode} onChange={onChange}
+      options={[{ value: 'guide', label: 'Guided lesson' }, { value: 'book', label: 'Book text' }]} />
+  </div>;
+}
+
 /** The guided lesson: written once by the AI, then read like any passage. */
-function GuidePanel({ guide, learner, topic, session, closed, activeIndex, onActiveIndex, language, onChanged }) {
-  const [writing, setWriting] = useState(false);
-  const [problem, setProblem] = useState('');
-  const confirm = useConfirm();
-  const write = async (rewrite) => {
-    if (rewrite && !(await confirm({
-      title: 'Write the guided lesson again?',
-      description: 'The AI writes a new version. Its voice will need to be created again.',
-      confirmLabel: 'Write again',
-    }))) return;
-    setWriting(true);
-    setProblem('');
-    try {
-      await tutorApi.writeGuide(learner, topic, rewrite);
-      onChanged();
-    } catch (error) {
-      setProblem(clean(error));
-    } finally {
-      setWriting(false);
-    }
-  };
-
-  if (!guide?.current) {
-    return (
-      <div className="p-5 flex flex-col gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="w-9 h-9 rounded-xl bg-action-soft text-action grid place-items-center"><Sparkles aria-hidden="true" className="w-5 h-5" /></span>
-          <h2 className="text-base font-bold">Guided lesson</h2>
-        </div>
-        <p className="text-sm text-muted leading-relaxed">
-          The AI turns this lesson into a teacher's walk-through: a welcome, the book text read in full, short
-          explanations of hard words and ideas along the way, and a recap. Lessons that are already a teacher's script
-          are tidied into one clear reading.
-        </p>
-        {guide && !guide.current && (
-          <p className="text-[13px] text-attention">The book pages for this lesson changed since the guide was written.</p>
-        )}
-        <Button variant="primary" icon={Sparkles} disabled={writing || closed} onClick={() => write(Boolean(guide))}>
-          {writing ? 'Writing the guided lesson…' : guide ? 'Write it again for the new pages' : 'Write the guided lesson'}
-        </Button>
-        {writing && <p className="text-[13px] text-muted" role="status">This takes about half a minute.</p>}
-        {problem && <p className="text-[13px] text-problem">{problem}</p>}
-      </div>
-    );
-  }
-
-  const voiceReady = guide.audio.some((t) => t.synchronized);
-  return (
-    <>
-      <div className="px-4 py-2.5 flex items-center gap-3 border-b border-line text-[13px] text-muted">
-        <span className="flex-1">
-          {guide.mode === 'tidy' ? 'Tidied' : 'Written'} by AI{guide.created_at ? ` on ${new Date(guide.created_at).toLocaleDateString()}` : ''}. Listen once before the lesson.
-        </span>
-        {!session && <Button size="sm" variant="quiet" disabled={writing} onClick={() => write(true)}>{writing ? 'Writing…' : 'Write again'}</Button>}
-      </div>
-      {problem && <p className="px-4 py-2 text-[13px] text-problem">{problem}</p>}
-      {!voiceReady && !closed && <VoiceBuilder learner={learner} topic={topic} guide onBuilt={onChanged} />}
-      <div className="flex-1 min-h-0">
-        <ReadAlong key={`guide-${guide.guide_id}-${guide.audio.map((t) => t.track_id).join()}`} passage={guide} tracks={guide.audio}
-          activeIndex={activeIndex} onActiveIndex={onActiveIndex} disabled={closed} language={language} />
-      </div>
-    </>
-  );
+export function GuidePanel({ guide, learner, topic, session, pinned, slotId, closed, resumeLesson, activeIndex, onActiveIndex, language, onChanged, onStarted, onFinished, onPassageModeChange, onSource }) {
+  const preparation = <LessonPreparationBar learner={learner} topic={topic} guide={guide} pinned={pinned} onChanged={onChanged} />;
+  if (!guide) return <div className="flex flex-col min-h-0">
+    {preparation}
+    <div className="p-5 flex flex-col gap-3">
+      <h2 className="text-base font-bold">Guided lesson</h2>
+      <p className="text-sm text-muted leading-relaxed">Prepare a teacher’s walk-through of the assigned pages, with the original reading, useful explanations and activities. The guide and recorded voice are saved for every device.</p>
+    </div>
+  </div>;
+  return <div className="guide-chat-panel">
+    {preparation}
+    {!guide.current && !pinned && <p className="px-4 py-2 text-sm bg-attention-soft">Update available · the teaching instructions or book pages have changed.</p>}
+    <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson}
+      activeIndex={activeIndex} onActiveIndex={onActiveIndex} closed={closed} language={language} onStarted={onStarted} onFinished={onFinished}
+      onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} lessonOptions={<>
+        <LessonSourcePages topic={topic}/>
+        <p className="text-xs text-muted">Prepared{guide.created_at ? ` on ${new Date(guide.created_at).toLocaleDateString()}` : ''}. Guide and voice generation are available above the lesson.</p>
+      </>} />
+  </div>;
 }
 
 /**
@@ -187,7 +159,8 @@ function GuidePanel({ guide, learner, topic, session, closed, activeIndex, onAct
  * In a tutor session only the pages and the read-along show.
  */
 export default function Lesson() {
-  const [params] = useSearchParams();
+  useViewportHeight();
+  const [params, setParams] = useSearchParams();
   const learner = params.get('learner');
   const topic = params.get('topic');
   const session = params.get('session');
@@ -199,13 +172,18 @@ export default function Lesson() {
   const [lesson, setLesson] = useState(null);
   const [error, setError] = useState('');
   const [activeIndex, setActiveIndex] = useState(null);
+  const [passageVoice, setPassageVoice] = useState(false);
   const [guideIndex, setGuideIndex] = useState(null);
   const [readMode, setReadMode] = useState(null);
   const [sentencePages, setSentencePages] = useState([]);
   const [closed, setClosed] = useState(false);
   const [tab, setTab] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [sourcePage, setSourcePage] = useState(null);
   const [done, setDone] = useSlotDone(slotId);
+  const started = useCallback((id) => {
+    setParams((previous) => { const next = new URLSearchParams(previous); next.set('session', id); return next; }, { replace: true });
+  }, [setParams]);
 
   const load = useCallback(() => {
     if (!learner || !topic) {
@@ -219,6 +197,12 @@ export default function Lesson() {
   }, [learner, topic, session]);
 
   useEffect(load, [load]);
+  const voicePreparing = ['queued', 'running', 'aligning'].includes(lesson?.guide?.voice_preparation?.status);
+  useEffect(() => {
+    if (!voicePreparing) return undefined;
+    const timer = window.setInterval(load, 4000);
+    return () => window.clearInterval(timer);
+  }, [voicePreparing, load]);
 
   useEffect(() => {
     if (!session) return undefined;
@@ -230,14 +214,14 @@ export default function Lesson() {
 
   const passage = lesson?.passage;
   useEffect(() => {
-    if (!passage?.document_id || !passage.sentences?.length) return;
+    if (!passage?.document_id || passage.hide_pdf || !passage.sentences?.length) return;
     pageTexts(passage.document_id, passage.pdf_pages.start, passage.pdf_pages.end)
       .then((texts) => setSentencePages(locateSentences(texts, passage.sentences)))
       .catch(() => setSentencePages([]));
   }, [passage]);
 
   const slot = useMemo(() => passage && ({
-    topic_id: Number(topic), document_id: passage.document_id, page_from: passage.printed_pages.start,
+    topic_id: Number(topic), document_id: passage.hide_pdf ? null : passage.document_id, page_from: passage.printed_pages.start,
     page_to: passage.printed_pages.end, pdf_page_offset: passage.pdf_page_offset,
     subject_name: lesson.subject_name, topic_title: passage.title,
   }), [passage, lesson, topic]);
@@ -247,10 +231,10 @@ export default function Lesson() {
 
   const child = findLearner(Number(learner));
   const tones = learnerTones(child?.color || '#2d5f54');
-  const hasBook = Boolean(passage.document_id);
+  const hasBook = Boolean(passage.document_id && !passage.hide_pdf);
   const hasText = passage.sentences.length > 0;
   const reviewed = passage.status === 'verified';
-  const voiceReady = lesson.audio.some((t) => t.synchronized);
+  const voiceReady = lesson.audio.some((t) => t.synchronized && (t.preferred ?? true));
   const tabs = [
     hasText && { id: 'read', label: 'Read along' },
     !session && hasBook && { id: 'practice', label: 'Practice' },
@@ -263,7 +247,8 @@ export default function Lesson() {
     passage.stop_before && `Stop before “${passage.stop_before}” (book page ${passage.printed_pages.end}).`,
   ].filter(Boolean).join(' ');
   const guide = lesson.guide;
-  const mode = readMode ?? (guide?.current ? 'guide' : 'book');
+  const activitySession = Boolean(session && guide?.activity_contract_version);
+  const mode = activitySession ? 'guide' : readMode ?? (guide?.current ? 'guide' : 'book');
   // The book sentence being read: directly, or the one a guided-lesson sentence comes from.
   const sourceIndex = mode === 'guide'
     ? (guideIndex !== null ? guide?.sentences[guideIndex]?.source ?? null : null)
@@ -287,24 +272,34 @@ export default function Lesson() {
   } : slot;
 
   return (
-    <div className="h-dvh flex flex-col bg-paper-deep">
-      <header className="min-h-[68px] px-4 md:px-5 py-2 flex flex-wrap items-center gap-3 md:gap-4 bg-surface border-b border-line">
-        {!session && <IconButton icon={ArrowLeft} label="Back" onClick={goBack} />}
+    <div className="lesson-workspace h-dvh flex flex-col bg-paper-deep">
+      <header className="lesson-header px-3 flex items-center gap-3 bg-surface border-b border-line shrink-0">
+        <IconButton icon={ArrowLeft} label="Back" onClick={goBack} />
         <div className="flex-1 min-w-0 flex flex-col">
-          <span className="text-[13px] text-muted">
+          <span className="text-xs text-muted">
             <span className="font-bold" style={{ color: tones.strong }}>{lesson.learner.name}</span> · {lesson.subject_name} · {pages}
           </span>
-          <h1 className="font-display text-xl md:text-[21px] font-semibold truncate">{passage.title}</h1>
+          <h1 className="font-display text-base md:text-lg font-semibold truncate">{passage.title}</h1>
         </div>
+        <details className="book-details"><summary className="text-xs font-semibold cursor-pointer">Book details</summary><div className="book-details-content">
+          {boundary && <p>{boundary}</p>}
+          {hasText && !reviewed && <p className="text-muted">The text was taken from the book automatically. If anything looks different, follow the book pages.</p>}
+          {hasText && !activitySession && guide?.activity_contract_version && <Button size="sm" onClick={() => { pauseNarration(); setReadMode(mode === 'guide' ? 'book' : 'guide'); }}>{mode === 'guide' ? 'Read book text only' : 'Return to guided lesson'}</Button>}
+          {closed && <p>This lesson is saved. Your answers remain in the lesson thread.</p>}
+        </div></details>
         {slotId && !session && (
           done
             ? <Button onClick={() => markDone(false)} icon={Check}>Done · undo</Button>
             : <Button variant="primary" icon={Check} onClick={() => markDone(true)}>Mark lesson done</Button>
         )}
       </header>
-      {closed && (
+      {lesson.resume_lesson && <div className="px-4 py-3 bg-attention-soft text-sm flex flex-wrap gap-3">
+        <span>Your place in {lesson.resume_lesson.title} is saved. You can start this lesson now.</span>
+        <Link to={lesson.resume_lesson.path} className="font-semibold underline">Resume unfinished lesson</Link>
+      </div>}
+      {closed && !guide?.activity_contract_version && (
         <div role="alert" className="px-4 py-3 bg-action-soft text-action border-b border-line text-sm font-medium">
-          This lesson has ended. Your tutor will tell you what comes next.
+          This lesson has ended and its progress is saved. You can review the learning summary in Progress.
         </div>
       )}
       {hasBook && !hasText && !viewing && (
@@ -312,7 +307,7 @@ export default function Lesson() {
           {(passage.issues?.[0] || 'This lesson has no text to read along with').replace(/\.$/, '')}, so read-along is not available.
         </p>
       )}
-      {hasText && !reviewed && !viewing && (
+      {hasText && !reviewed && !viewing && !guide?.activity_contract_version && (
         <p className="px-4 py-2 text-[13px] text-muted bg-surface border-b border-line">
           The text was taken from the book automatically. If anything looks different, follow the book pages.
         </p>
@@ -324,12 +319,11 @@ export default function Lesson() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
-        <div className="flex-1 min-h-0 min-w-0 bg-surface">
+      <LessonWorkspace hasBook={hasBook} hasTutor={tabs.length > 0} book={
+        <>
           {viewerSlot?.document_id ? (
             <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
-              boundaryNote={viewing ? null : boundary}
-              highlightSentence={!viewing && hasText ? highlight : null}
+              highlightSentence={!viewing && hasText && !passageVoice ? highlight : null}
               requestedPage={!viewing && sourceIndex !== null ? sentencePages[sourceIndex] : null} />
           ) : (
             <div className="h-full grid place-items-center p-8 text-center">
@@ -340,27 +334,29 @@ export default function Lesson() {
               </div>
             </div>
           )}
-        </div>
+        </>
+      }>
         {tabs.length > 0 && (
-          <aside aria-label="Lesson tools" className="lg:w-[400px] h-[50dvh] lg:h-auto shrink-0 bg-surface border-t lg:border-t-0 lg:border-l border-line min-h-0 flex flex-col">
-            <Tabs tabs={tabs} value={activeTab} onChange={setTab} />
-            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col">
-              {activeTab === 'read' && (
-                <div className="px-4 pt-3">
-                  <SegmentedControl label="What to read" size="sm" value={mode} onChange={setReadMode}
-                    options={[{ value: 'guide', label: 'Guided lesson' }, { value: 'book', label: 'Book text' }]} />
-                </div>
+          <aside aria-label="Lesson tools" className="lesson-tutor-panel shrink-0 bg-surface border-t lg:border-t-0 lg:border-l border-line min-h-0 flex flex-col">
+            {tabs.length > 1 && <Tabs tabs={tabs} value={activeTab} onChange={setTab} />}
+            <div role="region" aria-label="Lesson panel content" tabIndex={0} className={clsx('flex-1 min-h-0 overscroll-contain', activeTab === 'read' && mode === 'guide' && guide?.activity_contract_version ? 'flex flex-col overflow-hidden' : 'overflow-y-auto')}>
+              {activeTab === 'read' && !activitySession && (!guide?.activity_contract_version || mode === 'book') && (
+                <LessonReadMode mode={mode} resumePath={lesson.resume_current_lesson?.path}
+                  onChange={(next) => { pauseNarration(); setReadMode(next); }} />
               )}
               {activeTab === 'read' && mode === 'guide' && (
-                <GuidePanel guide={guide} learner={learner} topic={topic} session={session} closed={closed}
-                  activeIndex={guideIndex} onActiveIndex={setGuideIndex} language={lesson.language} onChanged={load} />
+                <GuidePanel guide={guide} learner={learner} topic={topic} session={session} pinned={lesson.interactive} slotId={slotId} closed={closed} resumeLesson={lesson.resume_lesson}
+                  activeIndex={guideIndex} onActiveIndex={setGuideIndex} language={lesson.language} onChanged={load}
+                  onPassageModeChange={setPassageVoice}
+                  onSource={(source) => { pauseNarration(); setSourcePage(source); }}
+                  onStarted={started} onFinished={() => { setClosed(true); setDone(true); load(); }} />
               )}
               {activeTab === 'read' && mode === 'book' && (
                 <>
                   {!voiceReady && !closed && <VoiceBuilder learner={learner} topic={topic} onBuilt={load} />}
-                  <div className="flex-1 min-h-0">
+                  <div>
                     <ReadAlong key={lesson.audio.map((t) => t.track_id).join()} passage={passage} tracks={lesson.audio}
-                      activeIndex={activeIndex} onActiveIndex={setActiveIndex} disabled={closed} language={lesson.language} />
+                      activeIndex={activeIndex} onActiveIndex={setActiveIndex} disabled={closed} language={lesson.language} onPassageModeChange={setPassageVoice} />
                   </div>
                 </>
               )}
@@ -374,7 +370,9 @@ export default function Lesson() {
             </div>
           </aside>
         )}
-      </div>
+      </LessonWorkspace>
+      {sourcePage && session && <OriginalSourcePage session={session} document={sourcePage.document_id}
+        page={sourcePage.page} onClose={() => setSourcePage(null)} />}
     </div>
   );
 }

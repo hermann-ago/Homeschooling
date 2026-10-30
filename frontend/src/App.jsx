@@ -4,7 +4,9 @@ import Today from './screens/Today';
 import Plan from './screens/Plan';
 import Curriculum from './screens/Curriculum';
 import Progress from './screens/Progress';
+import Records from './screens/Records';
 import Settings from './screens/Settings';
+import Books, { BookDetail } from './screens/Books';
 
 export default function App() {
   return (
@@ -13,7 +15,10 @@ export default function App() {
         <Route index element={<Today />} />
         <Route path="plan" element={<Plan />} />
         <Route path="curriculum" element={<Curriculum />} />
+        <Route path="books" element={<Books />} />
+        <Route path="books/:bookId" element={<BookDetail />} />
         <Route path="progress" element={<Progress />} />
+        <Route path="records" element={<Records />} />
         <Route path="settings" element={<Settings />} />
         {/* Addresses from the old menu */}
         <Route path="weekly" element={<Navigate to="/plan" replace />} />

@@ -25,11 +25,11 @@ def test_completion_time_is_automatic_and_cleared_when_undone():
     topic = {"completed": False, "completed_at": None}
     recorded_at = datetime(2026, 8, 10, 14, 30, tzinfo=timezone.utc)
     mark_topic_completed(topic, recorded_at)
-    assert topic == {"completed": True, "completed_at": recorded_at}
+    assert topic == {"completed": True, "completed_at": recorded_at, "completion_source": "manual"}
     mark_topic_completed(topic, datetime(2026, 8, 11, tzinfo=timezone.utc))
     assert topic["completed_at"] == recorded_at  # the original time is kept
     mark_topic_incomplete(topic)
-    assert topic == {"completed": False, "completed_at": None}
+    assert topic == {"completed": False, "completed_at": None, "completion_source": None}
 
 
 def test_calendar_lists_only_completions_without_slot_history(harness):

@@ -16,7 +16,7 @@ const SIZES = {
 
 /** The button look, for elements that must not be a <Button> (a label for a file input, say). */
 export const buttonClasses = ({ variant = 'secondary', size = 'md', className } = {}) => clsx(
-  'inline-flex items-center justify-center font-semibold whitespace-nowrap transition-colors',
+  'app-button inline-flex items-center justify-center font-semibold whitespace-nowrap transition-colors',
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-action',
   'disabled:opacity-50 disabled:cursor-not-allowed',
   VARIANTS[variant], SIZES[size], className,

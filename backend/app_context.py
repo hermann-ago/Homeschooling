@@ -69,15 +69,26 @@ class ResponseCache:
 
 
 class AppContext:
-    def __init__(self, config: HostConfig | None = None, *, drive_folder=None, start_worker: bool = True):
+    def __init__(self, config: HostConfig | None = None, *, drive_folder=None, start_worker: bool = True,
+                 live=None, files=None):
         self.config = config or HostConfig()
-        self.devices = DeviceRegistry(self.config.secrets_dir)
+        self.live = live
+        self.is_test = live is not None
+        self.devices = live.devices if live else DeviceRegistry(self.config.secrets_dir)
         self.responses = ResponseCache(self.config.dir / "responses")
         self.instance_token = uuid.uuid4().hex
-        self.files = DriveFolder(drive_folder or self.config.get("drive_folder"))
+        self.files = files or DriveFolder(drive_folder or self.config.get("drive_folder"))
         if self.files.available and start_worker:  # tools (e.g. the dry run) leave the Drive folder untouched
             self.files.ensure_folders()
         self.store = Store(self.config.database_path, self.files).load()
+        from tutoring.library import seed_catalog
+        seed_catalog(self.store)
+        from services.completion_tracking import reconcile_completed_topics
+        reconcile_completed_topics(self.store)
+        from services.ai_provider import AIService
+        self.ai = live.ai if live else AIService(self)
+        if not live:
+            self.ai.ledger.recover_interrupted()
         self._assign_subject_folders()
         self.last_export = None
         self.worker = Housekeeping(self) if start_worker else None
@@ -85,6 +96,33 @@ class AppContext:
             self.worker.start()
         from tutoring.service import TutorService
         self.tutor = TutorService(self)
+        from tutoring.books import BookService, ImportWorker
+        self.books = BookService(self)
+        self.books.backfill()
+        from tutoring.navigation import migrate_page_links
+        migrate_page_links(self)
+        from tutoring.subject_analysis import AnalysisService, AnalysisWorker
+        self.subject_analysis = AnalysisService(self)
+        from tutoring.learning_memory import LearningMemory
+        self.learning_memory = LearningMemory(self)
+        from tutoring.activity_engine import ActivityEngine
+        self.activity_engine = ActivityEngine(self)
+        from tutoring.curriculum_preparation import recover as recover_preparation
+        recover_preparation(self)
+        self.analysis_worker = None  # Whole-book analysis is retired; historical reports remain readable.
+        if not live:
+            from services.test_mode import TestModes
+            self.test_modes = TestModes(self)
+        self.import_worker = ImportWorker(self.books) if start_worker else None
+        if self.import_worker:
+            self.import_worker.start()
+        from tutoring import skills
+        if start_worker:  # migration/dry-run contexts do not write teaching files into Drive
+            skills.ensure(self)
+            from tutoring.material_skills import ensure as ensure_material_skills
+            ensure_material_skills(self)
+            from tutoring.subject_knowledge import ensure
+            ensure(self)
 
     def _assign_subject_folders(self):
         """Record the Kid/Grade/Subject folder of subjects created before folders were recorded, and the grade
@@ -108,6 +146,8 @@ class AppContext:
 
     # ── Drive folder ─────────────────────────────────────────────────────────
     def set_drive_folder(self, path: str) -> dict:
+        if self.is_test:
+            raise ValueError("Leave test mode before changing the real file folder.")
         folder = DriveFolder(path)
         if not folder.available:
             raise ValueError(f"{path} is not a folder on this computer")
@@ -162,7 +202,13 @@ class AppContext:
         return behind
 
     def backup_now(self) -> dict:
-        return create_backup(self.store, self.config.backup_dir)
+        result = create_backup(self.store, self.config.backup_dir)
+        usage_name = result["name"].replace("homeschooling-", "ai-usage-")
+        self.ai.ledger.backup(self.config.backup_dir / usage_name)
+        if self.files.available:
+            from storage.layout import BACKUPS
+            self.ai.ledger.backup(self.files.root / BACKUPS / usage_name)
+        return result
 
     def export_now(self) -> str | None:
         self.last_export = export_excel(self.store)
@@ -174,6 +220,12 @@ class AppContext:
         return self.files.read(path, sha256)
 
     def shutdown(self):
+        if not self.is_test and hasattr(self, "test_modes"):
+            self.test_modes.shutdown()
+        if self.import_worker:
+            self.import_worker.stop()
+        if self.analysis_worker:
+            self.analysis_worker.stop()
         if self.worker:
             self.worker.stop()
         try:

@@ -29,6 +29,8 @@ class SubjectUpdate(BaseModel):
 class SubjectResponse(SubjectBase):
     id: int
     child_id: int
+    purpose: Optional[str] = None
+    library_book_id: Optional[str] = None
     folder: Optional[str] = None  # Kid/Grade/Subject folder in the Homeschooling Drive folder
     created_at: datetime
     class Config:

@@ -10,6 +10,16 @@ os.environ.setdefault("HOMESCHOOLING_SKIP_APP", "1")
 os.environ["HOMESCHOOLING_DATA"] = str(Path(__file__).resolve().parent / ".tmp-data")
 
 
+@pytest.fixture(autouse=True)
+def isolated_drive_detection(monkeypatch):
+    # Test hosts must not probe the family's real synced folder.
+    monkeypatch.setattr("config.DRIVE_FOLDER_CANDIDATES", ())
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("INWORLD_API_KEY", raising=False)
+
+
 class Harness:
     def __init__(self, tmp_path):
         from fastapi.testclient import TestClient

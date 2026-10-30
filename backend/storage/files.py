@@ -63,10 +63,10 @@ class DriveFolder:
 
     def ensure_folders(self) -> list[str]:
         """Create the top-level app folders; subject folders appear when files are first written."""
-        from .layout import BACKUPS
+        from .layout import BACKUPS, INCOMING_BOOKS
         self.require()
         created = []
-        for name in (BACKUPS,):
+        for name in (BACKUPS, INCOMING_BOOKS):
             folder = self.root / name
             if not folder.exists():
                 folder.mkdir()

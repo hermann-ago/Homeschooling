@@ -1,0 +1,15 @@
+# Offline book and material review
+
+Codex can prepare sources without the app making paid AI requests. Personalized guides are generated later with current learner context.
+
+1. Keep the exact PDF in the subject's Books folder. Save its edition, SHA-256, page inventory and role. Organize the collection in Curriculum → subject → Books. One answer key can select multiple exact course parts.
+2. Create a canonical companion using `backend/tools/book_companion.py`, or use the optional fast geometry extractor in `backend/tools/book_source_review.py`. Install its isolated optional tools from `backend/requirements-source-tools.txt` when needed.
+3. Render bounded batches with `book_source_review.py sheets`. Preserve native extraction; correct only the transcription. Inspect column order, hidden template layers, visual instructions and annotated key answers. `checkpoint` accepts a JSON with `source_sha256` and explicit `pages` decisions, rejecting changes to immutable extraction. Its output still requires canonical validation. It does not inspect or certify pages automatically.
+4. Preserve source navigation in `sections`: stable ID, title, kind, optional number, part, ordered original PDF pages and printed starting label. A cross-volume TOC must be split at its explicit volume boundary. Unknown source details stay pending.
+5. Import each companion through **Book JSON files → Import JSON**. Importing records source data only. The JSON is stored beside the PDF in Books; earlier revisions remain immutable.
+6. Download `/api/source-map-schema`. A `homeschooling.source-map` version 1 identifies `expected_version_id`, every exact `expected_companions` hash, `producer`, `overview`, `note`, public eight-page `units`, exercise `links` and book `relationships`. Concepts cite checked student-safe text. Exercise links use canonical `source_item_id`; answers remain private. Cross-book relationships quote the original instruction and list exact destination PDF pages. Official-key relationships require explicit matching targets.
+7. Import through **Import Codex overview**. Default import requires complete checked source coverage. Explicit `allow_pending_sources: true` saves a resumable source checkpoint; pending pages remain excluded from teaching evidence and block a complete reusable knowledge archive. Viewing/exporting a checkpoint is free. Never use paid Analyze/Continue controls as a way to resume a Codex-only review.
+
+Partial source work is useful but must remain visibly partial. Extraction coverage, checked page coverage, exercise inventory, key matching and teaching activation are separate facts. No source conversion creates learner answers, completes lessons or schedules work.
+
+Legacy restoration uses `PUT /api/subjects/{s}/documents/{d}/restore-source`. It requires the original checksum, current document and all topic revisions, valid page bounds, literal opening-page quotations and a review note. Historical lesson IDs and completion survive; the audit is backed up and excluded from general exports. A different known checksum requires a separate edition rather than rewriting old evidence.

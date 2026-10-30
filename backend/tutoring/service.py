@@ -2,7 +2,7 @@
 
 Rules enforced here rather than left to the agent:
 
-* An unfinished session is resumed before any new topic starts.
+* Explicit topic selection resumes that topic only; other unfinished lessons stay saved.
 * First answers are immutable. Corrections are separate amendment attempts.
 * Work that received help, a clue or a supplied answer is never recorded as
   independent.
@@ -25,6 +25,8 @@ from storage import StoreError, layout
 from . import audio as audio_mod
 from . import guide as guide_mod
 from . import passages
+from . import skills
+from .automatic_voice import status as voice_preparation_status
 
 RESULTS = ("Correct", "Partly correct", "Not yet", "Unanswered", "Unreadable", "Source disputed")
 INDEPENDENCE = ("independent", "with_help", "not_assessed")
@@ -59,6 +61,8 @@ class TutorService:
         self._readers_path = ctx.config.dir / "readers.json"
         self._lock = threading.Lock()
         self._readers = json.loads(self._readers_path.read_text()) if self._readers_path.exists() else {}
+        from .interactive import InteractiveTutor
+        self.interactive = InteractiveTutor(self)
 
     @property
     def store(self):
@@ -68,7 +72,7 @@ class TutorService:
     def learners(self) -> list[dict]:
         result = []
         for child in sorted(self.store.all("children"), key=lambda c: c["id"]):
-            subjects = sorted(self.store.find("subjects", child_id=child["id"]), key=lambda s: s["name"])
+            subjects = sorted((s for s in self.store.find("subjects", child_id=child["id"]) if s.get('purpose') != 'library_paused'), key=lambda s: s["name"])
             result.append({"child_id": child["id"], "name": child["name"],
                            "subjects": [{"subject_id": s["id"], "name": s["name"]} for s in subjects]})
         return result
@@ -80,11 +84,11 @@ class TutorService:
         return subject
 
     def _topics(self, subject_id: int) -> list[dict]:
-        return sorted(self.store.find("topics", subject_id=subject_id), key=lambda t: t["chapter_order"] or 0)
+        return sorted((t for t in self.store.find("topics", subject_id=subject_id) if not t.get("archived") and t["is_core"]), key=lambda t: t["chapter_order"] or 0)
 
-    def open_session(self, child_id: int, subject_id: int) -> dict | None:
+    def open_session(self, child_id: int, subject_id: int, topic_id: int | None = None) -> dict | None:
         sessions = [s for s in self.store.find("tutor_sessions", child_id=child_id, subject_id=subject_id)
-                    if s["status"] in OPEN_SESSION]
+                    if s["status"] in OPEN_SESSION and (topic_id is None or s['topic_id']==topic_id)]
         return max(sessions, key=lambda s: (s["started_at"] or _now(), s["id"])) if sessions else None
 
     def open_checkpoint(self, session_id: str) -> dict | None:
@@ -99,7 +103,9 @@ class TutorService:
                            if s["status"] == "completed" and s["next_topic_id"]),
                           key=lambda s: (s["finished_at"] or s["updated_at"], s["id"]))
         if finished:
-            return self.store.get("topics", finished[-1]["next_topic_id"]), None
+            candidate=self.store.get("topics", finished[-1]["next_topic_id"])
+            if candidate and not candidate.get('completed') and not candidate.get('archived'):
+                return candidate,None
         return next((t for t in self._topics(subject_id) if not t["completed"]), None), None
 
     def _topic_summary(self, topic: dict | None) -> dict | None:
@@ -123,6 +129,7 @@ class TutorService:
                      if c["chapter"] == int(match[1])), None)
 
     def context(self, child_id: int, subject_id: int, phase: str = "start", questions: list[int] | None = None) -> dict:
+        from .family_skill import packet as family_packet
         child = self.store.get("children", child_id)
         if not child:
             raise TutorError("Unknown learner")
@@ -133,11 +140,20 @@ class TutorService:
         subject_topics = {t["id"] for t in self._topics(subject_id)}
         reviews = [r for r in reviews if r["topic_id"] in subject_topics]
         checkpoint = self.open_checkpoint(session["id"]) if session else None
+        subject_actions = self.store.find("lesson_actions", child_id=child_id, subject_id=subject_id)
+        replaced_actions = {a["source_action_id"] for a in subject_actions if a["source_action_id"]}
         recent = sorted((s for s in self.store.find("tutor_sessions", child_id=child_id, subject_id=subject_id)
                          if s["status"] == "completed"), key=lambda s: (s["date"] or today, s["id"]))[-2:]
         packet = {
             "learner": {"child_id": child_id, "name": child["name"]},
             "subject": {"subject_id": subject_id, "name": subject["name"]},
+            "teaching_skill": skills.packet(self.store, subject),
+            "family_tutoring": family_packet(self.store, child_id),
+            "pending_assignments": [a for a in self.store.find("assignments", child_id=child_id)
+                                    if a["topic_id"] in subject_topics and a["status"] == "assigned"],
+            "pending_actions": [a for a in subject_actions if a["status"] in ("pending", "skipped") and a["id"] not in replaced_actions
+                                and (self.store.get('tutor_sessions', a['session_id']) or {}).get('status') != 'superseded'
+                                and (self.store.get('tutor_sessions', a['session_id']) or {}).get('completion_source') not in ('manual','topic_completion')],
             "preferences": {p["key"]: p["value"] for p in self.store.find("preferences", child_id=child_id)},
             "topic": self._topic_summary(topic),
             "session": self._session_view(session) if session else None,
@@ -152,10 +168,18 @@ class TutorService:
                             and r["next_due"] and r["next_due"] <= today],
             "open_reviews": sum(1 for r in reviews if r["status"] == "Open"),
             "storage": {k: v for k, v in self.store.status().items() if k in ("state", "drive_folder_available")},
-            "reminders": ["Resume the saved next prompt before anything new." if session else
+            "reminders": ["An unfinished lesson is saved; resume it or choose another chapter." if session else
                           "Begin with a short welcome and at most one recall question.",
                           "Checkpoints and open readers are not completion or mastery."],
         }
+        if hasattr(self.ctx, "books"):
+            packet["available_exercises"] = self.ctx.books.eligible(topic, include_optional=True) if topic else []
+            packet["pending_exercise_items"] = [{"id": i["id"], "exercise_id": i["exercise_id"], "version_id": i["version_id"],
+                "topic_id": i["topic_id"], "status": i["status"], **self.ctx.books.public(i["snapshot"])}
+                for i in self.store.find("assignment_items", child_id=child_id) if i["topic_id"] in subject_topics and i["status"] != "reviewed"]
+        packet["learning_memory"] = self.ctx.learning_memory.packet(child_id, subject_id, topic["id"] if topic else None)
+        from .source_annotations import packet as annotation_packet
+        packet['source_annotations']=annotation_packet(self.store,topic) if topic else []
         if phase == "reading":
             if not topic:
                 raise TutorError("No current topic")
@@ -201,7 +225,9 @@ class TutorService:
                           "passage_evidence": maps[number]["evidence"], "note": maps[number]["note"],
                           "key_answer": key["answer"] if key else None, "key_exception": key["exception"] if key else None,
                           "key_pdf_page": key["key_pdf_page"] if key else chapter["key_pdf_page"]})
-        return {"chapter": chapter["chapter"], "test_pdf_pages": [chapter["test_pdf_start"], chapter["test_pdf_end"]],
+        from .source_annotations import packet as annotation_packet
+        return {"chapter": chapter["chapter"], "source_annotations":annotation_packet(self.store,topic,assessment=True),
+                "test_pdf_pages": [chapter["test_pdf_start"], chapter["test_pdf_end"]],
                 "test_printed_pages": [chapter["test_print_start"], chapter["test_print_end"]],
                 "items": items, "outside_current_topic": other_topic,
                 "reminder": "Read the actual question and passage before grading; key text alone is insufficient. "
@@ -221,7 +247,7 @@ class TutorService:
     @staticmethod
     def _session_view(s):
         return {k: s[k] for k in ("id", "child_id", "subject_id", "topic_id", "date", "status", "phase", "revision",
-                                  "session_type", "learner_explained", "difficulty", "next_action", "next_topic_id")}
+                                  "session_type", "completion_source", "learner_explained", "difficulty", "next_action", "next_topic_id")}
 
     @staticmethod
     def _review_view(r):
@@ -241,11 +267,12 @@ class TutorService:
 
     def start(self, tx, child_id: int, subject_id: int, topic_id: int | None = None) -> dict:
         self._subject(child_id, subject_id)
-        topic, session = self.current_topic(child_id, subject_id)
+        topic, session = (self.store.get('topics',topic_id),self.open_session(child_id,subject_id,topic_id)) if topic_id else self.current_topic(child_id, subject_id)
+        if topic_id and (not topic or topic['subject_id']!=subject_id):
+            raise TutorError('That topic is not part of this subject')
+        if session and (tx.get('tutor_sessions', session['id']) or {}).get('status') not in OPEN_SESSION:
+            session = None  # a replacement can retire the old session in this transaction
         if session:
-            if topic_id and topic_id != session["topic_id"]:
-                raise TutorConflict(f"Session {session['id']} for this learner is unfinished; resume or finish it "
-                                    "before starting another topic")
             session = tx.update("tutor_sessions", session["id"], {"status": "active"})
             resumed = True
         else:
@@ -259,7 +286,7 @@ class TutorService:
             session = tx.insert("tutor_sessions", {
                 "id": self._new_session_id(child_id, today), "child_id": child_id, "subject_id": subject_id,
                 "topic_id": topic["id"], "date": today, "status": "active", "phase": "start",
-                "session_type": "lesson", "started_at": _now(), "source": "integrated tutor"})
+                "session_type": "repeat" if topic.get('completed') else "lesson", "started_at": _now(), "source": "integrated tutor"})
             resumed = False
         checkpoint = self.open_checkpoint(session["id"])
         return {"session_id": session["id"], "resumed": resumed, "topic": self._topic_summary(topic),
@@ -304,7 +331,10 @@ class TutorService:
             tx.update("checkpoints", existing["id"], {"phase": phase, "next_prompt": _clean(next_prompt),
                                                       "observations": clean_obs})
         else:
-            tx.insert("checkpoints", {"id": f"{session_id}-cp", "session_id": session_id,
+            checkpoint_id = f"{session_id}-cp"
+            if tx.get("checkpoints", checkpoint_id):
+                checkpoint_id = f"{session_id}-cp-{len(tx.find('checkpoints', session_id=session_id)) + 1}"
+            tx.insert("checkpoints", {"id": checkpoint_id, "session_id": session_id,
                                       "child_id": session["child_id"], "topic_id": session["topic_id"],
                                       "phase": phase, "status": "open", "next_prompt": _clean(next_prompt),
                                       "observations": clean_obs, "basis": _clean(basis)
@@ -335,12 +365,32 @@ class TutorService:
                 raise TutorError(f"independence must be one of {INDEPENDENCE}")
             if independence == "independent" and assisted:
                 raise TutorError(f"{question_ref}: assisted work cannot be recorded as independent")
+            if independence == "independent" and first_result != "Correct":
+                raise TutorError("Only a correct, unassisted answer can establish independent understanding")
             if first_result == "Unreadable" and item.get("after_help_result") == "Not yet":
                 raise TutorError("Illegibility is not an error; ask about the answer instead")
             amends = item.get("amends_attempt_id")
-            if amends and not tx.get("attempts", amends):
-                raise TutorError(f"Attempt {amends} does not exist")
+            amended = tx.get("attempts", amends) if amends else None
+            if amends and (not amended or amended["child_id"] != session["child_id"] or
+                           amended["session_id"] != session_id):
+                raise TutorError("The amended attempt must belong to this session")
             topic_id = item.get("topic_id") or session["topic_id"]
+            related = tx.get("topics", topic_id)
+            if not related or related["subject_id"] != session["subject_id"]:
+                raise TutorError("The attempt topic must belong to this subject")
+            paths = item.get("evidence_paths") or []
+            owned = {e["file_path"] for e in tx.find("evidence_files", session_id=session_id)}
+            if any(p not in owned for p in paths):
+                raise TutorError("Evidence must belong to this session")
+            assigned = tx.get("assignment_items", item.get("assignment_item_id")) if item.get("assignment_item_id") else None
+            if item.get("exercise_id") and not assigned:
+                raise TutorError("An exercise attempt needs its owned assignment item")
+            if item.get("assignment_item_id"):
+                book = tx.get("subject_books", tx.get("exercises", assigned["exercise_id"])["book_id"]) if assigned else None
+                if not assigned or assigned["child_id"] != session["child_id"] or not book or book["subject_id"] != session["subject_id"] or assigned["exercise_id"] != item.get("exercise_id"):
+                    raise TutorError("The exercise must belong to this learner and subject")
+                if amended and amended.get("assignment_item_id") != assigned["id"]:
+                    raise TutorError("The amendment must refer to the same exercise item")
             base = f"{session_id}-{re.sub(r'[^A-Za-z0-9]+', '', question_ref)[:40] or 'Q'}"
             attempt_id = item.get("id") or base
             suffix = 2
@@ -360,7 +410,13 @@ class TutorService:
                 "after_help_result": _clean(item.get("after_help_result"), 40), "independence": independence,
                 "recheck_date": item.get("recheck_date"), "evidence_paths": item.get("evidence_paths"),
                 "source_note": _clean(item.get("source_note")), "tutor_created": bool(item.get("tutor_created")),
-                "amends_attempt_id": amends}))
+                "amends_attempt_id": amends, "assignment_item_id": item.get("assignment_item_id"), "exercise_id": item.get("exercise_id")}))
+            if assigned and not amends:
+                result = item.get("after_help_result") or first_result
+                tx.update("assignment_items", assigned["id"], {"status": "reviewed" if result == "Correct" else "pending"})
+                siblings = tx.find("assignment_items", assignment_id=assigned["assignment_id"])
+                tx.update("assignments", assigned["assignment_id"], {"status": "reviewed" if all(i["status"] == "reviewed" for i in siblings) else "assigned"})
+        self.ctx.learning_memory.refresh(tx, session["child_id"], session["subject_id"])
         return {"session_id": session_id, "attempts": [a["id"] for a in saved]}
 
     def reviews(self, tx, session_id: str, expected_revision: int, items: list[dict]) -> dict:
@@ -370,6 +426,18 @@ class TutorService:
         for item in items:
             review_id = item.get("id")
             current = tx.get("reviews", review_id) if review_id else None
+            topic_id = item.get("topic_id") or (current or {}).get("topic_id") or session["topic_id"]
+            related = tx.get("topics", topic_id)
+            if not related or related["subject_id"] != session["subject_id"] or (current and current["child_id"] != session["child_id"]):
+                raise TutorError("The review must belong to this learner and subject")
+            exercise_id = item.get("exercise_id") or (current or {}).get("exercise_id")
+            assigned_id = item.get("assignment_item_id") or (current or {}).get("assignment_item_id")
+            if exercise_id:
+                exercise = tx.get("exercises", exercise_id)
+                book = tx.get("subject_books", exercise["book_id"]) if exercise else None
+                assigned = tx.get("assignment_items", assigned_id) if assigned_id else None
+                if not book or book["subject_id"] != session["subject_id"] or (assigned_id and (not assigned or assigned["exercise_id"] != exercise_id or assigned["child_id"] != session["child_id"])):
+                    raise TutorError("The review exercise must belong to this learner and subject")
             outcome = item.get("outcome")
             if outcome is not None and outcome not in REVIEW_OUTCOMES:
                 raise TutorError(f"outcome must be one of {REVIEW_OUTCOMES}")
@@ -393,6 +461,8 @@ class TutorService:
                       "last_outcome": outcome or (current or {}).get("last_outcome"),
                       "next_prompt": _clean(item.get("next_prompt")) or (current or {}).get("next_prompt"),
                       "evidence_session_id": session_id}
+            if exercise_id:
+                values.update(exercise_id=exercise_id, assignment_item_id=assigned_id)
             if current:
                 if item.get("evidence"):
                     values["evidence"] = (current["evidence"] + "\n" if current["evidence"] else "") + item["evidence"]
@@ -402,9 +472,10 @@ class TutorService:
                     raise TutorError("A new review needs a specific concept and the observed evidence")
                 new_id = review_id or f"{session_id}-R{len(tx.find('reviews', evidence_session_id=session_id)) + 1:02d}"
                 saved.append(tx.insert("reviews", {"id": new_id, "child_id": session["child_id"],
-                                                   "topic_id": item.get("topic_id") or session["topic_id"],
+                                                   "topic_id": topic_id,
                                                    "concept": _clean(item["concept"], 300),
                                                    "evidence": _clean(item["evidence"]), **values}))
+        self.ctx.learning_memory.refresh(tx, session["child_id"], session["subject_id"])
         return {"session_id": session_id, "reviews": [r["id"] for r in saved]}
 
     def assign(self, tx, session_id: str, expected_revision: int, questions: list[int], note: str | None) -> dict:
@@ -421,8 +492,13 @@ class TutorService:
         return {"session_id": session_id, "assignment_id": row["id"], "questions": row["questions"]}
 
     def evidence(self, tx, session_id: str, expected_revision: int, filename: str, data: bytes, mime_type: str,
-                 note: str | None) -> dict:
+                 note: str | None, action_id: str | None = None) -> dict:
         session = self.guard(tx, session_id, expected_revision)
+        if action_id:
+            playback = tx.get("lesson_playback", session_id)
+            action = tx.get("lesson_actions", f"{session_id}:{action_id}")
+            if not playback or playback["action_id"] != action_id or not action or action["status"] != "pending":
+                raise TutorConflict("Attach the photo to the current paused student action")
         if not mime_type.startswith("image/") and mime_type != "application/pdf":
             raise TutorError("Attach a photo or PDF of the learner's work")
         safe = re.sub(r"[^A-Za-z0-9._-]+", "_", filename)[:80] or "work.jpg"
@@ -431,14 +507,19 @@ class TutorService:
         number = len(tx.find("evidence_files", session_id=session_id)) + 1
         row = tx.insert("evidence_files", {"id": f"{session_id}-E{number}", "child_id": session["child_id"],
                                            "session_id": session_id, "file_path": path, "sha256": sha,
-                                           "filename": safe, "mime_type": mime_type, "note": _clean(note)})
+                                           "filename": safe, "mime_type": mime_type, "note": _clean(note),
+                                           "action_id": action_id, "size_bytes": len(data)})
         return {"session_id": session_id, "evidence_id": row["id"]}
 
     def finish(self, tx, session_id: str, expected_revision: int, payload: dict) -> dict:
         session = self.guard(tx, session_id, expected_revision)
         next_topic_id = payload.get("next_topic_id")
         next_topic = tx.get("topics", next_topic_id) if next_topic_id else None
-        if not next_topic or next_topic["subject_id"] != session["subject_id"] or next_topic_id == session["topic_id"]:
+        end_of_subject = payload.get("end_of_subject") is True
+        remaining = [t for t in self._topics(session["subject_id"]) if t["id"] != session["topic_id"] and not t["completed"]]
+        if end_of_subject and (next_topic_id or remaining):
+            raise TutorError("End of subject is only valid when no other topics remain")
+        if not end_of_subject and (not next_topic or next_topic["subject_id"] != session["subject_id"] or next_topic_id == session["topic_id"]):
             raise TutorError("Choose one explicit next topic in this subject (not the current one)")
         if not _clean(payload.get("learner_explained")):
             raise TutorError("Record what the learner actually explained or did")
@@ -468,6 +549,7 @@ class TutorService:
             topic = tx.get("topics", session["topic_id"])
             topic_changes["completed"] = True
             topic_changes["completed_at"] = topic["completed_at"] or _now()
+            topic_changes['completion_source']='tutor'
         tx.update("topics", session["topic_id"], topic_changes)
         for chapter_update in payload.get("chapter_updates") or []:
             chapter = next((c for c in tx.find("chapters", subject_id=session["subject_id"])
@@ -477,7 +559,6 @@ class TutorService:
             allowed = {k: v for k, v in chapter_update.items()
                        if k in ("test_status", "test_date", "items_to_revisit", "note")}
             tx.update("chapters", chapter["id"], {**allowed, "session_id": session_id})
-        self.close_reader(session_id)
         return {"session_id": session_id, "status": "completed", "next_topic_id": next_topic_id,
                 "topic_completed": payload.get("complete_topic") is True}
 
@@ -525,24 +606,100 @@ class TutorService:
             session = self.store.get("tutor_sessions", session_id)
             if not session or session["topic_id"] != topic_id or session["child_id"] != child_id:
                 raise TutorError("This reader link does not match the lesson")
-        package = passages.load(self.ctx, topic)
-        guide = self.guide(topic, package)
+        playback = self.store.get("lesson_playback", session_id) if session_id else None
+        pinned = self.store.get("guides", playback["guide_id"]) if playback else None
+        package = (pinned or {}).get("source_snapshot") or passages.load(self.ctx, topic)
+        guide = self.guide(topic, package, playback["guide_id"] if playback else None)
+        unfinished = self.open_session(child_id, subject["id"])
+        same_lesson = self.open_session(child_id, subject['id'], topic_id) if not session_id else None
+        resume_lesson = None
+        if unfinished and unfinished["topic_id"] != topic_id:
+            resume_lesson = {"title": self.store.get("topics", unfinished["topic_id"])["title"],
+                             "path": self.reader_path(unfinished)}
         return {"learner": {"child_id": child_id, "name": self.store.get("children", child_id)["name"]},
                 "subject_name": subject["name"], "language": audio_mod.language_for(subject["name"]),
                 "session_id": session_id,
+                "interactive": bool(playback), "resume_lesson": resume_lesson,
+                "resume_current_lesson": {"path": self.reader_path(same_lesson)}
+                    if same_lesson and self.store.get('lesson_playback', same_lesson['id']) else None,
                 "reader_state": self.reader_state(session_id) if session_id else "open",
                 "passage": package,
                 "audio": self.audio_tracks(topic, package, exclude=guide["passage_sha256"] if guide else None),
-                "guide": {**guide, "audio": self.audio_tracks(topic, guide, only=guide["passage_sha256"])}
+                "guide": {**guide, "audio": self.audio_tracks(topic, guide, only=guide["passage_sha256"]),
+                          "voice_preparation": voice_preparation_status(self.ctx, guide["guide_id"])}
                 if guide else None}
 
-    def guide(self, topic: dict, package: dict) -> dict | None:
+    def guide(self, topic: dict, package: dict, guide_id: str | None = None) -> dict | None:
         """The lesson's guided walk-through, if one was written (see tutoring/guide.py)."""
-        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"])
+        skill = skills.packet(self.store, self.store.get("subjects", topic["subject_id"]))
+        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"], skill["sha256"])
+        from . import library_materials
+        shared_book = library_materials.book_for(self.store, topic['subject_id'])
+        if row:
+            from .visual_source import current as current_sources
+            fresh = fresh and current_sources(self.ctx,row,topic)
+            from .source_annotations import packet as annotation_packet
+            frozen_notes=(row.get('context_snapshot') or {}).get('source_annotations') or []
+            fresh=fresh and frozen_notes==annotation_packet(self.store,topic)
+            from .family_skill import packet as family_packet
+            family = family_packet(self.store, self.store.get('subjects', topic['subject_id'])['child_id'])
+            if shared_book:
+                from .family_skill import current, digest
+                common = current(self.store)
+                family = {**family, 'sha256': digest(common['content'], {})}
+                frozen = row.get('context_snapshot') or {}
+                fresh = fresh and frozen.get('library_shared_policy') == library_materials.VERSION
+                material = library_materials.latest(self.store, frozen.get('library_material_key')) if frozen.get('library_material_key') else None
+                if material:
+                    fresh = fresh and guide_mod.guide_sha(material['data']['built']['sentences']) == row['guide_sha256']
+            recorded_family = (row.get('context_snapshot') or {}).get('family_tutoring')
+            fresh = fresh and (recorded_family.get('sha256') == family['sha256'] if recorded_family else family['version'] == 0)
+        if row and hasattr(self.ctx, "books"):
+            recorded = (row.get("context_snapshot") or {}).get("workbook_fingerprint")
+            books = self.store.find("subject_books", subject_id=topic["subject_id"])
+            has_catalog = any(b["active_index"] for b in books)
+            if not shared_book:
+                fresh = fresh and (recorded == self.ctx.books.fingerprint(topic["subject_id"]) or (recorded is None and not has_catalog))
+
+        if guide_id:
+            row = self.store.get("guides", guide_id)
+            if row and row["topic_id"] != topic["id"]:
+                raise TutorError("The guide does not belong to this topic")
+            fresh = True  # active sessions keep their prepared guide and instructions
         if not row:
             return None
         try:
-            return guide_mod.package(self.ctx, row, fresh)
+            result = guide_mod.package(self.ctx, row, fresh)
+            if not guide_id:
+                from .lesson_context import preparation
+                subject = self.store.get("subjects", topic["subject_id"])
+                adaptive = preparation(self.ctx, subject["child_id"], topic, package)
+                if shared_book:
+                    shared_source = library_materials.neutral_context(self.ctx, adaptive)
+                    if (row.get('context_snapshot') or {}).get('visual_source'):
+                        shared_source['subject_sources'].pop('page_structure', None)
+                    expected = library_materials.key(self.ctx, topic, package, row['language'], skill, shared_source)
+                    result['current'] = result['current'] and expected == (row.get('context_snapshot') or {}).get('library_material_key')
+                from . import lesson_quality
+                try:
+                    from .source_spacing import reading_requirements
+                    requirements=reading_requirements(adaptive['source_requirements'],
+                        (row.get('context_snapshot') or {}).get('source_spacing'))
+                    lesson_quality.validate({'activities':result['activities']},requirements)
+                except guide_mod.GuideError:
+                    # Newly indexed source obligations can expose an omission in
+                    # an older guide. Preserve that thread but never reuse its
+                    # script/audio as current preparation for a new lesson.
+                    result['current']=False
+                recorded = (row.get("context_snapshot") or {}).get("fingerprint")
+                old_source = (row.get("context_snapshot") or {}).get("subject_sources", {}).get("selection", {})
+                new_source = adaptive["subject_sources"]["selection"]
+                if old_source.get("fingerprint") or new_source.get("active"):
+                    result["current"] = result['current'] and fresh and new_source.get("active", False) and old_source.get("fingerprint") == new_source.get("fingerprint")
+                result["adaptive_context"] = {"fresh": recorded == adaptive["fingerprint"],
+                    "warmup": adaptive["adaptive_warmup"], "source_selection": new_source,
+                    "note": "Starting a new lesson refreshes a relevant saved recall question without rewriting the guide or its audio."}
+            return result
         except Exception:  # an unreadable guide file must not hide the reader
             return None
 
@@ -550,10 +707,40 @@ class TutorService:
                      only: str | None = None) -> list[dict]:
         """Voices for the passage, or (``only``) for a guide; ``exclude`` leaves out the guide's voices."""
         tracks = []
-        for row in self.store.find("audio_tracks", topic_id=topic["id"]):
+        preferred_provider = self.ctx.config.get("tts", {}).get("provider", "google-gemini")
+        tts = self.ctx.config.get("tts", {})
+        preferred_voice = "Achird"
+        from .imported_audio import PREFERRED
+        explicit = next((t['id'] for t in self.store.find('audio_tracks', topic_id=topic['id'])
+                         if t.get('note') == PREFERRED and t['passage_sha256'] == package['passage_sha256']), None)
+        if preferred_provider == 'elevenlabs':
+            from .elevenlabs_audio import narrator
+            subject = self.store.get('subjects', topic['subject_id'])
+            from .voice_choices import selected
+            preferred_voice = selected(self.store, topic['id']) or narrator(self.ctx, audio_mod.language_for(subject['name']), subject['child_id'])
+        if preferred_provider == 'inworld':
+            from .inworld_voices import narrator, selected
+            subject = self.store.get('subjects', topic['subject_id'])
+            choice = selected(self.store, topic['id'])
+            preferred_voice = choice or narrator(self.ctx, audio_mod.language_for(subject['name']), subject['child_id'])
+            if choice:
+                explicit = None
+        if preferred_provider == "kokoro-local":
+            from .local_audio import narrator
+            subject = self.store.get("subjects", topic["subject_id"])
+            preferred_voice = narrator(self.ctx, audio_mod.language_for(subject["name"]))
+        rows = {r['id']: r for r in self.store.find("audio_tracks", topic_id=topic["id"])}
+        from .library_materials import book_for, audio_rows
+        book = book_for(self.store, topic['subject_id'])
+        if book:
+            rows.update({r['id']: r for r in audio_rows(self.store, book) if r['passage_sha256'] == package['passage_sha256']})
+        for row in rows.values():
+            if (row.get("note") or "").startswith("feedback:"):
+                continue
             if (only and row["passage_sha256"] != only) or (exclude and row["passage_sha256"] == exclude):
                 continue
             synchronized = False
+            manifest = {}
             reason = row["note"] or ""
             if row["status"] == "ready" and row["timing"] and row["manifest_path"]:
                 try:
@@ -562,7 +749,14 @@ class TutorService:
                                                                        len(package["sentences"]))
                 except Exception as error:  # an unreadable manifest must not hide the reader
                     reason = f"Timing unavailable: {error}"
+            from .voice_choices import name as narrator_name
             tracks.append({"track_id": row["id"], "provider": row["provider"], "voice": row["voice"],
+                           'voice_name': narrator_name(self.ctx, row['voice']) if row['provider']=='elevenlabs' else row['voice'],
+                           "preferred": row['id'] == explicit if explicit else (row["provider"] == preferred_provider and row["voice"] == preferred_voice
+                                         and row["speaking_rate"] == (tts.get("rate") or audio_mod.DEFAULT_RATE)),
+                           "model": manifest.get("model"), "cost_usd": manifest.get("cost_usd"),
+                           "job_status": manifest.get("job_status"), "fallback_parts": manifest.get("fallback_parts", 0),
                            "speaking_rate": row["speaking_rate"], "status": row["status"],
+                           "timing": row["timing"],
                            "synchronized": synchronized, "note": None if synchronized else reason})
         return tracks

@@ -80,6 +80,7 @@ export function highlightItemIndices(items, sentence) {
 
 /** Which sentence is being spoken at `time` seconds into a timed track part. */
 export function sentenceAt(part, time) {
+  if (part?.timing === 'passage') return part.startSentence;
   const starts = part?.sentenceStarts || [];
   let index = -1;
   for (let i = 0; i < starts.length; i += 1) {
@@ -90,5 +91,6 @@ export function sentenceAt(part, time) {
 }
 
 export function partForSentence(parts, sentenceIndex) {
-  return parts.findIndex((p) => sentenceIndex >= p.startSentence && sentenceIndex < p.startSentence + p.sentenceStarts.length);
+  return parts.findIndex((p) => sentenceIndex >= p.startSentence && sentenceIndex < p.startSentence +
+    (p.timing === 'passage' || p.fallback ? p.sentenceCount : (p.sentenceStarts?.length || 0)));
 }

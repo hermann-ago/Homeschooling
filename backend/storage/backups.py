@@ -9,6 +9,7 @@ leaves out teacher-only tables (answer keys).
 from __future__ import annotations
 
 import os
+import copy
 import shutil
 import sqlite3
 import tempfile
@@ -95,6 +96,13 @@ def export_excel(store) -> str | None:
         sheet = workbook.create_sheet(spec.tab[:31])
         sheet.append(spec.header)
         for record in sorted(store.all(spec.name), key=lambda r: str(r["id"])):
+            if spec.name == 'guides':
+                record = copy.deepcopy(record)
+                frozen = record.get('context_snapshot') or {}
+                # Private review PDFs and assessment exceptions are preparation
+                # internals, not part of the general read-only workbook.
+                for key in ('lesson_sources', 'source_assessment_notes'):
+                    frozen.pop(key, None)
             sheet.append([to_cell(column_kind(spec, c), record.get(c)) for c in spec.header])
         sheet.freeze_panes = "A2"
     (store.files.root / BACKUPS).mkdir(exist_ok=True)

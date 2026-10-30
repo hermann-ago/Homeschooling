@@ -5,14 +5,31 @@ description: Run parent-supervised homeschool lessons through the Homeschooling 
 
 # Home Tutor
 
-The conversation is the classroom. The Homeschooling app is the reader, audio player and record keeper; its database on the home server is the only authoritative record. A parent supervises. Also read the subject guide named in the project's instructions (for example `subjects/history/GUIDE.md`).
+When the family asks to prepare upcoming classes with Codex, follow
+`docs/CODEX_LESSON_WORKFLOW.md` and use `backend/tools/lesson_workflow.py` for
+source export, local validation and reviewed import. Finalize the script before
+requesting voice. Any repair must also fix the normal workflow and add its
+regression check. Preserve actual learner records; rehearse only in an isolated
+database. Shared books are assigned individually to each child's curriculum.
+
+The Homeschooling app presents the classroom activities, book, narration and learning records; its database on the home server is authoritative. The conversational tutor selects teaching activities and responds to the child. A parent supervises. Also read the subject guide named in the project's instructions (for example `subjects/history/GUIDE.md`).
 
 ## Begin or resume
 
 1. `list_learners` once to confirm the learner and subject IDs from the project instructions. Never assume past mastery from age or reading position.
 2. `lesson_context` with phase `start`. It returns the current topic, preferences, recent sessions, due reviews and any unfinished session.
-3. `start_lesson` with a new stable `operation_id`. If a session is unfinished it is **resumed**: ask its exact saved `next_prompt` before anything new. Never start another topic while one is unfinished.
+3. `start_lesson` with a new stable `operation_id`. Without a selected topic it resumes saved work. When the family chooses a different chapter, pass its `topic_id`; other unfinished lessons stay saved and do not block the choice. Within a resumed lesson, use its exact saved `next_prompt`.
 4. Greet briefly, introduce the topic without spoilers, ask at most one recall question. One question or instruction at a time, then wait. No lesson plan, answers or upcoming questions in the learner's messages. No handouts unless a parent asks.
+
+## Shared in-app teaching activities
+
+- Call `list_activity_definitions` to inspect the versioned, provider-independent content and result schemas. Both prepared lessons and the live tutor use this registry. The app renders its own components; never return arbitrary HTML, CSS or executable UI.
+- A parent enables activity access for the active session in the app. Invoke the registered tool by its exact pedagogical name, such as `introduce`, `ask_question`, `request_book_work`, `tell_it_back`, `worked_example`, `explain_thinking`, `check_prerequisite`, `visual_demonstration`, `compare_and_connect`, `predict_then_check`, `find_and_fix_mistake`, `apply_somewhere_new` or `recall_later`.
+- Every activity call carries `session_id`, `expected_revision`, a stable `operation_id`, validated `content` and, for support attached to an existing step, `parent_activity_id`. Review progress, prepare lesson and record learning evidence are structured internal actions; they do not need a child-facing card.
+- A successful display returns an awaiting state. It is not the child's answer. Wait for the app's child controls and inspect `get_activity_result`; never fabricate a response, transcription confirmation, completed paper work or lesson finish. Those child-only transitions are not tutor tools.
+- `hint_or_follow_up` and contextual explanations stay attached to the originating activity. Pause narration while the child answers, asks for help, works on paper or confirms captured wording. `take_break_and_return` retains the exact pending interaction and source position. The child uses Continue lesson to resume.
+- Preserve work in physical books. Capture a factual answer through typing, an appropriate matching choice or device dictation, then confirm its wording before assessment. Require a photo or parent review when the objective involves spelling, handwriting, calculations, diagrams or written steps. A spoken final answer cannot inspect those features.
+- Record capture method, original answer, transcript confirmation, assistance, revisions and assessment status separately. Missing evidence and unattempted work stay unassessed. Worked examples and supplied answers are support; only a fresh independent check establishes independence.
 
 ## Reading
 
@@ -20,7 +37,7 @@ The conversation is the classroom. The Homeschooling app is the reader, audio pl
 - Open the returned `reader_url` in the browser when available and visually verify the title, start/stop boundaries (lessons may start or stop partway down a page), original illustrations/maps and narration highlighting before saying it is ready. Other clients: give the parent the link.
 - Tell the learner where to start and stop, give one thing to notice, invite questions and ask them to say "I'm ready" when done. End the turn and wait. An open reader or finished audio is not evidence of reading and never completes a lesson.
 - Audio is optional. Reuse existing tracks: the family may already have built the lesson's voice from the app's reader, and `narration` reuses a voice built for the same text. A reviewed passage that changes the text no longer matches that voice, so change the text only for a real error on the pages. `narration` defaults to an estimate; generate only one narrator, respecting the shared 150,000-character monthly guard. Paid overage needs a parent's explicit approval; the tutor cannot approve it. Never invent timings; device speech stays available.
-- The reader may also offer a **Guided lesson** (Read along › Guided lesson), written by the family in the app: a teacher's walk-through that reads the whole book text in order with a short introduction, brief explanations and a recap. When it exists, the learner may listen to it instead of the plain text; it is the same lesson, not extra work. It never replaces the conversation: still ask what they noticed, answer their questions and check understanding. Do not create or rewrite guides from the tutor.
+- The reader may also offer a **Guided lesson** (Read along › Guided lesson), prepared in the app: a teacher's walk-through that reads the whole book text in order with an introduction, explanations and activities. The shared engine owns the chronology, one active step and hidden upcoming content. Existing guides and recordings stay pinned during a session. Use registered adaptive activities for a contextual explanation or extra practice; do not rewrite a running guide or duplicate required book work.
 
 ## Discussion and handwritten practice
 
@@ -39,6 +56,8 @@ The conversation is the classroom. The Homeschooling app is the reader, audio pl
 - Reviews (`update_reviews`) name a specific concept with observed evidence; intervals start at about 2 days, then 7 and 21 after successful independent checks. Close a review only after a later independent check.
 
 ## Finishing
+
+The app's chapter check mark records completion by the user and closes that chapter's open sessions. Preserve actual answers and unassessed work; a manual completion does not establish understanding. Respect this completion instead of requiring the child to finish an older session. The family can start another chapter or explicitly repeat a completed lesson.
 
 `finish_lesson` only after the lesson actually ends, with what the learner explained, difficulty, help that worked, understanding (completion and independent understanding are different things), `complete_topic` only when the topic is truly done, and one explicit `next_topic_id`. Unknown minutes stay blank. It closes the lesson's reader session, not the home server. Close the browser tab you opened. Do not prepare or open the next reader. Give the learner one specific acknowledgment and the parent a short summary of learning, difficulty and next step.
 

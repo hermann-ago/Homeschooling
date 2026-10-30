@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from contextvars import ContextVar
+from contextlib import contextmanager
 
 from fastapi import Depends, HTTPException, Request
 
@@ -13,6 +15,7 @@ from security.network import is_loopback
 from storage import SAVED
 
 _context = None
+_selected_context = ContextVar("selected_app_context", default=None)
 
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -23,9 +26,25 @@ def set_context(value):
 
 
 def context():
+    selected = _selected_context.get()
+    if selected is not None:
+        return selected
     if _context is None:
         raise RuntimeError("The app context has not started")
     return _context
+
+
+def live_context():
+    return _context
+
+
+@contextmanager
+def select_context(value):
+    marker = _selected_context.set(value)
+    try:
+        yield value
+    finally:
+        _selected_context.reset(marker)
 
 
 def store():
@@ -75,6 +94,10 @@ class IdempotencyMiddleware:
             return await self.app(scope, receive, send)
         headers = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
         key = headers.get("idempotency-key")
+        # Activity events have durable, payload-checked receipts in the engine.
+        # Recovery must reach their saved job rather than replay an old pending
+        # response (and may carry a refreshed expected session revision).
+        activity_event = scope["path"].startswith("/api/tutor/sessions/") and scope["path"].endswith("/activity-events")
         body = b""
         more = True
         while more:
@@ -89,7 +112,7 @@ class IdempotencyMiddleware:
         if key:
             if len(key) > 120 or not all(c.isalnum() or c in "-_:." for c in key):
                 return await _json(send, 400, {"detail": "Invalid Idempotency-Key"})
-            prior = ctx.responses.get(device_hash, key)
+            prior = None if activity_event else ctx.responses.get(device_hash, key)
             if prior:
                 if prior["request_hash"] != request_hash:
                     return await _json(send, 409, {"detail": "This Idempotency-Key was used for a different request"})
@@ -122,7 +145,9 @@ class IdempotencyMiddleware:
         if state:
             response_headers += [(b"x-sync-state", state.encode()),
                                  (b"x-operation-id", ",".join(request.operation_ids).encode())]
-        if key and started.get("status", 500) < 500:
+        # Authorization failures did not execute an operation. A family may
+        # grant this lesson's tools later, then retry the same stable request.
+        if key and not activity_event and started.get("status", 500) < 500 and started.get("status") not in (401, 403):
             ctx.responses.put(device_hash, key, {
                 "request_hash": request_hash, "status": started["status"], "operation_ids": request.operation_ids,
                 "headers": [(k.decode("latin-1"), v.decode("latin-1")) for k, v in response_headers

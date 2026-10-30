@@ -5,8 +5,8 @@ Handles bilingual content (Portuguese/English).
 import os
 import json
 import re
-from google import genai
-from google.genai import types
+from pydantic import BaseModel
+from .ai_provider import service
 
 from dotenv import load_dotenv
 
@@ -39,14 +39,6 @@ def analyze_curriculum(text: str, page_count: int) -> dict:
     """
     Send extracted PDF text (TOC) to Gemini for curriculum analysis.
     """
-    current_key = os.getenv("GEMINI_API_KEY", "")
-    if not current_key or current_key == "your_key_here":
-        raise ValueError(
-            "Gemini API key not configured. "
-            "Please add your API key to the .env file: GEMINI_API_KEY=your_actual_key"
-        )
-
-    client = genai.Client(api_key=current_key)
 
     # Build the user prompt focused on TOC
     user_prompt = f"""The following text is the Table of Contents or index from a textbook.
@@ -63,17 +55,22 @@ TOC Content:
 Return ONLY the JSON object."""
 
     try:
-        response = client.models.generate_content(
-            model="gemini-flash-latest",  # follows the current Flash model
-            contents=user_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                response_mime_type="application/json",
-            ),
-        )
-        return _parse_response(response.text, page_count)
+        result = service().generate(user_prompt, instructions=SYSTEM_INSTRUCTION, schema=Curriculum,
+                                    category="books", max_output=8192)
+        return _parse_response(json.dumps(result), page_count)
     except Exception as e:
-        raise ValueError(f"Gemini API call failed: {str(e)}")
+        raise ValueError(f"Curriculum analysis failed: {e}") from e
+
+
+class CurriculumTopic(BaseModel):
+    title: str
+    page_start: int
+    page_end: int
+
+
+class Curriculum(BaseModel):
+    language: str
+    topics: list[CurriculumTopic]
 
 
 def _parse_response(response_text: str, page_count: int) -> dict:

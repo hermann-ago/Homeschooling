@@ -1,6 +1,14 @@
 import { fetchApi } from './client';
 
+const documentQuery = (id) => id == null ? '' : `&document_id=${encodeURIComponent(id)}`;
+
 export const subjectsApi = {
+  teachingSkill: (id) => fetchApi(`/subjects/${id}/teaching-skill`),
+  skillHistory: (id) => fetchApi(`/subjects/${id}/teaching-skill/history`),
+  saveSkill: (id, content, version) => fetchApi(`/subjects/${id}/teaching-skill`, {
+    method: 'PUT', body: JSON.stringify({ content, expected_version: version }),
+  }),
+  exportSkill: (id) => fetchApi(`/subjects/${id}/teaching-skill/export`, { method: 'POST' }),
   getByChildId: (childId) => fetchApi(`/subjects/by-child/${childId}`),
   getById: (id) => fetchApi(`/subjects/${id}`),
   create: (data) => fetchApi('/subjects', { method: 'POST', body: JSON.stringify(data) }),
@@ -11,9 +19,9 @@ export const subjectsApi = {
   updateTopic: (subjectId, topicId, data) => fetchApi(`/subjects/${subjectId}/topics/${topicId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTopic: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}`, { method: 'DELETE' }),
   deleteSubject: (subjectId) => fetchApi(`/subjects/${subjectId}`, { method: 'DELETE' }),
-  setMainBook: (subjectId, pdfFilename) => fetchApi(`/subjects/${subjectId}/books/set-main-book?pdf_filename=${encodeURIComponent(pdfFilename)}`, { method: 'PUT' }),
-  deleteBook: (subjectId, pdfFilename) => fetchApi(`/subjects/${subjectId}/books?pdf_filename=${encodeURIComponent(pdfFilename)}`, { method: 'DELETE' }),
-  setBookOffset: (subjectId, pdfFilename, offset) => fetchApi(`/subjects/${subjectId}/books/set-book-offset?pdf_filename=${encodeURIComponent(pdfFilename)}&offset=${offset}`, { method: 'PUT' }),
+  setMainBook: (subjectId, pdfFilename, document) => fetchApi(`/subjects/${subjectId}/books/set-main-book?pdf_filename=${encodeURIComponent(pdfFilename)}${documentQuery(document)}`, { method: 'PUT' }),
+  deleteBook: (subjectId, pdfFilename, document) => fetchApi(`/subjects/${subjectId}/books?pdf_filename=${encodeURIComponent(pdfFilename)}${documentQuery(document)}`, { method: 'DELETE' }),
+  setBookOffset: (subjectId, pdfFilename, offset, document) => fetchApi(`/subjects/${subjectId}/books/set-book-offset?pdf_filename=${encodeURIComponent(pdfFilename)}&offset=${offset}${documentQuery(document)}`, { method: 'PUT' }),
   toggleTopicComplete: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}/toggle-complete`, { method: 'POST' }),
   generateChapters: (subjectId, count) => fetchApi(`/subjects/${subjectId}/generate-chapters?count=${count}`, { method: 'POST' }),
   completePrevious: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}/complete-previous`, { method: 'POST' }),

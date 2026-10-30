@@ -10,16 +10,23 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from dependencies import IdempotencyMiddleware, context, set_context
-from routers import annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, \
+from routers import activities, annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, \
     system, time_windows, tutor
 from security.network import PrivateNetworkMiddleware
+from services.test_mode import TestModeMiddleware
 from storage import DuplicateOperation, FileUnavailable, OutsideBoundary, RevisionConflict, StoreError
 
 load_dotenv()
+if os.getenv('HOMESCHOOLING_SKIP_APP') != '1':
+    # Official ElevenLabs CLI onboarding saves the server key here. Test hosts
+    # never load this file or inherit a real narration credential.
+    load_dotenv(Path(__file__).resolve().parents[1] / '.env.local')
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 FRONTEND_DIST = Path(os.getenv("HOMESCHOOLING_FRONTEND", Path(__file__).resolve().parents[1] / "frontend" / "dist"))
@@ -79,9 +86,16 @@ def create_app(app_context=None) -> FastAPI:
     app = FastAPI(title="Homeschooling", description="Private home server for one homeschool family",
                   version="3.0.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.add_middleware(IdempotencyMiddleware)
+    app.add_middleware(TestModeMiddleware)
     app.add_middleware(PrivateNetworkMiddleware,
                        extra_hosts=(app_context.config.get("allowed_hosts") if app_context else ()) or ())
     app.add_middleware(CompressText)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        if request.url.path == "/api/ai/key":
+            return JSONResponse(status_code=422, content={"detail": "Enter a supported provider and a valid API key"})
+        return await request_validation_exception_handler(request, exc)
 
     app.include_router(system.router, prefix="/api", tags=["System"])
     app.include_router(children.router, prefix="/api/children", tags=["Children"])
@@ -95,6 +109,12 @@ def create_app(app_context=None) -> FastAPI:
     app.include_router(documents.router, prefix="/api")
     app.include_router(annotations.router, prefix="/api")
     app.include_router(tutor.router, prefix="/api/tutor", tags=["Tutor"])
+    app.include_router(activities.router, prefix="/api/tutor", tags=["Teaching activities"])
+    from routers import books, records, preparation, library
+    app.include_router(preparation.router, prefix="/api/tutor/preparation", tags=["Lesson preparation"])
+    app.include_router(books.router, prefix="/api", tags=["Books"])
+    app.include_router(library.router, prefix="/api/library", tags=["Family library"])
+    app.include_router(records.router, prefix="/api", tags=["Records"])
 
     @app.exception_handler(RevisionConflict)
     async def revision_conflict(request: Request, exc: RevisionConflict):

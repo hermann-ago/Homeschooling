@@ -176,13 +176,14 @@ def start(config: HostConfig, port: int, open_browser: bool):
     log_dir.mkdir(parents=True, exist_ok=True)
     log = open(log_dir / "server.log", "ab")
     command = [str(server_python()), "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", str(port)]
+    environment = server_environment(config)
     flags = 0
     if os.name == "nt":
         # A console of its own without a window, not DETACHED_PROCESS: the venv's python.exe starts
         # the real interpreter as a child, which would otherwise open a new, closable console window.
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
     process = subprocess.Popen(command, cwd=BACKEND, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
-                               creationflags=flags, start_new_session=os.name != "nt")
+                               creationflags=flags, start_new_session=os.name != "nt", env=environment)
     for _ in range(120):
         time.sleep(0.5)
         if process.poll() is not None:
@@ -206,6 +207,18 @@ def start(config: HostConfig, port: int, open_browser: bool):
     config.update(port=port)
     announce(port, open_browser)
     return 0
+
+
+def server_environment(config: HostConfig):
+    """The child must use this exact config, even when no data override was inherited."""
+    environment = os.environ.copy()
+    environment["HOMESCHOOLING_DATA"] = str(config.dir.resolve())
+    environment.pop("HOMESCHOOLING_MODE", None)
+    environment.pop("HOMESCHOOLING_SKIP_APP", None)
+    environment.pop("HOMESCHOOLING_DRIVE_FOLDER", None)
+    if config.get("drive_folder"):
+        environment["HOMESCHOOLING_DRIVE_FOLDER"] = str(config.get("drive_folder"))
+    return environment
 
 
 def announce(port: int, open_browser: bool):

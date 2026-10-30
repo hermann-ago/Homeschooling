@@ -7,7 +7,7 @@ import clsx from 'clsx';
 export default function SegmentedControl({ options, value, onChange, label, size = 'md', className }) {
   const height = size === 'sm' ? 'h-8 text-[13px]' : 'h-9 text-sm';
   return (
-    <div role="group" aria-label={label} className={clsx('inline-flex gap-1.5 p-1 rounded-xl bg-paper-deep', className)}>
+    <div role="group" aria-label={label} className={clsx('app-segmented inline-flex max-w-full overflow-x-auto gap-1.5 p-1 rounded-xl bg-paper-deep', className)}>
       {options.map((option) => {
         const selected = option.value === value;
         return (

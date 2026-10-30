@@ -8,6 +8,7 @@
 @theme {
   --font-sans: 'Figtree Variable', system-ui, 'Segoe UI', sans-serif;
   --font-display: 'Fraunces Variable', Georgia, serif;
+  --font-introduction: 'Figtree Variable', system-ui, 'Segoe UI', sans-serif;
 
   --color-paper: #f6f3ec;
   --color-paper-deep: #efeae0;
@@ -72,6 +73,17 @@
   scrollbar-color: var(--color-line) transparent;
 }
 
+/* Keep the test label visible without covering lesson controls or mobile tabs. */
+.test-copy-content {
+  --test-height: calc(100dvh - 3.5rem);
+}
+.test-copy-content .h-dvh { height: var(--test-height); }
+.test-copy-content .min-h-dvh,
+.test-copy-content .min-h-screen { min-height: var(--test-height); }
+@media (min-width: 768px) {
+  .test-copy-content { --test-height: calc(100dvh - 2.5rem); }
+}
+
 /* ─── Print Styles ─────────────────────────────────────────── */
 @media print {
   /* When printing from the PDF viewer, hide everything except the PDF content */
@@ -105,4 +117,159 @@
   background: rgba(250, 204, 21, 0.45);
   color: transparent;
   border-radius: 2px;
+}
+
+.activity-introduction {
+  font-family: var(--font-introduction);
+  background: var(--color-action-soft);
+  border: 1px solid color-mix(in srgb, var(--color-action) 25%, transparent);
+  border-radius: 1rem;
+  padding: 1rem;
+  line-height: 1.65;
+}
+
+/* Lesson workspace: the book and conversation own the available height. */
+.app-shell, .lesson-workspace { height: var(--app-height, 100dvh); }
+.app-shell { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+.mobile-tab-bar { padding-bottom: max(.25rem, env(safe-area-inset-bottom)); }
+.app-dialog { max-height: calc(var(--app-height, 100dvh) - 2rem); overflow: hidden; }
+.app-dialog > div { min-height: 0; max-height: inherit; }
+.lesson-workspace { overflow: hidden; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.lesson-workspace-layout[data-has-book="false"] .lesson-book-panel { display: none; }
+.lesson-workspace-layout[data-has-book="false"] .lesson-tutor-panel { width: 100%; }
+.lesson-header { min-height: 3.25rem; }
+.lesson-tutor-panel { height: 100%; }
+.guide-chat-panel, .registry-lesson, .tutor-chat { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.lesson-preparation-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .65rem; padding: .65rem 1rem; border-bottom: 1px solid var(--color-line); background: var(--color-paper); flex-shrink: 0; }
+.lesson-preparation-bar > button, .lesson-preparation-bar > a { flex-shrink: 0; }
+.tutor-chat-header { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); grid-auto-rows: max-content; align-items: start; gap: .5rem; padding: .55rem 1rem; flex: 0 0 auto; }
+.tutor-header-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; min-width: 0; }
+.tutor-lesson-position { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .3rem; }
+.tutor-lesson-position > p { margin: 0; font-size: .75rem; }
+.tutor-lesson-position > ol { margin-top: 0; font-size: .7rem; column-gap: .75rem; row-gap: .15rem; }
+.tutor-chat-header .tutor-lesson-position > ol { display: none; }
+.tutor-session-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: .4rem; width: 100%; min-width: 0; }
+.tutor-session-controls > label { min-width: 0; }
+.tutor-session-controls select { height: 2rem; border: 1px solid var(--color-line); border-radius: .6rem; background: var(--color-surface); color: var(--color-ink); padding: .25rem; font-size: .75rem; }
+.tutor-session-controls label:first-child select { width: 100%; text-overflow: ellipsis; }
+.tutor-session-controls label:nth-child(2) select { width: 3.75rem; }
+.tutor-session-controls .session-replay, .tutor-session-controls .lesson-options > summary { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: .6rem; }
+.session-replay:disabled { opacity: .35; cursor: default; }
+.session-replay:hover:not(:disabled) { background: var(--color-paper); }
+.tutor-thread-wrap { position: relative; flex: 1; min-height: 0; }
+.tutor-thread { height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-anchor: none; }
+.tutor-thread-content { min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 1.5rem; padding: 1rem 1.25rem 1.5rem; }
+.tutor-current { border: 0; }
+.tutor-thread [aria-label="Saved lesson thread"] > details { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.tutor-thread [aria-label="Saved lesson thread"] > details > summary { color: var(--color-muted); font-size: .75rem; }
+.tutor-thread article { overflow-wrap: anywhere; }
+.tutor-thread [aria-live] > article { border: 0; }
+.tutor-thread [aria-live] > article:has(> .text-xs.text-muted) { margin-left: 2rem; border-radius: 1rem 1rem .25rem 1rem; }
+.tutor-composer { flex-shrink: 1; min-height: 0; max-height: 82%; margin: 0 .75rem max(.75rem, env(safe-area-inset-bottom)); display: flex; flex-direction: column; border: 1px solid var(--color-line); border-radius: 1.25rem; background: var(--color-surface); box-shadow: 0 -8px 20px -15px #1e222640; overflow: hidden; }
+.tutor-composer[data-expanded="true"] { height: 88%; max-height: 88%; }
+.tutor-composer[data-minimized="true"] { height: auto; max-height: none; }
+.tutor-workbox-header { flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .5rem 1rem; background: var(--color-paper); border-bottom: 1px solid var(--color-line); }
+.tutor-workbox-size { padding: .35rem .5rem; border-radius: .5rem; color: var(--color-action); font-size: .75rem; }
+.tutor-workbox-size:hover { background: var(--color-action-soft); }
+.tutor-workbox-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; display: flex; flex-direction: column; gap: .85rem; }
+.tutor-workbox-content[hidden] { display: none; }
+.tutor-step-actions { flex-shrink: 0; padding: .65rem 1rem; border-top: 1px solid var(--color-line); }
+.tutor-step-actions > button { width: 100%; }
+.tutor-step-actions[hidden] { display: none; }
+.tutor-narration { flex-shrink: 0; border-top: 1px solid var(--color-line); }
+.tutor-narration[hidden], .tutor-narration:empty { display: none; }
+.tutor-narration-controls { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem 1rem; }
+.tutor-narration-button { flex-shrink: 0; display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: var(--color-action); color: white; }
+.tutor-narration-button:disabled { opacity: .4; cursor: default; }
+.tutor-device-passage-button { flex-shrink: 0; padding: .65rem .85rem; border-radius: .75rem; background: var(--color-action); color: white; font-size: .8rem; font-weight: 600; }
+.tutor-device-passage-button:disabled { opacity: .4; cursor: default; }
+.tutor-workbox-content > * { flex-shrink: 0; overflow-wrap: anywhere; }
+.tutor-workbox-content .response-composer { border: 0; border-radius: 0; border-top: 1px solid var(--color-line); padding: .85rem 0 0; background: transparent; }
+.tutor-history-placeholder { text-align: center; padding: 1rem 0; }
+.tutor-composer:empty { display: none; }
+.response-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .55rem .65rem; padding: .8rem; border: 1px solid var(--color-line); border-radius: 1.25rem; background: var(--color-paper); }
+.response-composer > label, .response-composer > fieldset, .response-composer > p, .response-composer > input { grid-column: 1 / -1; }
+.response-composer > label:first-child { flex-direction: row; align-items: center; justify-content: space-between; font-size: .75rem; }
+.response-composer > label:first-child select { width: auto; max-width: 75%; min-height: 2rem; height: 2rem; font-size: .75rem; background: transparent; border: 0; }
+.response-composer textarea { max-height: 9rem; min-height: 3.5rem; resize: vertical; border: 0; background: transparent; padding: .4rem 0; box-shadow: none; }
+.response-composer > button { min-height: 2rem; height: auto; font-size: .75rem; padding: .4rem .6rem; }
+.response-composer > button:last-child { grid-column: 2; grid-row: auto; border-radius: 2rem; }
+.response-composer > p[role="status"]:last-of-type { grid-column: 1; align-self: center; font-size: .65rem; }
+.response-composer > p[id] { grid-column: 1; align-self: center; font-size: .65rem; }
+.lesson-help { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; font-size: .75rem; }
+.lesson-help > details[open] { flex-basis: 100%; }
+.lesson-help > button { margin-left: auto; font-size: .7rem; min-height: 1.75rem; }
+.lesson-help summary { font-size: .75rem; }
+.tutor-latest { position: absolute; bottom: .75rem; left: 50%; transform: translateX(-50%); padding: .5rem .9rem; border-radius: 2rem; background: var(--color-surface); border: 1px solid var(--color-line); box-shadow: var(--shadow-soft); font-size: .75rem; white-space: nowrap; }
+.lesson-options { position: relative; }
+.lesson-options > summary { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; cursor: pointer; list-style: none; }
+.lesson-options > summary::-webkit-details-marker { display: none; }
+.lesson-options > summary:hover { background: var(--color-paper); }
+.lesson-options-content, .book-details-content { position: absolute; z-index: 40; right: 0; top: calc(100% + .4rem); width: min(22rem, calc(100vw - 2rem)); max-height: 65dvh; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 1rem; background: var(--color-surface); border: 1px solid var(--color-line); border-radius: 1rem; box-shadow: 0 10px 32px #1e222620; }
+/* A wrapped toolbar can put its trigger on the left. Anchor both menus to
+   the whole tutor header so their cards stay inside the lesson panel. */
+.tutor-chat-header .lesson-options { position: static; }
+.tutor-chat-header .lesson-options-content { right: .75rem; width: min(22rem, calc(100% - 1.5rem)); }
+.book-details { position: relative; }
+.book-details-content { font-size: .8rem; line-height: 1.6; }
+.pdf-page-controls { position: absolute; top: .6rem; right: 1.25rem; z-index: 15; display: flex; align-items: center; gap: .25rem; padding: .25rem; border: 1px solid var(--color-line); border-radius: .85rem; background: #ffffffed; box-shadow: var(--shadow-soft); backdrop-filter: blur(12px); }
+.pdf-page-controls button { min-width: 2rem; min-height: 2rem; display: grid; place-items: center; padding: .25rem .5rem; font-size: .7rem; border-radius: .5rem; }
+.pdf-page-controls button[aria-pressed="true"] { background: var(--color-action-soft); color: var(--color-action); font-weight: 600; }
+.pdf-page-controls button:disabled { opacity: .3; }
+@media (min-width: 1024px) {
+  .lesson-tutor-panel { width: clamp(26rem, 41vw, 46rem); height: auto; }
+}
+@media (max-width: 1023px) {
+  .lesson-panels[data-mobile-pane="tutor"] > .lesson-book-panel { display: none; }
+  .lesson-panels[data-mobile-pane="book"] > .lesson-tutor-panel { display: none; }
+  .lesson-tutor-panel { flex: 1; width: 100%; border-top: 0; }
+  .pdf-reading-area { flex-direction: column; }
+  .pdf-page-controls { position: static; flex-shrink: 0; justify-content: center; border-width: 0 0 1px; border-radius: 0; box-shadow: none; background: var(--color-surface); }
+  .pdf-page-controls > * { flex-shrink: 0; }
+  /* Give a typed answer the usable screen while its keyboard is open. */
+  [data-keyboard-open="true"] .lesson-workspace-switch,
+  [data-keyboard-open="true"] .lesson-preparation-bar,
+  [data-keyboard-open="true"] .tutor-chat-header,
+  [data-keyboard-open="true"] .tutor-narration,
+  [data-keyboard-open="true"] [aria-label="Lesson voice preparation"],
+  [data-keyboard-open="true"] .mobile-tab-bar { display: none; }
+  [data-keyboard-open="true"] .tutor-composer { flex: 1; max-height: none; }
+  [data-keyboard-open="true"] .tutor-thread-wrap { flex: 0; }
+}
+@media (max-width: 640px) {
+  .lesson-header { padding-left: .5rem; padding-right: .5rem; gap: .5rem; }
+  .lesson-header h1 { font-size: .85rem; }
+  .lesson-header .book-details > summary { display: grid; place-items: center; width: 3rem; min-height: 2.75rem; text-align: center; }
+  .app-dialog { max-width: calc(100vw - 1rem); max-height: calc(var(--app-height, 100dvh) - 1rem); }
+  .app-dialog > div > header { padding: 1rem; }
+  .app-dialog-body { padding-left: 1rem; padding-right: 1rem; }
+  .app-dialog > div > footer { padding: 1rem; }
+  .app-dialog > div > footer > button { flex: 1; }
+  .lesson-preparation-bar { gap: .5rem; padding: .5rem .75rem; }
+  .lesson-preparation-bar > .app-button { min-width: 0; max-width: 55%; white-space: normal; height: auto; min-height: 2.75rem; }
+  .tutor-thread-content { padding: .75rem; }
+  .tutor-chat-header { padding: .35rem .75rem; }
+  .tutor-composer { margin: 0 .4rem .4rem; max-height: 80%; }
+  .tutor-composer[data-expanded="true"] { height: 94%; max-height: 94%; }
+  .tutor-composer[data-minimized="true"] { height: auto; max-height: none; }
+  .tutor-workbox-header { padding: .25rem .65rem; }
+  .tutor-workbox-content { padding: .65rem; }
+  .pdf-page-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .2rem; padding: .25rem .5rem; }
+  .pdf-page-controls > span { text-align: center; }
+}
+
+@media (pointer: coarse) {
+  .app-button { min-height: 2.75rem; min-width: 2.75rem; height: auto; padding-top: .5rem; padding-bottom: .5rem; white-space: normal; }
+  .app-segmented > button, .pdf-page-controls button, .response-composer > button,
+  .lesson-options > summary, .tutor-session-controls .session-replay,
+  .tutor-session-controls .lesson-options > summary, .tutor-workbox-size { min-height: 2.75rem; min-width: 2.75rem; }
+  .tutor-session-controls { grid-template-columns: minmax(0, 1fr) 4.5rem auto auto; }
+  .tutor-session-controls select { height: 2.75rem; }
+  .tutor-session-controls label:nth-child(2) select { width: 100%; }
+  input, textarea, select, .response-composer textarea, .response-composer > label:first-child select, .tutor-session-controls select { font-size: 16px; }
+  .response-composer > label:first-child { flex-wrap: wrap; gap: .5rem; }
+  .response-composer > label:first-child select { max-width: 100%; }
+  .response-composer > button { font-size: .875rem; }
+  .response-composer > button:last-child { grid-column: 1 / -1; }
+  .response-composer > p[id] { grid-column: 1 / -1; }
 }

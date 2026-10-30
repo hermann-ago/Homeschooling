@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 
 const viewerMocks = vi.hoisted(() => ({
@@ -9,7 +9,10 @@ const viewerMocks = vi.hoisted(() => ({
   getDocumentData: vi.fn(),
   pageRender: vi.fn(),
   resize: null,
+  print: vi.fn(),
 }));
+
+vi.mock('../utils/printLessonPages', () => ({ printLessonPages: viewerMocks.print }));
 
 vi.mock('react-pdf', () => ({
   Document: ({ children }) => <div data-testid="pdf-document">{children}</div>,
@@ -54,6 +57,7 @@ import { FeedbackProvider } from '../ui/feedback';
 
 
 describe('PageViewer sizing', () => {
+  afterEach(cleanup);
   beforeEach(() => {
     viewerMocks.pageRender.mockClear();
     viewerMocks.getDocument.mockReset().mockResolvedValue({
@@ -64,6 +68,8 @@ describe('PageViewer sizing', () => {
     });
     viewerMocks.getDocumentData.mockReset().mockResolvedValue(new Uint8Array([1, 2, 3]));
     viewerMocks.resize = null;
+    viewerMocks.print.mockReset().mockResolvedValue(undefined);
+    HTMLElement.prototype.scrollTo = vi.fn();
 
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
       configurable: true,
@@ -110,5 +116,39 @@ describe('PageViewer sizing', () => {
     });
 
     expect(viewerMocks.pageRender).not.toHaveBeenCalled();
+  });
+
+  it('fits a portrait page to available height without changing its proportions, and allows width fitting', async () => {
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 800 });
+    render(<FeedbackProvider><PageViewer slot={{ document_id: 9, page_from: 1, page_to: 2 }} /></FeedbackProvider>);
+    await screen.findByTestId('pdf-page');
+    act(() => viewerMocks.pageRender.mock.calls.at(-1)[0].onLoadSuccess({ getViewport: () => ({ width: 600, height: 1000 }) }));
+    expect(screen.getByTestId('pdf-page').style.width).toBe('466px');
+    fireEvent.click(screen.getByRole('button', { name: 'Fit width' }));
+    expect(screen.getByTestId('pdf-page').style.width).toBe('500px');
+    expect(screen.getByRole('button', { name: 'Fit width' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('prints the assigned range with its PDF offset, regardless of the currently viewed page', async () => {
+    render(<FeedbackProvider><PageViewer slot={{ document_id: 9, page_from: 10, page_to: 12, pdf_page_offset: 4, topic_title: 'Letter practice' }} /></FeedbackProvider>);
+    await screen.findByTestId('pdf-page');
+    fireEvent.click(screen.getByRole('button', { name: 'Next assigned page' }));
+    await screen.findByText('Book page 11');
+    fireEvent.click(screen.getByRole('button', { name: 'Print lesson pages' }));
+    expect(await screen.findByRole('dialog', { name: 'Print lesson pages' })).toBeTruthy();
+    expect(viewerMocks.print).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Book pages'), { target: { value: '10,12' } });
+    fireEvent.change(screen.getByLabelText('Pages per sheet'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open print dialog' }));
+    await waitFor(() => expect(viewerMocks.print).toHaveBeenCalledTimes(1));
+    expect(viewerMocks.print.mock.calls[0][0]).toMatchObject({ first: 14, last: 16, offset: 4, selection: '10,12', pagesPerSheet: 2, title: 'Letter practice · book pages 10–12' });
+  });
+
+  it('keeps printing unavailable when the book could not be loaded', async () => {
+    viewerMocks.getDocumentData.mockRejectedValue(new Error('The PDF is unavailable'));
+    render(<FeedbackProvider><PageViewer slot={{ document_id: 9, page_from: 1, page_to: 2 }} /></FeedbackProvider>);
+    await screen.findByText('The PDF is unavailable');
+    expect(screen.getByRole('button', { name: 'Print lesson pages' }).disabled).toBe(true);
+    expect(viewerMocks.print).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,7 @@ function newOperationId() {
 export async function request(endpoint, options = {}) {
   const method = (options.method || 'GET').toUpperCase();
   const headers = { ...options.headers };
+  headers['X-Homeschooling-Mode'] = currentMode;
   if (!(options.body instanceof FormData) && options.body !== undefined) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
   }
@@ -34,17 +35,21 @@ export async function fetchApi(endpoint, options = {}) {
   const response = await request(endpoint, options);
   if (!response.ok) {
     let errorMessage = `Request failed (${response.status})`;
+    let code;
     try {
       const errorData = await response.json();
       const detail = errorData.detail;
+      code=typeof detail==='object' ? detail?.code : undefined;
       errorMessage = typeof detail === 'string' ? detail : detail?.message || errorMessage;
     } catch {
       // Ignored
     }
     const error = new Error(`${endpoint}: ${errorMessage}`);
     error.status = response.status;
+    error.code=code;
     throw error;
   }
   if (response.status === 204) return null;
   return response.json();
 }
+import { currentMode } from './mode';

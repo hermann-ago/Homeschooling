@@ -1,0 +1,4 @@
+# Optional offline book conversion tools; the app itself keeps its pypdf fallback.
+-r requirements.txt
+PyMuPDF==2.0.0
+Pillow==13.0.0

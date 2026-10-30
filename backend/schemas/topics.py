@@ -30,6 +30,7 @@ class TopicResponse(TopicBase):
     id: int
     subject_id: int
     completed_at: Optional[datetime] = None
+    completion_source: Optional[str] = None
     created_at: datetime
     class Config:
         from_attributes = True

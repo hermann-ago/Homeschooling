@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import FamilyTutorSkill from '../components/FamilyTutorSkill';
 import { useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
@@ -13,6 +14,8 @@ import { timeWindowsApi } from '../api/timeWindows';
 import { keys, useAutoReplan, useFamilyProgress, useNarrationUsage, useSchoolYear, useStorageStatus, useSubjects, useTimeWindows } from '../api/queries';
 import { useDevice } from '../components/deviceContext';
 import GradeSelect from '../components/GradeSelect';
+import AICostSettings from '../components/AICostSettings';
+import TestModeSettings from '../components/TestModeSettings';
 import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { shortTime } from '../utils/lessons';
@@ -360,8 +363,9 @@ function backupTime(name) {
   return new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)).toLocaleString();
 }
 
-function HomeServer() {
+export function HomeServer() {
   const device = useDevice();
+  const sandbox = device?.test_mode === true;
   const { data: storage } = useStorageStatus();
   const { data: usage } = useNarrationUsage();
   const [folder, setFolder] = useState(null);
@@ -384,15 +388,15 @@ function HomeServer() {
   };
 
   return (
-    <Section id="home-server" title="Home server and backups">
+    <Section id="home-server" title={sandbox ? 'Test records and backups' : 'Home server and backups'}>
       <p className="text-[13px] text-muted">
-        Records are kept in a database on the family computer. Books, handwriting, audio and backups are files in the
-        Homeschooling folder that Google Drive for desktop keeps in sync.
+        {sandbox ? 'Practice answers, handwriting and uploads stay in the test working area. Prepared lessons and narration are saved for reuse; real student progress remains unchanged.'
+          : 'Records are kept in a database on the family computer. Books, handwriting, audio and backups are files in the Homeschooling folder that Google Drive for desktop keeps in sync.'}
       </p>
       <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2 text-sm">
         <dt className="text-muted">Records</dt>
         <dd className="font-semibold">{storage ? 'Saved on this computer' : 'Home server not answering'}</dd>
-        <dt className="text-muted">Drive folder</dt>
+        <dt className="text-muted">{sandbox ? 'Test files' : 'Drive folder'}</dt>
         <dd className="break-all">
           <span className="font-mono text-[13px]">{storage?.drive_folder || 'Not set'}</span>
           {storage && !storage.drive_folder_available && (
@@ -403,8 +407,8 @@ function HomeServer() {
         <dd className="font-semibold">{storage?.last_backup ? backupTime(storage.last_backup) : 'None yet'}</dd>
         {usage && (
           <>
-            <dt className="text-muted">Read-along voices</dt>
-            <dd>{usage.characters.toLocaleString()} of {usage.monthly_limit.toLocaleString()} characters this month</dd>
+            <dt className="text-muted">Previous Neural2 usage</dt>
+            <dd>{Number(usage.characters || 0).toLocaleString()} characters this month · tracked only</dd>
           </>
         )}
       </dl>
@@ -414,16 +418,15 @@ function HomeServer() {
           {busy === 'backup' ? 'Backing up…' : 'Back up now'}
         </Button>
         <Button size="sm" disabled={Boolean(busy)}
-          onClick={() => run('export', systemApi.exportNow, (r) => (r.path ? 'Excel copy written to the Drive folder.' : 'The Drive folder is not available.'))}>
+          onClick={() => run('export', systemApi.exportNow, (r) => (r.path ? (sandbox ? 'Excel copy written to the test folder.' : 'Excel copy written to the Drive folder.') : 'The file folder is not available.'))}>
           {busy === 'export' ? 'Writing…' : 'Write the Excel copy'}
         </Button>
       </div>
       <p className="text-[13px] text-subtle">
-        A verified backup goes to the folder's _App Backups every day and when the server stops (the newest 30 are kept).
-        The Excel copy is for reading only and leaves out answer keys. For lessons without internet, right-click the
-        Homeschooling folder in File Explorer and choose Offline access → Available offline.
+        {sandbox ? 'Backups and Excel exports here contain only the test copy and stay on this computer. They never replace real student records.'
+          : "A verified backup goes to the folder's _App Backups every day and when the server stops (the newest 30 are kept). The Excel copy is for reading only and leaves out answer keys. For lessons without internet, right-click the Homeschooling folder in File Explorer and choose Offline access → Available offline."}
       </p>
-      {isHost ? (
+      {sandbox ? <p className="text-[13px] text-subtle">Leave test mode before changing the real storage folder.</p> : isHost ? (
         <form className="flex flex-wrap items-end gap-2" onSubmit={(e) => {
           e.preventDefault();
           run('folder', () => systemApi.setDriveFolder((folder ?? storage?.drive_folder ?? '').trim()), 'Drive folder saved.');
@@ -447,9 +450,11 @@ export default function Settings() {
   return (
     <div className="px-4 md:px-10 py-8 flex flex-col gap-6">
       <h1 className="font-display text-3xl md:text-4xl font-medium">Settings</h1>
+      <TestModeSettings />
+      <FamilyTutorSkill />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <div className="flex flex-col gap-5"><Family /><SchoolYear /></div>
-        <div className="flex flex-col gap-5"><StudyTimes /><HomeServer /></div>
+        <div className="flex flex-col gap-5"><AICostSettings /><StudyTimes /><HomeServer /></div>
       </div>
     </div>
   );

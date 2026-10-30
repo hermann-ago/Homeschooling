@@ -10,45 +10,40 @@ Generates four types of AI-powered learning content for a given PDF section:
 
 All functions:
   1. Accept extracted page text and a language hint ('pt' or 'en').
-  2. Call the current Gemini Flash model (same as ai_analyzer.py).
+  2. Call the explicitly selected, budget-controlled provider.
   3. Are bilingual-aware — prompts adapt based on the language argument.
   4. Return Python objects (dicts / strings), NOT raw JSON strings.
 
 Error Handling
 --------------
-All generation functions raise ValueError on Gemini API failure.
+All generation functions raise ValueError on provider or allowance failure.
 The router catches these and returns HTTP 502 with a user-friendly message.
 """
 
-import os
-import json
 import re
-from google import genai
-from google.genai import types
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# ── Gemini Configuration ──────────────────────────────────────────────────────
-
-# "latest" follows Google's current Flash model instead of failing when a version is retired.
-GEMINI_MODEL = "gemini-flash-latest"
+from pydantic import BaseModel
+from .ai_provider import service
 
 VALID_CONTENT_TYPES = {"quiz", "audio", "terms", "explain"}
 
 
-def _get_client() -> genai.Client:
-    """
-    Instantiate a Gemini model, re-reading the API key at call time so
-    that runtime key updates (via Settings page) are respected.
-    """
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key or api_key == "your_key_here":
-        raise ValueError(
-            "Gemini API key not configured. "
-            "Please add your API key in the Settings page."
-        )
-    return genai.Client(api_key=api_key)
+class QuizQuestion(BaseModel):
+    question: str
+    choices: list[str]
+    answer: str
+
+
+class Quiz(BaseModel):
+    items: list[QuizQuestion]
+
+
+class Term(BaseModel):
+    term: str
+    definition: str
+
+
+class Terms(BaseModel):
+    items: list[Term]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -105,14 +100,8 @@ TEXT:
 {text[:4000]}
 ---"""
 
-    client = _get_client()
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        parsed = json.loads(_clean_json(response.text))
+        parsed = service().generate(prompt + '\nWrap the array in an object with an items field.', schema=Quiz)["items"]
         if not isinstance(parsed, list):
             raise ValueError("Expected a JSON array")
         return parsed[:5]  # Trim to 5 in case model returns more
@@ -145,10 +134,8 @@ TEXT:
 
 Return ONLY the summary text."""
 
-    client = _get_client()
     try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        return response.text.strip()
+        return service().generate(prompt, max_output=1024)
     except Exception as e:
         raise ValueError(f"Audio summary generation failed: {e}")
 
@@ -178,14 +165,8 @@ TEXT:
 {text[:4000]}
 ---"""
 
-    client = _get_client()
     try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(response_mime_type="application/json"),
-        )
-        parsed = json.loads(_clean_json(response.text))
+        parsed = service().generate(prompt + '\nWrap the array in an object with an items field.', schema=Terms)["items"]
         if not isinstance(parsed, list):
             raise ValueError("Expected a JSON array")
         return parsed[:8]
@@ -218,10 +199,8 @@ TEXT:
 
 Return ONLY the explanation text."""
 
-    client = _get_client()
     try:
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        return response.text.strip()
+        return service().generate(prompt, max_output=1024)
     except Exception as e:
         raise ValueError(f"Simple explanation generation failed: {e}")
 

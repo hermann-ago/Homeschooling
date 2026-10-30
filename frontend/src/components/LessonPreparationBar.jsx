@@ -1,0 +1,47 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { LoaderCircle, WandSparkles } from 'lucide-react';
+import { curriculumPrepApi } from '../api/preparation';
+import { currentMode, modeHref } from '../api/mode';
+import { Button } from '../ui';
+import { CurriculumPreparationDialog } from './CurriculumLessonPrep';
+
+const working = (status) => ['queued', 'running'].includes(status?.job?.status)
+  || ['queued', 'running', 'aligning'].includes(status?.audio?.status);
+
+/** One visible home for guide and voice preparation, before or during a lesson. */
+export default function LessonPreparationBar({ learner, topic, guide, pinned, onChanged }) {
+  const [open, setOpen] = useState(false);
+  const previous = useRef(null);
+  const { data, error, refetch } = useQuery({
+    queryKey: ['curriculum-preparation', currentMode, learner, topic],
+    queryFn: () => curriculumPrepApi.lesson(learner, topic),
+    refetchInterval: (query) => working(query.state.data) ? 3000 : 30000,
+  });
+  const stamp = data ? [data.guide_id, data.job?.status, data.job?.phase, data.audio?.status].join(':') : null;
+  useEffect(() => {
+    if (stamp && previous.current && previous.current !== stamp) onChanged?.();
+    if (stamp) previous.current = stamp;
+  }, [stamp, onChanged]);
+  const fallback = { guide_id: guide?.guide_id, script_status: guide?.current ? 'ready' : guide ? 'outdated' : 'missing',
+    review: guide?.script_review, audio: { status: guide?.audio?.some((track) => track.synchronized && (track.preferred ?? true)) ? 'ready' : 'missing' } };
+  const status = data || fallback;
+  const busy = working(status);
+  const ready = status.script_status === 'ready';
+  const voiced = status.audio?.status === 'ready';
+  const olderVersion = pinned && data?.guide_id && data.guide_id !== guide?.guide_id;
+  const label = busy ? status.job?.phase === 'review' ? 'Reviewing lesson…' : status.job?.phase === 'audio' || status.audio?.status === 'running' ? 'Preparing voice…' : 'Preparing lesson…'
+    : !ready ? 'Prepare lesson & voice' : !voiced ? 'Prepare voice' : 'Lesson & voice';
+  return <section aria-label="Lesson preparation" className="lesson-preparation-bar">
+    <div className="min-w-0 text-xs text-muted" role="status">
+      <p className="font-semibold text-ink">Lesson preparation</p>
+      <p>Guide {ready ? 'ready' : status.script_status === 'outdated' ? 'update available' : 'not prepared'} · Voice {voiced ? 'ready' : busy ? 'preparing' : 'not prepared'}</p>
+      {status.job?.error && !busy && <p className="text-attention">Preparation needs attention</p>}
+    </div>
+    {olderVersion ? <Button as="a" size="sm" href={modeHref(`/lesson?learner=${learner}&topic=${topic}`)}>Prepare current version</Button>
+      : <Button size="sm" variant={ready ? 'secondary' : 'primary'} icon={busy ? LoaderCircle : WandSparkles} disabled={busy} onClick={() => setOpen(true)}>{label}</Button>}
+    {error && <button className="text-xs text-action underline" onClick={() => refetch()}>Refresh preparation status</button>}
+    {open && <CurriculumPreparationDialog learner={learner} topic={{ id: topic, title: data?.title || guide?.title || 'This lesson' }}
+      status={status} target={ready ? 'audio' : 'both'} onClose={() => { setOpen(false); refetch(); onChanged?.(); }} />}
+  </section>;
+}

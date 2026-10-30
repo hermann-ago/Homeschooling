@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { getDocument, getDocumentData } from '../api/documents';
 import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
@@ -10,6 +10,9 @@ import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
 import { toPhysicalPage } from './pdfAnnotations/annotationGeometry';
 import { highlightItemIndices } from '../utils/readAlong';
 import { useConfirm } from '../ui/useFeedback';
+import { printLessonPages } from '../utils/printLessonPages';
+import { pauseNarration } from '../utils/narration';
+import LessonPrintDialog from './LessonPrintDialog';
 
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -37,11 +40,17 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
   const [documentInfo, setDocumentInfo] = useState(null);
   const [page, setPage] = useState(physicalStart);
   const [pdfError, setPdfError] = useState('');
+  const [printing, setPrinting] = useState(false);
+  const [printStatus, setPrintStatus] = useState('');
+  const [printOptionsOpen, setPrintOptionsOpen] = useState(false);
   const [tool, setTool] = useState('hand');
   const [color, setColor] = useState('#111827');
   const [strokeWidth, setStrokeWidth] = useState(0.005);
   const [zoom, setZoom] = useState(100);
   const [viewportWidth, setViewportWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [pageRatio, setPageRatio] = useState(null);
+  const [fit, setFit] = useState('page');
   const [textItems, setTextItems] = useState([]);
   const viewportRef = useRef(null);
   const pageSurfaceRef = useRef(null);
@@ -55,6 +64,7 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
       setViewportWidth((currentWidth) => (
         currentWidth === nextWidth ? currentWidth : nextWidth
       ));
+      setViewportHeight(Math.max(0, viewport.clientHeight - 24));
     };
     const measure = () => {
       if (animationFrame !== null) cancelAnimationFrame(animationFrame);
@@ -77,6 +87,8 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
     setPdfError('');
     setPage(physicalStart);
     setZoom(100);
+    setPageRatio(null);
+    setFit('page');
     setTool('hand');
     getDocument(slot.document_id)
       .then(async (nextDocument) => {
@@ -126,7 +138,8 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
     () => (pdfData ? { data: pdfData.slice() } : null),
     [pdfData],
   );
-  const renderWidth = Math.max(240, Math.round(viewportWidth * (zoom / 100)));
+  const fittedWidth = fit === 'page' && pageRatio && viewportHeight > 0 ? Math.min(viewportWidth, viewportHeight * pageRatio) : viewportWidth;
+  const renderWidth = Math.max(160, Math.round(fittedWidth * (zoom / 100)));
   const boundedEnd = documentInfo
     ? Math.min(physicalEnd, documentInfo.page_count)
     : physicalEnd;
@@ -150,12 +163,26 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
   };
 
   const bookPage = page - offset;
+  const printPages = async (options) => {
+    pauseNarration();
+    setPrinting(true); setPrintStatus('Preparing lesson pages for printing…');
+    try {
+      await printLessonPages({ data: pdfData, first: physicalStart, last: boundedEnd,
+        offset, ...options,
+        title: `${slot.topic_title || documentInfo?.original_filename || 'Lesson'} · book pages ${start}–${boundedEnd - offset}`,
+        onProgress: ({ done, total }) => setPrintStatus(`Preparing print page ${done} of ${total}…`),
+        onReady: () => { setPrintOptionsOpen(false); setPrintStatus('Selected pages are ready. Choose your printer, copies and colour in the print dialog.'); } });
+    } catch (error) { setPrintStatus(error.message); }
+    finally { setPrinting(false); }
+  };
 
   return (
-    <div className="flex flex-col h-full bg-surface min-h-0">
+    <div className="pdf-reader relative flex flex-col h-full bg-surface min-h-0">
+      {printOptionsOpen && <LessonPrintDialog key={`${slot.document_id}.${physicalStart}.${boundedEnd}`} first={physicalStart} last={boundedEnd} offset={offset} busy={printing} onClose={() => setPrintOptionsOpen(false)} onPrint={printPages} />}
       {boundaryNote && (
         <div className="px-4 py-2 bg-action-soft border-b border-line text-[13px] text-action" data-testid="boundary-note">{boundaryNote}</div>
       )}
+      {printStatus && <div role="status" className="absolute top-14 right-4 z-20 max-w-sm rounded-xl border border-line bg-white p-3 shadow-sm text-sm text-action flex items-start gap-3"><span>{printStatus}</span>{!printing && <button type="button" aria-label="Dismiss print message" onClick={() => setPrintStatus('')}>×</button>}</div>}
 
       {annotation.conflict && (
         <div className="px-3 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-900 flex flex-wrap items-center gap-2">
@@ -194,10 +221,19 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
           />
         )}
 
+        <div className="pdf-reading-area relative flex-1 min-h-0 min-w-0 flex">
+        <nav aria-label="Book page controls" className="pdf-page-controls">
+          <button type="button" aria-label="Previous assigned page" disabled={page <= physicalStart} onClick={() => changePage(page - 1)}><ChevronLeft size={18} /></button>
+          <span className="text-xs font-semibold whitespace-nowrap" title={`Assigned ${start}–${end}${offset ? ` · PDF page ${page}` : ''}`}>Book page {bookPage}</span>
+          <button type="button" aria-label="Next assigned page" disabled={page >= boundedEnd} onClick={() => changePage(page + 1)}><ChevronRight size={18} /></button>
+          <button type="button" aria-pressed={fit === 'page' && zoom === 100} onClick={() => { setFit('page'); setZoom(100); }}>Fit page</button>
+          <button type="button" aria-pressed={fit === 'width' && zoom === 100} onClick={() => { setFit('width'); setZoom(100); }}>Fit width</button>
+          <button type="button" aria-label="Print lesson pages" title={`Print book pages ${start}–${boundedEnd - offset}`} disabled={!pdfData || printing || Boolean(pdfError)} onClick={() => { pauseNarration(); setPrintOptionsOpen(true); }}><Printer size={17} /></button>
+        </nav>
         <div
           ref={viewportRef}
           data-testid="pdf-page-viewport"
-          className="flex-1 overflow-x-auto overflow-y-scroll bg-gray-100 p-3 text-center min-h-0 min-w-0"
+          className="flex-1 overflow-auto bg-paper-deep/60 p-3 text-center min-h-0 min-w-0"
           style={{ scrollbarGutter: 'stable' }}
         >
         {pdfError && <p className="text-red-700 p-4">{pdfError}</p>}
@@ -213,6 +249,10 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
                 <Page
                   pageNumber={page}
                   width={renderWidth}
+                  onLoadSuccess={(loadedPage) => {
+                    const bounds = loadedPage.getViewport({ scale: 1 });
+                    setPageRatio(bounds.width / bounds.height);
+                  }}
                   renderTextLayer
                   renderAnnotationLayer
                   customTextRenderer={renderText}
@@ -236,15 +276,7 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
           </Document>
         )}
         </div>
-      </div>
-
-      <div className="border-t px-3 py-2 flex justify-between items-center gap-2 shrink-0 bg-white">
-        <button type="button" aria-label="Previous assigned page" disabled={page <= physicalStart} onClick={() => changePage(page - 1)} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 disabled:opacity-30"><ChevronLeft /></button>
-        <div className="text-center min-w-0">
-          <p className="text-sm font-semibold">Book page {bookPage}</p>
-          <p className="text-[10px] text-text-secondary">Assigned {start}-{end}{offset ? ` · PDF page ${page}` : ''}</p>
         </div>
-        <button type="button" aria-label="Next assigned page" disabled={page >= boundedEnd} onClick={() => changePage(page + 1)} className="w-11 h-11 rounded-xl flex items-center justify-center hover:bg-gray-100 disabled:opacity-30"><ChevronRight /></button>
       </div>
     </div>
   );

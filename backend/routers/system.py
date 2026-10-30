@@ -3,15 +3,270 @@ from __future__ import annotations
 
 import signal
 import threading
+import math
+from datetime import datetime, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from dependencies import context, current_device, require_host, require_family
+from dependencies import context, current_device, require_host, require_family, live_context
 from security.devices import Device
 from security.network import is_loopback
+from services.ai_budget import micros
 
 router = APIRouter()
+
+
+class LearnerNarrator(BaseModel):
+    child_id: int = Field(ge=1)
+    english_voice: str = Field(pattern=r'^[A-Za-z0-9_-]{10,100}$')
+    portuguese_voice: str = Field(pattern=r'^[A-Za-z0-9_-]{10,100}$')
+
+
+class InworldLearnerNarrator(BaseModel):
+    child_id: int = Field(ge=1)
+    english_voice: str | None = Field(None, min_length=1, max_length=100)
+    portuguese_voice: str | None = Field(None, min_length=1, max_length=100)
+
+
+class AISettingsRequest(BaseModel):
+    provider: str = "openai"
+    teaching_usd: float = Field(3, ge=0, le=100)
+    books_usd: float = Field(2, ge=0, le=100)
+    voice_usd: float = Field(2, ge=0, le=100)
+    google_voice_enabled: bool = False
+    voice_provider: Literal["google-gemini", "kokoro-local", "elevenlabs", "inworld"] | None = None
+    inworld_enabled: bool | None = None
+    inworld_voice_en: str | None = Field(None, min_length=1, max_length=100)
+    inworld_voice_pt: str | None = Field(None, min_length=1, max_length=100)
+    inworld_learner_voices: list[InworldLearnerNarrator] | None = Field(None, max_length=20)
+    elevenlabs_enabled: bool | None = None
+    elevenlabs_voice_en: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{10,100}$')
+    elevenlabs_voice_pt: str | None = Field(default=None, pattern=r'^[A-Za-z0-9_-]{10,100}$')
+    elevenlabs_learner_voices: list[LearnerNarrator] | None = Field(default=None, max_length=20)
+    aligned_voice_blocks: bool | None = None
+    local_voice_en: Literal["am_michael", "af_heart"] | None = None
+    local_voice_pt: Literal["pf_dora", "pm_alex"] | None = None
+    pilot_passed: bool = False
+    monthly_generation_enabled: bool | None = None
+
+
+class AIKeyRequest(BaseModel):
+    provider: str
+    key: str = Field(min_length=15, max_length=500)
+
+
+@router.get("/ai/status", dependencies=[Depends(require_family)])
+def ai_status():
+    ctx = context()
+    provider, model = ctx.ai.selection()
+    from tutoring import local_audio, narration_alignment, elevenlabs_audio, inworld_audio
+    from tutoring.inworld_voices import learner_choices
+    from services.ai_provider import PREPARATION_MODEL, PREPARATION_REASONING
+    tts = ctx.config.get("tts", {})
+    local = tts.get("provider", "google-gemini") == local_audio.PROVIDER
+    eleven = tts.get('provider') == elevenlabs_audio.PROVIDER
+    inworld = tts.get('provider') == 'inworld'
+    jobs = [{"id": j["id"], "done": j["done"], "total": j["total"], "stage": j["stage"],
+             "status": j["status"], "error": j["error"]} for j in ctx.store.all("book_imports")
+            if j["status"] in ("failed", "waiting", "queued", "running")]
+    return {"provider": provider, "model": model, "spending_policy": "tracking_only",
+            "preparation_model": PREPARATION_MODEL if provider == 'openai' else model,
+            "preparation_reasoning": PREPARATION_REASONING if provider == 'openai' else None,
+            "keys": {p: bool(ctx.ai.key(p)) for p in ("openai", "google", "elevenlabs", "inworld")},
+            "voice": {"provider": tts.get("provider", "google-gemini"),
+                      "model": inworld_audio.MODEL if inworld else elevenlabs_audio.MODEL if eleven else local_audio.MODEL if local else "gemini-3.8-flash-lite-tts",
+                      "voice": inworld_audio.narrator(ctx, 'en-US') if inworld else elevenlabs_audio.narrator(ctx, 'en-US') if eleven else local_audio.narrator(ctx, "en-US") if local else "Achird",
+                      "enabled": tts.get('inworld_enabled', False) if inworld else tts.get('elevenlabs_enabled', False) if eleven else local_audio.available(ctx) if local else tts.get("enabled", False),
+                      "inworld_enabled": bool(tts.get('inworld_enabled')),
+                      "inworld_model": inworld_audio.MODEL,
+                      "inworld_voice_en": inworld_audio.narrator(ctx, 'en-US'),
+                      "inworld_voice_pt": inworld_audio.narrator(ctx, 'pt-BR'),
+                      "inworld_learner_voices": learner_choices(ctx),
+                      "elevenlabs_enabled": tts.get('elevenlabs_enabled', False),
+                      "elevenlabs_voice_en": elevenlabs_audio.narrator(ctx, 'en-US'),
+                      "elevenlabs_voice_pt": elevenlabs_audio.narrator(ctx, 'pt-BR'),
+                      "elevenlabs_model": elevenlabs_audio.MODEL,
+                      "elevenlabs_learner_voices": [{**row, 'name': (ctx.store.get('children', row['child_id']) or {}).get('name', 'Learner')}
+                          for row in tts.get('elevenlabs_learner_voices', [])],
+                      "google_enabled": tts.get("enabled", False), "local_available": local_audio.available(ctx),
+                      "aligned_blocks": bool(tts.get('aligned_blocks')),
+                      "alignment_languages": [lang for lang in narration_alignment.ASSETS if narration_alignment.available(ctx, lang)],
+                      "local_voice_en": local_audio.narrator(ctx, "en-US"),
+                      "local_voice_pt": local_audio.narrator(ctx, "pt-BR")},
+            "pilot_passed": ctx.ai.settings.get("pilot_passed", False),
+            "monthly_generation_enabled": ctx.ai.settings.get("monthly_generation_enabled", False),
+            "usage": ctx.ai.ledger.summary(ctx.ai.limits), "book_jobs": jobs,
+            "voice_jobs": [j for j in ctx.ai.ledger.jobs() if j["status"] not in ("ready", "ready_with_fallback")],
+            "uncertain_requests": ctx.ai.ledger.requests(uncertain_only=True),
+            "provider_balances": ctx.config.get("provider_balances", {})}
+
+
+class ProviderBalanceCheck(BaseModel):
+    balance: float = Field(ge=-1000000, le=1000000, allow_inf_nan=False)
+    currency: Literal["USD", "BRL"]
+    auto_reload: bool
+    note: str = Field("", max_length=500)
+
+
+@router.put("/ai/balances/{provider}", dependencies=[Depends(require_family), Depends(require_host)])
+def save_provider_balance(provider: Literal["openai", "google"], payload: ProviderBalanceCheck):
+    """Dated portal observations; never alter allowances, usage or provider billing."""
+    if payload.currency != ("USD" if provider == "openai" else "BRL"):
+        raise HTTPException(400, "Keep each provider balance in its original billing currency")
+    ctx = context()
+    checks = {**ctx.config.get("provider_balances", {}), provider: {
+        **payload.model_dump(), "checked_at": datetime.now(timezone.utc).isoformat(),
+        "source": "billing_page_check"}}
+    ctx.config.update(provider_balances=checks)
+    return {"provider": provider, **checks[provider]}
+
+
+class AIReconcileRequest(BaseModel):
+    charged_usd: float = Field(ge=0, le=100)
+    verified_provider_bill: bool = False
+
+
+@router.put("/ai/requests/{request_id}/reconcile", dependencies=[Depends(require_family), Depends(require_host)])
+def ai_reconcile(request_id: str, payload: AIReconcileRequest):
+    if not payload.verified_provider_bill or not math.isfinite(payload.charged_usd):
+        raise HTTPException(400, "Verify this request's actual charge in the provider bill first")
+    try:
+        context().ai.ledger.reconcile(request_id, micros(payload.charged_usd))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return ai_status()
+
+
+@router.put("/ai/settings", dependencies=[Depends(require_family), Depends(require_host)])
+def ai_settings(payload: AISettingsRequest):
+    if payload.provider not in ("openai", "google") or not all(math.isfinite(v) for v in
+            (payload.teaching_usd, payload.books_usd, payload.voice_usd)):
+        raise HTTPException(status_code=400, detail="Choose a supported provider and finite spending allowances")
+    ctx = context()
+    voice_settings = {**ctx.config.get("tts", {}), "enabled": payload.google_voice_enabled}
+    if any(getattr(payload, k) is not None for k in ('inworld_voice_en', 'inworld_voice_pt', 'inworld_learner_voices')):
+        from tutoring.inworld_voices import catalog
+        try:
+            voices = {v['id']: v['language'] for v in catalog(ctx)}
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        pairs = [(payload.inworld_voice_en, 'en-US'), (payload.inworld_voice_pt, 'pt-BR')]
+        rows = payload.inworld_learner_voices
+        if rows is not None:
+            if len({r.child_id for r in rows}) != len(rows) or any(not ctx.store.get('children', r.child_id) for r in rows):
+                raise HTTPException(400, 'Choose each existing learner once for Inworld narrators')
+            pairs += [(getattr(r, field), language) for r in rows for field, language in
+                (('english_voice', 'en-US'), ('portuguese_voice', 'pt-BR'))]
+            voice_settings['inworld_learner_voices'] = [r.model_dump() for r in rows]
+        if any(voice and voices.get(voice) != language for voice, language in pairs):
+            raise HTTPException(400, 'Choose an available Inworld narrator in the selected language')
+    for field in ('inworld_enabled', 'inworld_voice_en', 'inworld_voice_pt'):
+        if getattr(payload, field) is not None:
+            voice_settings[field] = getattr(payload, field)
+    voice_settings['inworld_model'] = 'inworld-tts-2-flash'
+    if payload.elevenlabs_learner_voices is not None:
+        rows = payload.elevenlabs_learner_voices
+        if len({r.child_id for r in rows}) != len(rows) or any(not ctx.store.get('children', r.child_id) for r in rows):
+            raise HTTPException(400, 'Choose each existing learner once for narrator settings')
+        voice_settings['elevenlabs_learner_voices'] = [r.model_dump() for r in rows]
+    if payload.voice_provider is not None:
+        voice_settings["provider"] = payload.voice_provider
+    if payload.aligned_voice_blocks is not None:
+        voice_settings['aligned_blocks'] = payload.aligned_voice_blocks
+    for key in ("local_voice_en", "local_voice_pt", "elevenlabs_enabled", "elevenlabs_voice_en", "elevenlabs_voice_pt"):
+        if getattr(payload, key) is not None:
+            voice_settings[key] = getattr(payload, key)
+    ctx.config.update(ai={**ctx.ai.settings, "provider": payload.provider, "spending_policy": "tracking_only"},
+                      tts=voice_settings)
+    return ai_status()
+
+
+@router.get('/ai/inworld/voices', dependencies=[Depends(require_family)])
+def inworld_voices():
+    from tutoring.inworld_voices import packet
+    try:
+        return packet(context())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get('/ai/voices', dependencies=[Depends(require_family)])
+def configured_voices():
+    if context().config.get('tts', {}).get('provider') == 'inworld':
+        return inworld_voices()
+    from tutoring.voice_choices import catalog
+    try:
+        return {'provider': 'elevenlabs', 'voices': catalog(context())}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.get('/ai/inworld/voices/{voice_id}/preview', dependencies=[Depends(require_family)])
+def inworld_preview(voice_id: str):
+    from tutoring.inworld_voices import preview
+    try:
+        return Response(preview(context(), voice_id), media_type='audio/mpeg', headers={'Cache-Control': 'private, max-age=86400'})
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.put("/ai/key", dependencies=[Depends(require_family), Depends(require_host)])
+def ai_key(payload: AIKeyRequest):
+    try:
+        context().ai.save_key(payload.provider, payload.key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"provider": payload.provider, "configured": True}
+
+
+@router.get('/ai/elevenlabs/check', dependencies=[Depends(require_family), Depends(require_host)])
+def check_elevenlabs():
+    """Read-only key/permission check. Never return account details or the key."""
+    ctx = context()
+    key = ctx.ai.key('elevenlabs')
+    if not key:
+        raise HTTPException(400, 'Save an ElevenLabs API key on the home server first')
+    try:
+        reply = ctx.ai.http.get('https://api.elevenlabs.io/v1/user', headers={'xi-api-key': key})
+    except Exception:
+        raise HTTPException(502, 'Could not reach ElevenLabs; no speech was requested') from None
+    if not reply.is_success:
+        raise HTTPException(400, f'ElevenLabs returned {reply.status_code}. Check the key and its Read User permission.')
+    return {'configured': True, 'verified': True, 'speech_requested': False}
+
+
+@router.get('/ai/inworld/check', dependencies=[Depends(require_family), Depends(require_host)])
+def check_inworld():
+    """Read-only authentication check; never synthesize audio or expose credentials."""
+    ctx = context()
+    key = ctx.ai.key('inworld')
+    if not key:
+        raise HTTPException(400, 'Save an Inworld API key on the home server first')
+    try:
+        reply = ctx.ai.http.get('https://api.inworld.ai/voices/v1/voices',
+            params={'pageSize': 1}, headers={'Authorization': f'Basic {key}'})
+    except Exception:
+        raise HTTPException(502, 'Could not reach Inworld; no speech was requested') from None
+    if not reply.is_success:
+        raise HTTPException(400, f'Inworld returned {reply.status_code}. Check the Standard key and Voices Read permission.')
+    try:
+        value = reply.json()
+        if not isinstance(value, dict) or not isinstance(value.get('voices'), list):
+            raise ValueError('Invalid voice catalog')
+    except (ValueError, TypeError):
+        raise HTTPException(502, 'Inworld returned an unreadable voice catalog; no speech was requested') from None
+    return {'configured': True, 'verified': True, 'speech_requested': False}
+
+
+@router.get('/ai/elevenlabs/voices', dependencies=[Depends(require_family)])
+def elevenlabs_voices():
+    from tutoring.voice_choices import catalog
+    try:
+        return {'voices': catalog(context()), 'speech_requested': False}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/health")
@@ -35,7 +290,40 @@ def pairing_agent(payload: AgentPairing):
 def session(request: Request, device: Device = Depends(current_device)):
     client = request.client.host if request.client else None
     return {"device": {"id": device.id, "name": device.name, "role": device.role},
-            "host": is_loopback(client) or client == "testclient"}
+            "host": is_loopback(client) or client == "testclient",
+            "environment": "test" if context().is_test else "live",
+            "test_mode": context().is_test}
+
+
+class TestModeRequest(BaseModel):
+    enabled: bool
+    token: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
+
+
+@router.post("/test-mode", dependencies=[Depends(require_family)])
+def test_mode(payload: TestModeRequest, request: Request, response: Response):
+    from services.test_mode import manager, COOKIE, mode_token
+    modes = manager(live_context())
+    old = mode_token(request.scope)
+    try:
+        if payload.enabled:
+            if payload.token:
+                modes.get(payload.token)
+                token = payload.token
+            elif old != "live":
+                modes.get(old)  # Never silently substitute real records for an expired test.
+                token = old
+            else:
+                token = modes.create()
+            response.set_cookie(COOKIE, token, httponly=True, samesite="strict", path="/api")
+        else:
+            if old != "live":
+                modes.end(old)
+            token = None
+            response.delete_cookie(COOKIE, path="/api")
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {"test_mode": payload.enabled, "token": token}
 
 
 # ── Storage: database, Drive folder, backups ────────────────────────────────

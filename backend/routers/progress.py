@@ -31,6 +31,11 @@ def _calculate_subject_progress(db, subject: dict, school_year_end: date) -> Sub
     completed_pages = manually_completed_pages + slot_completed_pages
     progress_percent = (completed_pages / total_pages * 100) if total_pages > 0 else 0.0
 
+    if subject.get('purpose') == 'library':
+        return SubjectProgress(subject_id=subject['id'], subject_name=subject['name'], total_pages=total_pages,
+            completed_pages=completed_pages, progress_percent=round(progress_percent, 1),
+            status='on_track', projected_finish_date=None)
+
     today = date.today()
     school_year_start = date.fromisoformat(get_setting(db, "SCHOOL_YEAR_START"))
     total_days = (school_year_end - school_year_start).days
@@ -60,7 +65,7 @@ def _calculate_subject_progress(db, subject: dict, school_year_end: date) -> Sub
 
 
 def _child_progress(db, child: dict, school_year_end: date) -> ChildProgress:
-    subjects = sorted(db.find("subjects", child_id=child["id"]), key=lambda s: s["id"])
+    subjects = sorted((s for s in db.find("subjects", child_id=child["id"]) if s.get("purpose") != "library_paused"), key=lambda s: s["id"])
     subject_progress_list = [_calculate_subject_progress(db, s, school_year_end) for s in subjects]
     total_pages = sum(sp.total_pages for sp in subject_progress_list)
     completed_pages = sum(sp.completed_pages for sp in subject_progress_list)

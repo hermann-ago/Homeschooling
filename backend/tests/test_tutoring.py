@@ -74,7 +74,10 @@ def test_start_resumes_unfinished_genghis_discussion(harness):
     advance = harness.call("POST", "/api/tutor/sessions/start", role="tutor", key="start-2",
                            json={"child_id": s["lucas"]["id"], "subject_id": s["history"]["id"],
                                  "topic_id": s["conquest"]["id"]})
-    assert advance.status_code == 409  # resume before advancing
+    assert advance.status_code == 200, advance.text
+    assert advance.json()['session_id'] != started['session_id']
+    assert harness.ctx.store.get('tutor_sessions',started['session_id'])['status'] == 'active'
+    assert harness.ctx.tutor.open_checkpoint(started['session_id'])['next_prompt'] == started['next_prompt']
     genghis = harness.ctx.store.get("topics", s["genghis"]["id"])
     assert genghis["completed"] is False and genghis["understanding"] is None
 
@@ -167,7 +170,7 @@ class FakeTTS:
                 "timepoints": [{"markName": m, "timeSeconds": i * 2.5} for i, m in enumerate(marks)]}
 
 
-def test_narration_guards_monthly_characters(harness, tmp_path, monkeypatch):
+def test_narration_tracks_monthly_characters_without_a_local_ceiling(harness, tmp_path, monkeypatch):
     s = seed_history(harness)
     topic = harness.ctx.store.get("topics", s["genghis"]["id"])
     draft = passages.load(harness.ctx, topic)
@@ -181,13 +184,9 @@ def test_narration_guards_monthly_characters(harness, tmp_path, monkeypatch):
     monkeypatch.setattr("config.home_tutor_dir", lambda: ledger_root)
     ledger = audio_mod.UsageLedger(ledger_root, "gen-lang-client-0088393168")
     ledger.reserve(audio_mod.month_key(), "earlier-month-usage", audio_mod.MONTHLY_LIMIT - 10)
-    with pytest.raises(audio_mod.LedgerError):
-        with harness.ctx.store.transaction() as tx:
-            audio_mod.generate(harness.ctx, tx, topic, verified, voice="en-US-Neural2-J", rate=0.9, engine=FakeTTS())
-    approval = {"approved_by_parent": True, "extra_characters": 1000, "device": "test parent"}
     with harness.ctx.store.transaction() as tx:
-        result = audio_mod.generate(harness.ctx, tx, topic, verified, voice="en-US-Neural2-J", rate=0.9,
-                                    engine=FakeTTS(), overage_approval=approval)
+        result = audio_mod.generate(harness.ctx, tx, topic, verified, voice="en-US-Neural2-J", rate=0.9, engine=FakeTTS())
+    assert ledger.used(audio_mod.month_key()) > audio_mod.MONTHLY_LIMIT
     assert result["reused"] is False
     tracks = harness.call("GET", "/api/tutor/reader", role="learner",
                           params={"learner": s["lucas"]["id"], "topic": topic["id"]}).json()["audio"]
@@ -197,6 +196,8 @@ def test_narration_guards_monthly_characters(harness, tmp_path, monkeypatch):
 
 
 def test_any_device_builds_a_lessons_voice_that_the_tutor_reuses(harness, tmp_path, monkeypatch):
+    # Existing Neural2 endpoints/recordings remain compatible when explicitly selected.
+    harness.config.update(tts={**harness.config.get("tts"), "provider": "google-neural2"})
     s = seed_history(harness)
     topic = harness.ctx.store.get("topics", s["genghis"]["id"])
     monkeypatch.setattr("config.home_tutor_dir", lambda: tmp_path / "HomeTutor")
@@ -231,7 +232,7 @@ def test_portuguese_lessons_are_read_in_portuguese(harness):
     reader = harness.call("GET", "/api/tutor/reader", role="learner", params=body).json()
     assert reader["language"] == "pt-BR"
     estimate = harness.call("POST", "/api/tutor/reader/narration", role="learner", json=body).json()
-    assert estimate["voice"] == "pt-BR-Neural2-A" and estimate["rate"] == 0.9  # the English preference is skipped
+    assert estimate["voice"] == "Achird" and estimate["language"] == "pt-BR" and estimate["rate"] == 0.9
 
 
 def test_reader_explains_a_missing_book_file(harness):

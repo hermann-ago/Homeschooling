@@ -1,0 +1,4 @@
+# Optional CPU-only narrator alignment. No API key; no child microphone capture.
+numpy>=1.26,<3
+onnxruntime>=1.23,<2
+num2words==0.5.14
