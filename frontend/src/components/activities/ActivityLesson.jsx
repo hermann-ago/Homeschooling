@@ -174,7 +174,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         if (command.type === 'request_hint' && next.error) {
           writeSaved(pendingKey, command); setPending(command);
         }
-        if (['continue', 'acknowledge_source_issue', 'advance_stage', 'acknowledge_return', 'reveal', 'go_back', 'restart_lesson'].includes(command.type)) callbacks.current.onContinue?.(next);
+        if (['continue', 'acknowledge_source_issue', 'advance_stage', 'acknowledge_return', 'reveal', 'go_back', 'restart_lesson'].includes(command.type)
+            || command.type === 'parent_check' && command.payload?.result === 'checked') callbacks.current.onContinue?.(next);
         return next;
       } catch (error) {
         setProblem(clean(error));

@@ -230,6 +230,22 @@ describe('Shared activity lesson', () => {
     } finally { timer.mockRestore(); }
   });
 
+  it('narrates the next step after a grown-up confirms hands-on work, but not after another try', async () => {
+    const check = (id) => makeActivity({ id, kind: 'explain_or_observe', content: { text: `Colour page ${id}.`, parent_check: true },
+      interaction: { id: `${id}-i1`, status: 'awaiting_work' } });
+    api.state.mockResolvedValue(makeState(check('a1')));
+    api.event.mockResolvedValueOnce(makeState(check('a1'), { revision: 2 }))
+      .mockResolvedValueOnce(makeState(check('a2'), { revision: 3 }));
+    const onContinue = vi.fn();
+    show({ onContinue });
+    fireEvent.click(await screen.findByRole('button', { name: "Let's try again" }));
+    await waitFor(() => expect(api.event).toHaveBeenCalledTimes(1));
+    expect(onContinue).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole('button', { name: '✓ Looks good' }));
+    await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1));
+    expect(onContinue.mock.calls[0][0].active_activity.id).toBe('a2');
+  });
+
   it('offers repeated back and start-over commands in lesson options, including from a break', async () => {
     api.state.mockResolvedValue(makeState(makeActivity(), { can_go_back: true, on_break: true }));
     api.event.mockResolvedValue(makeState(makeActivity({ id: 'previous' }), { revision: 2, can_go_back: true }));
