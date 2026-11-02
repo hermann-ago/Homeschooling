@@ -101,13 +101,36 @@ Each step: implement → tests → `pytest` + frontend tests if touched → upda
 file → commit. Do not start a step while the previous one is uncommitted.
 
 ### Step 0 — Baseline
-- [ ] Commit (or deliberately stash) the 69 currently uncommitted files.
-- [ ] Record test counts: `cd backend && venv/Scripts/python -m pytest -q`.
-- [ ] Pick 4 eval lessons and export their packets with
-      `tools/lesson_workflow.py export` into `tmp/eval/<name>/`:
-      one History chapter (long reading), one Portuguese workbook spread,
-      one Math page, one read-along book chapter. Save current saved guides
-      for those topics as the "before" reference.
+- [x] Commit (or deliberately stash) the 69 currently uncommitted files. (`bc8fb02`)
+- [x] Record test counts: `cd backend && venv/Scripts/python -m pytest -q -rfE --tb=line`
+      (~17 min). Baseline: **727 passed, 78 failed, 18 errors**. The failing
+      list is in [`baseline-test-failures.txt`](baseline-test-failures.txt).
+      Nearly all are stale tests for features retired on Oct 28 (26 hit the
+      "whole-book scanning is retired" 410/ValueError, 18 are `KeyError: 'contents'`
+      in book-companion fixtures, most others assert old prompt wording or old
+      preparation contracts). Rule for every step: **no test outside that list
+      may start failing**. Stale tests are deleted or rewritten in Step 6, or
+      earlier when a step touches the same code.
+- [x] Pick eval lessons and export their packets with
+      `tools/lesson_workflow.py export` into `tmp/eval/<name>/` (gitignored),
+      and save the latest saved guide as `before-guide.json`:
+
+      | Folder | Learner | Topic | Before guide | Author |
+      |---|---|---|---|---|
+      | `history-380` | Lucas (1) | 380 The Capture of Constantinople, pp. 218–223 | `guide-380-fea06be79e` | API (`gpt-6.1-sol`) |
+      | `portugues-979` | Mila (2) | 979 Consoantes – Letra T, pp. 61–74 | `guide-979-bb12086a23` | Codex |
+      | `language-arts-1251` | Lucas (1) | 1251 Lesson 21, pp. 86–91 | `guide-1251-371d885c1c` | Codex |
+      | `read-along-1689` | Lucas (1) | 1689 A Commons Tragedy, pp. 23–28 | `guide-1689-302d81021f` | Codex |
+      | `math-1125` | Mila (2) | 1125 Measuring to the Nearest Centimeter | none | — |
+
+- [ ] Math export fails: *"The visual source does not match the assigned book
+      version"* (Mila's Math, document 17). Fix the book/edition record, then
+      export `math-1125`. No Math subject has a saved guide yet.
+
+Observations from the baseline: current writer prompts are 20–32 k characters
+before any PDF pages. Three of the four reference guides were authored by hand
+in Codex rather than by the app's API writer — the in-app writer should become
+good enough that this is unnecessary.
 
 ### Step 1 — Eval set and rubric (do early; used by every later step)
 - [ ] `backend/tools/lesson_eval.py`: given an eval folder, report deterministic
@@ -211,4 +234,5 @@ file → commit. Do not start a step while the previous one is uncommitted.
 
 | Date | Step | Result / numbers | Commit |
 |---|---|---|---|
-| 2026-11-01 | — | Plan written after code review of the preparation pipeline | — |
+| 2026-11-01 | — | Plan written after code review of the preparation pipeline | `f264483` |
+| 2026-11-01 | 0 | Baseline committed; 4 eval packets exported (Math blocked by book-version mismatch); tests 727 pass / 78 fail / 18 error, list saved | (this commit) |
