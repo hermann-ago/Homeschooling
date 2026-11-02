@@ -128,8 +128,8 @@ def test_prepared_json_review_retry_restart_and_second_reader(harness, monkeypat
             assert 'BOOK READING QUESTION POLICY' in prompt
             assert '"response_modes": ["choice"]' in prompt
             return {'findings': []}
-        assert 'exactly one JSON object' in prompt
-        assert 'BOOK READING QUESTION POLICY' in prompt
+        assert 'one compact JSON object' in prompt
+        assert 'READ-ALONG BOOK' in prompt
         return schema.model_validate(script()).model_dump()
 
     monkeypatch.setattr(h.ctx.ai, 'generate', generate)

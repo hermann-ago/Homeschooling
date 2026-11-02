@@ -158,7 +158,7 @@ def test_explicit_rewrite_receives_exact_editorial_feedback_without_auto_generat
     made=h.call('POST','/api/tutor/reader/guide',json={
         'learner':s['lucas']['id'],'topic':s['genghis']['id'],'rewrite':True,'prepare_voice':False})
     assert made.status_code==200,made.text
-    assert len(prompts)==1 and finding['detail'] in prompts[0] and 'review_feedback' in prompts[0]
+    assert len(prompts)==1 and finding['detail'] in prompts[0] and 'REVISION FEEDBACK' in prompts[0]
     assert not h.ctx.store.all('attempts')
 
 

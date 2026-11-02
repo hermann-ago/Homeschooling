@@ -722,10 +722,6 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     text = teaching_script.prompt(package, subject=subject["name"], learner=child.get("nickname") or child["name"],
                             grade=subject.get("grade") or child.get("grade_year"), language=language,
                             skill=skill["content"], learner_context=learner_context)
-    visual_instructions=''
-    if visual_context:
-        visual_instructions = '\nUse the attached original pages and their page map directly. No extracted task IDs are required.'
-        text+=visual_instructions
     shared_key = library_materials.key(context(), topic, package, language, skill, learner_context) if shared_book else None
     if payload.export_inputs:
         import base64

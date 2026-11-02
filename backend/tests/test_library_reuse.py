@@ -121,7 +121,7 @@ def test_codex_export_bypasses_cached_guide_without_paid_generation_or_student_c
     assert not packet['paid_generation'] and packet['package']['passage_sha256']
     assert made['guide_id']
     assert base64.b64decode(packet['source_pdf_base64']).startswith(b'%PDF')
-    assert 'BOOK READING QUESTION POLICY' in packet['prompt']
+    assert 'READ-ALONG BOOK' in packet['prompt']
     assert packet['context']['book_question_policy'] == 'book-read-along-3'
     assert len(prompts) == 1
     assert {table: h.ctx.store.all(table) for table in before} == before

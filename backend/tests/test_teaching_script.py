@@ -148,7 +148,7 @@ def test_application_prepares_with_new_writer_schema_and_keeps_source_script_pri
                 'detail':'I would prefer a shorter welcome.','suggestion':'Shorten it.'}] if style_advice else []}
         from tutoring.page_script import Script
         assert issubclass(schema,Script)
-        assert 'AUTHORING FORMAT' in prompt and 'activity_kind' not in prompt
+        assert 'OUTPUT FORMAT' in prompt and 'activity_kind' not in prompt
         return schema.model_validate(script).model_dump()
     monkeypatch.setattr(h.ctx.ai,'generate',generate)
     before={t:copy.deepcopy(h.ctx.store.all(t)) for t in ('attempts','tutor_sessions','lesson_playback','activity_responses')}
@@ -158,7 +158,7 @@ def test_application_prepares_with_new_writer_schema_and_keeps_source_script_pri
     assert saved['source_coverage']['readings_preserved']==0  # No pre-extracted coverage inventory.
     assert [a['kind'] for a in saved['activities']]==['introduce','read_source','explain_or_observe','close_lesson']
     frozen=h.ctx.store.get('guides',saved['guide_id'])['context_snapshot']
-    assert frozen['preparation_policy']=='original-pages-2' and frozen['teaching_script']['script']['welcome']==script['welcome']
+    assert frozen['preparation_policy']=='original-pages-3' and frozen['teaching_script']['script']['welcome']==script['welcome']
     if style_advice:
         from tutoring.script_review import latest
         assert saved['script_review']['advice_count']==1

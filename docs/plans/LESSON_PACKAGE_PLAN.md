@@ -170,19 +170,51 @@ Qualitative notes from reading the guides:
   depth and placement**. That is what Steps 2–3 should move.
 
 ### Step 2 — One prompt builder, no duplicates (P1, part of P2)
-- [ ] New `tutoring/lesson_prompt.py` that composes the six blocks above; the
-      writer, the reviewer and the Codex export all use it.
-- [ ] Fold `TEACHING_POLICY`, `PREPARATION_INSTRUCTIONS` (assessment + capture)
-      and read-along `AUTHORING` into the non-negotiables / family style once;
-      delete the "overrides older guidance" sentences.
-- [ ] Remove engine tool names (`read_source`, `tell_it_back`, …) and format
-      rules from `skills.template` and `tutor/subjects/*/GUIDE.md`; keep pedagogy.
-- [ ] Move stroke-order guidance out of the generic prompt into the subject
-      skill(s) that need it (handwriting/Portuguese).
-- [ ] Existing saved subject skills in the DB: provide an explicit, versioned
-      "clean up skill" migration the parent can accept; never overwrite silently.
-- Done when: prompt length is reduced substantially (record before/after
-  characters), tests pass, eval set is no worse.
+- [x] New `tutoring/lesson_prompt.py` composes: lesson facts → NON_NEGOTIABLES →
+      HOW_TO_TEACH → READ_ALONG (book reading only) → family style → subject
+      skill (labelled: teaching parts now, grading later, non-negotiables win)
+      → learner (preferences + learning memory without record IDs) → compact
+      page map → boundaries → source notes → revision feedback → OUTPUT_FORMAT.
+      `page_script.prompt` delegates to it, so the app writer and the Codex
+      export share it. Writer version bumped to `original-pages-3`.
+- [x] The writer no longer receives `TEACHING_POLICY`, `assessment_policy` /
+      `capture_policy` `PREPARATION_INSTRUCTIONS` or `book_questions.AUTHORING`;
+      their writing-relevant content is folded into the blocks once. Those
+      constants remain for the live tutor, reviewer and legacy writers.
+- [x] Removed the route's extra "Use the attached original pages…" suffix.
+- [x] Stroke-order guidance kept as one generic line (any handwriting model).
+- [x] Engine tool names removed from `skills.template`, `tutor/subjects/history`
+      and `math` guides (the live tutor gets its own activity list from code).
+      Template "short teacher explanations" → "teach while reading".
+- [x] Repo default family style (`child-friendly-tutor/SKILL.md`) rebased on the
+      family's saved v4, minus parts now covered by the composed blocks.
+- [ ] **Reviewer** still has its own stacked policies (`script_review.run`);
+      fold it onto the same blocks after the eval shows the writer change helps
+      (kept separate so effects can be measured one at a time). Its focused
+      check now accepts any `original-pages-*` policy.
+- [ ] Saved family/subject skills in the DB — proposals generated in
+      `tmp/skill-proposals/` (family v4→v5, History v3→v4, Português v5→v6,
+      8 untouched template v1→v2). Save via the normal skill API only after
+      the family approves; older versions stay restorable.
+- [ ] Eval: prepare the 4 sample lessons with the new writer in Test mode
+      (paid, ~US$0.15–0.40 each) and compare with the baseline table.
+
+Prompt size (characters, before PDF pages) — app-owned instructions went from
+~6.5 k with repetition to ~4.1 k without; totals are dominated by the family's
+own documents until the skill proposals are applied:
+
+| Eval | v2 prompt | v3 prompt | of which family style + subject skill |
+|---|---|---|---|
+| history-380 | 27,574 | 23,384 | 7,678 + 6,645 |
+| portugues-979 | 31,651 | 27,549 | 7,678 + 13,040 |
+| language-arts-1251 | 20,724 | 16,470 | — |
+| read-along-1689 | 19,574 | 15,369 | — |
+
+Finding: the History subject skill (v3) itself told the writer to add only
+"short explanations" and avoid comments between paragraphs — a direct cause of
+the thin teaching in the baseline. Português v5 carried instructions for the
+retired formats (`explain_or_observe`, `request_book_work` fields,
+`source_block_id`, "modo tidy").
 
 ### Step 3 — Book text by reference, bigger budget (P3)
 
@@ -215,6 +247,15 @@ as today. Both forms are valid in one script.
   coverage and output tokens well under the limit.
 
 ### Step 4 — Exercises as items + teacher annex with keys (P4)
+- [ ] **Answer-key map (family idea, 2026-11-01):** when the chapter map is
+      built (no AI: bookmarks/contents), also detect answer-key locations —
+      contents entries such as "Answer Key", "Answers", "Respostas", "Gabarito",
+      "Teacher's Guide", or a separate PDF with role `answer_key` — and store
+      per-chapter key page ranges alongside `book_navigation`, editable by the
+      parent in **Chapter maps**. Do **not** extract all answers up front
+      (same failure mode as whole-book JSON). At lesson preparation, attach only
+      that chapter's key pages to the writer call (teacher-only), and the writer
+      fills the annex from them.
 - [ ] Replace `book_work` with `exercise`: `{type:'exercise', document_id, page,
       number, instruction, items:[{item_id, label, prompt, options?, response}]}`.
       One exercise = one waiting turn; items keep individual identity.

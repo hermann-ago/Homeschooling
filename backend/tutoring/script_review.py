@@ -214,7 +214,7 @@ def _run(ctx,row,*,human=False,retry=False):
     if book_questions.enabled(data):
         prompt += (book_questions.REVIEW if book_questions.read_along(data) else book_questions.LEGACY_REVIEW) + '\n'
     from .page_script import VERSION as teaching_version
-    focused=data.get('preparation_policy')==teaching_version
+    focused=data.get('preparation_policy','').startswith(teaching_version.rsplit('-',1)[0]+'-')
     if focused:
         prompt+=('FOCUSED SCRIPT CHECK: Preserve the writer\'s words and teaching personality. '
             'Check missing/changed assigned reading, incorrectly represented exercises/options, '
