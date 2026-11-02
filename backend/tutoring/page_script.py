@@ -1,6 +1,7 @@
 """Direct teaching from selected original pages, without an exercise inventory."""
 import copy
 import json
+import re
 from typing import Literal, Union
 from pydantic import Field, model_validator
 from .activities import Content
@@ -51,6 +52,10 @@ class BookWork(Content):
     page: int = Field(ge=1)
     prompt: str = Field(min_length=1, max_length=8000)
     response: Response = Field(default_factory=Response)
+    # Teacher-only: the answer key's answer for this exercise and the key page
+    # it came from. Frozen with the raw script; never compiled into child content.
+    answer: str | None = Field(None, min_length=1, max_length=4000)
+    answer_page: int | None = Field(None, ge=1)
 
 
 class Script(Content):
@@ -115,6 +120,7 @@ def compile_script(value, passage, context, language):
         else:
             if book_questions.enabled(context):
                 book_questions.validate_book_work(turn)
+            reveals_answer(turn, segments[-1])
             page = pages.get((turn.document_id, turn.page))
             if not page or page.get('role') == 'answer_key':
                 raise ValueError('Book work must refer to an attached student page.')
@@ -132,6 +138,26 @@ def compile_script(value, passage, context, language):
                 'source_refs': [{'document_id': turn.document_id, 'page': turn.page}]})
     segments.append({'type': 'recap', 'text': script.closing})
     return GuidePlan.model_validate({'mode': 'tidy', 'segments': segments}).model_dump(by_alias=True, exclude_none=True)
+
+
+BINARY_ANSWERS = {'true', 'false', 'verdadeiro', 'falso', 'yes', 'no', 'sim', 'não'}
+CHOICE_FORMATS = {'true_false', 'single_choice', 'multiple_select', 'matching'}
+
+
+def _words(text):
+    return ' '.join(re.findall(r"[\w']+", (text or '').casefold()))
+
+
+def reveals_answer(turn, before):
+    """A key answer must not be spoken just before, or written into, its own question."""
+    answer = _words(turn.answer)
+    if len(answer) < 4 or answer in BINARY_ANSWERS:
+        return  # Letters, numbers and true/false cannot be checked by wording.
+    spoken = before.get('text') if before.get('type') in ('explain', 'intro') else ''
+    # Choice questions print their options, the right one included.
+    prompt = '' if turn.response.format in CHOICE_FORMATS else turn.prompt
+    if f' {answer} ' in f' {_words(spoken)} ' or f' {answer} ' in f' {_words(prompt)} ':
+        raise ValueError('An exercise prompt or the explanation just before it reveals its answer-key answer.')
 
 
 def teaching_summary(script, passage):
@@ -197,3 +223,36 @@ def prompt(passage, *, subject, learner, grade, language, skill='', learner_cont
     from .lesson_prompt import writer_prompt
     return writer_prompt(passage, subject=subject, learner=learner, grade=grade, language=language,
                          skill=skill, learner_context=learner_context, policy=VERSION)
+
+
+def answer_key(snapshot):
+    """Each book exercise with its recorded key answer, for the family's review."""
+    turns = (((snapshot or {}).get('teaching_script') or {}).get('script') or {}).get('turns', [])
+    return [{'prompt': t['prompt'], 'answer': t.get('answer'), 'answer_page': t.get('answer_page')}
+            for t in turns if t.get('type') == 'book_work']
+
+
+def answer_for(ctx, action):
+    """The pinned guide's key answer for a book-work activity, for grading only.
+
+    compile_script emits one required-book activity per book_work turn, in
+    order, so the running lesson's frozen raw script lines up with its guide.
+    """
+    playback = ctx.store.get('lesson_playback', action['session_id'])
+    prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
+    turns = [t for t in ((prepared.get('teaching_script') or {}).get('script') or {}).get('turns', [])
+             if t.get('type') == 'book_work']
+    if not any(t.get('answer') for t in turns):
+        return None
+    row = ctx.store.get('guides', playback['guide_id'])
+    guide = json.loads(ctx.file_bytes(row['guide_path'], row.get('guide_file_sha256')))
+    work = [a['id'] for a in guide.get('activities', [])
+            if a.get('origin') == 'required_book' and a['kind'] in ('request_book_work', 'explain_or_observe')]
+    if len(work) != len(turns) or action['action_id'] not in work:
+        return None
+    turn = turns[work.index(action['action_id'])]
+    if not turn.get('answer'):
+        return None
+    return {'answer_key': turn['answer'], 'answer_key_page': turn.get('answer_page'),
+            'note': 'Copied from the answer key by the lesson writer. Judge against the question and the '
+                    'assigned reading too; equivalent wording is correct unless exact wording is the task.'}

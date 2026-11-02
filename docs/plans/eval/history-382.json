@@ -1,0 +1,21 @@
+{
+  "notes": "Story of the World V.2, ch. 25 'The Plague', printed pp. 227-231 (PDF 242-246). Text layer is garbled (running headers, a picture caption, lost capitals, hyphen splits), so readings must be transcribed. Chapter 25 test items 1-9 and 14-16 belong to this section; 10-13 and 17-19 to 'A New Way of Living'. Key on SOTW2_Tests PDF p. 174.",
+  "reading": [
+    {"starts": "The people who lived in the Middle ages had to face", "ends": "all believed it was the end of the world"}
+  ],
+  "ignore_patterns": ["228thestoryoftheworldvolume2", "230thestoryoftheworldvolume2", "peoplethoughtcostumesliketheskeptthe(blackdeathaway)?", "theendoftheworld2(29|31)"],
+  "exercises": [
+    {"id": "A1", "snippet": "distant parts of", "answer": "China"},
+    {"id": "A2", "snippet": "The people of Europe called the sickness", "answer": "Black Death"},
+    {"id": "A3", "snippet": "plague", "answer": "bubonic"},
+    {"id": "A4", "snippet": "The disease was spread by", "answer": "fleas"},
+    {"id": "B5", "snippet": "What symptoms did people with the mysterious illness have"},
+    {"id": "B6", "snippet": "Most people who got sick died within"},
+    {"id": "B7", "snippet": "What reasons did people of the Middle Ages give"},
+    {"id": "B8", "snippet": "What did people carry with them"},
+    {"id": "B9", "snippet": "What happened to farms during the sickness"},
+    {"id": "C14", "snippet": "blamed foreign merchants"},
+    {"id": "C15", "snippet": "dead bodies were thrown over the wall"},
+    {"id": "C16", "snippet": "sleeping on your stomach"}
+  ]
+}

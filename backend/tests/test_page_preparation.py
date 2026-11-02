@@ -160,7 +160,10 @@ def test_selected_pages_are_edition_bound_and_keys_are_private(harness, monkeypa
     result=h.call('POST','/api/tutor/reader/guide',json={'learner':kid['id'],'topic':topic['id'],'prepare_voice':False})
     assert result.status_code==200,result.text
     assert result.json()['current']
-    assert len(PdfReader(io.BytesIO(seen[0][1])).pages)==2
+    # The writer reads the key page (teacher-only) to record answers; the child's pages never include it.
+    assert len(PdfReader(io.BytesIO(seen[0][1])).pages)==3 and 'ANSWER KEY PAGES' in seen[0][0]
+    planner=h.ctx.store.get('guides',result.json()['guide_id'])['context_snapshot']['lesson_sources']['planner']
+    assert not any(p['role']=='answer_key' for p in planner['pages'])
     assert 'reading_ids' not in seen[0][0] and 'task_id' not in seen[0][0]
     assert not h.ctx.store.all('book_units')
     # A change of selected pages invalidates future reuse, preserving the saved guide.

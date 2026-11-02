@@ -28,3 +28,12 @@ it('shows a blocking finding without an automatic rewrite or review retry',async
   await waitFor(()=>expect(api.retryScriptReview).not.toHaveBeenCalled());
   expect(screen.queryByRole('button',{name:'Review saved script'})).toBeNull();
 });
+
+it('lists the teacher answer key recorded with the script',async()=>{
+  api.scriptReview.mockResolvedValue({...failed,status:{status:'approved',summary:'Script reviewed'},review:{data:{findings:[]}},
+    answer_key:[{prompt:'3. ____ the Conqueror captured Constantinople.',answer:'Mehmed',answer_page:174},{prompt:'Draw a map.',answer:null,answer_page:null}]});
+  show();await screen.findByText('Answer key (teacher only)');
+  expect(screen.getByText('Mehmed')).toBeTruthy();
+  expect(screen.getByText(/key page 174/)).toBeTruthy();
+  expect(screen.getByText('No answer in the key')).toBeTruthy();
+});

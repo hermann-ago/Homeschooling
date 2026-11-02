@@ -435,7 +435,9 @@ class InteractiveTutor:
                 grading["actual_questions"] = extracted["passage"]
         else:
             from .source_key import resolve
+            from .page_script import answer_for
             grading = source_key if source_key is not None else resolve(self.db, action)
+            grading = grading or answer_for(self.ctx, action)
         observations = {k: packet[k] for k in ("preferences", "recent_sessions", "due_reviews")}
         observations["learning_memory"] = self.ctx.learning_memory.packet(session["child_id"], session["subject_id"],
             action["topic_id"], action.get("concept_ids") or [])

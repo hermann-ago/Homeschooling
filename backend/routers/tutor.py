@@ -559,9 +559,12 @@ class ScriptReviewRequest(BaseModel):
 def script_review_details(guide_id:str):
     from tutoring import script_review
     row=get_or_404(store(),'guides',guide_id,'Guide')
+    from tutoring.page_script import answer_key
     return {'review':script_review.latest(context(),guide_id),
         'status':script_review.status(context(),row),
-        'input_sha256':script_review.identity(script_review.inputs(context(),row))}
+        'input_sha256':script_review.identity(script_review.inputs(context(),row)),
+        # Family-only route: the teacher's key answers recorded by the writer.
+        'answer_key':answer_key(row.get('context_snapshot'))}
 
 
 class SourceSpacingRequest(BaseModel):
@@ -719,6 +722,12 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     if visual_context:
         learner_context['visual_source'] = visual_context
         visual_source.prefer_original_pages(learner_context)
+    # The writer reads the private bundle when it holds answer-key pages, so it
+    # can record each exercise's key answer; the child's pages stay key-free.
+    key_pages = [p for p in review_sources[1]['pages'] if p['role'] == 'answer_key'] if review_sources else []
+    writer_pdf = review_sources[0] if key_pages else visual_pdf
+    if key_pages:
+        learner_context['answer_key_pages'] = [{k: p.get(k) for k in ('document_id', 'page', 'book_name')} for p in key_pages]
     text = teaching_script.prompt(package, subject=subject["name"], learner=child.get("nickname") or child["name"],
                             grade=subject.get("grade") or child.get("grade_year"), language=language,
                             skill=skill["content"], learner_context=learner_context)
@@ -728,7 +737,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         return {'topic': topic, 'subject': subject, 'package': package, 'skill': skill,
             'context': learner_context, 'language': language, 'prompt': text,
             'schema': teaching_script.schema(package, learner_context, language).model_json_schema(),
-            'source_pdf_base64': base64.b64encode(visual_pdf).decode() if visual_pdf else None,
+            'source_pdf_base64': base64.b64encode(writer_pdf).decode() if writer_pdf else None,
             'paid_generation': False}
     shared_material = library_materials.load(context(), shared_key) if shared_key and not payload.rewrite else None
     if shared_material and reviewed_plan is None:
@@ -753,7 +762,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     plan_schema=teaching_script.schema(package,learner_context,language)
     input_bound = len(text.encode()) + len(json.dumps(strict_schema(plan_schema)).encode()) + 4096
     if visual_context:
-        input_bound += len(visual_context['pages']) * 4096
+        input_bound += (len(visual_context['pages']) + len(key_pages)) * 4096
     pricing = context().ai.rates(provider, selected_model)
     ceiling = token_cost(input_bound, guide_mod.MAX_PLAN_OUTPUT, pricing[0] * Decimal("1.25") if provider == "openai" else pricing[0], pricing[1]) / 1_000_000
     if source_inventory_needed and not source_inventory_cached:ceiling*=2
@@ -765,16 +774,16 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     remaining = context().ai.ledger.summary(context().ai.limits)["categories"]["teaching"]["remaining_usd"]
     if payload.dry_run:
         cached_script = context().ai.has_valid_cached_reply(text,schema=plan_schema,
-            instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=visual_pdf)
+            instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=writer_pdf)
         if source_inventory_needed:cached_script=False
         if cached_script:ceiling=0
         ceiling+=review_ceiling
         failure=context().ai.cached_failure(text,schema=plan_schema,
-            instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=visual_pdf)
+            instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=writer_pdf)
         return {"reused": False, "estimated_cost_usd": ceiling, "remaining_usd": remaining,
             "cached_script_available":cached_script,
             "cached_invalid_reply":context().ai.has_invalid_cached_reply(text,schema=plan_schema,
-                instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=visual_pdf),
+                instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=writer_pdf),
             "cached_failure":failure,
             "maximum_usd": None, "tracking_only": True, "allowed": not failure or failure['replaceable'],
             "source_context": {"current_concepts": [c["title"] for c in learner_context["subject_sources"]["current_concepts"]],
@@ -799,7 +808,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
             plan,model=reviewed_plan,'codex-reviewed'
         else:
             with context().ai.scoped(scope_id):
-                plan, model = guide_mod.write_plan(text, models, **({'pdf': visual_pdf} if visual_pdf is not None else {}),
+                plan, model = guide_mod.write_plan(text, models, **({'pdf': writer_pdf} if writer_pdf is not None else {}),
                     **({'schema':plan_schema} if plan_schema is not guide_mod.GuidePlan else {}),
                     **({'replace_invalid':True} if payload.replace_invalid else {}))
         # The paid writer returns teaching words, not engine commands. Local

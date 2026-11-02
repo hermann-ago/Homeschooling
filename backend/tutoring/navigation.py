@@ -237,10 +237,19 @@ def attach(ctx, topic, pdf, metadata):
         doc = ctx.store.get('documents', page['document_id'])
         page['book_name'] = book_name(doc['original_filename'])
     review = copy.deepcopy(public)
-    for s in selected:
-        if s['role'] == 'answer_key':
-            doc = ctx.store.get('documents', s['document_id'])
-            _append(ctx, writer, review['pages'], doc, range(s['page_start'], s['page_end']+1), 'answer_key')
+    keys = [s for s in selected if s['role'] == 'answer_key']
+    if not keys:
+        # Family-selected key pages win; otherwise find this lesson's key section locally.
+        from .answer_keys import for_lesson
+        try:
+            keys = for_lesson(ctx, topic, selected)
+        except Exception:  # An unreadable text layer only means no automatic key.
+            keys = []
+    for s in keys:
+        doc = ctx.store.get('documents', s['document_id'])
+        _append(ctx, writer, review['pages'], doc, range(s['page_start'], s['page_end']+1), 'answer_key')
+    for page in review['pages']:
+        page.setdefault('book_name', book_name(ctx.store.get('documents', page['document_id'])['original_filename']))
     private = _bytes(writer)
     review['attachment_sha256'] = hashlib.sha256(private).hexdigest()
     return planner, public, (private, review)

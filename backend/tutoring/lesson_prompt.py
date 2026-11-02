@@ -69,7 +69,10 @@ Turns:
 - read: assigned reading only, never worksheet directions. READ_FORMS
 - ask: your own question, with purpose discussion, retelling or reasoning.
 - book_work: an original exercise, with document_id and its PDF page; one
-  turn can group the parts of one exercise.
+  turn can group the parts of one exercise. answer and answer_page are
+  teacher-only: copy this exercise's answers from the ANSWER KEY PAGES,
+  numbered as printed (for example "3. Mehmed; 4. Istanbul"), with the key's
+  PDF page; null when no key page covers it. The child never sees them.
 ask and book_work need response.format: text, spelling, true_false,
 single_choice, multiple_select, matching, reasoning, written_steps,
 handwriting, diagram or observe. Choice work lists all original choices;
@@ -148,6 +151,9 @@ Preparation policy: {policy}.''',
         _block('ABOUT THIS LEARNER (observed evidence; use only where relevant)', learner_facts),
         _block('ASSIGNED PAGES (the attached PDF, in order)', pages),
         _block('BOUNDARIES (inclusive start_at, exclusive stop_before)', boundaries),
+        _block('ANSWER KEY PAGES (attached after the student pages; teacher-only: never read them, quote them, '
+               'hint from them or let them shape what the child hears; use them only for book_work answers)',
+               context.get('answer_key_pages')),
         _block('SOURCE NOTES (checked, edition-specific clarifications)', context.get('source_annotations')),
         _block('REVISION FEEDBACK (resolve these findings without reintroducing earlier corrections)',
                context.get('review_feedback')),

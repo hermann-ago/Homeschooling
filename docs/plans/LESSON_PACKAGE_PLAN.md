@@ -274,6 +274,39 @@ none. The first draft had 3 rhetorical questions in narration; `lesson_eval`
 flagged them and they were rewritten before import.
 
 ### Step 4 — Exercises as items + teacher annex with keys (P4)
+**Status (2026-11-02): done as below — a smaller design than first sketched.**
+- [x] `tutoring/answer_keys.py`: local, AI-free detection. A key section is a
+      page with an "Answer Key / Answers / Gabarito / Respostas…" heading (or a
+      whole PDF linked with role `answer_key`); answers are found under the label
+      the lesson carries in its title or exercise pages ("Chapter 24", "Lição 3"),
+      continuing onto the next page unless that page opens with the next label.
+      History: Chapter 24 → SOTW2_Tests p. 174, Chapter 25 → p. 174, verified.
+- [x] `navigation.attach` adds detected key pages to the private review bundle
+      when the family selected none; family selections always win.
+- [x] The writer receives that private bundle (key pages labelled teacher-only
+      in ANSWER KEY PAGES); the child's planner PDF and page map never include
+      them (tested).
+- [x] Instead of a separate annex/`exercise.items` contract, each `book_work`
+      turn gained teacher-only `answer` + `answer_page`. One turn = one compiled
+      activity, so alignment is by construction. Compile rejects an answer that
+      appears in the turn's open prompt or the explanation right before it
+      (binary and choice answers exempt).
+- [x] Grading: `page_script.answer_for` finds the pinned guide's answer for the
+      current activity and passes it as teacher-only grading context; the PDF and
+      key pages are still attached for disputes.
+- [x] Family view: Curriculum → Prepare lesson → Script review → **Answer key
+      (teacher only)**, from `GET /tutor/guides/{id}/review` (family-only).
+- [ ] Separate key PDFs linked per workbook: supported through role
+      `answer_key` in the subject's books, untested on real family data.
+- [ ] Evidence types stay on `response.format` (see Step 5).
+
+Real lessons prepared through the Codex workflow, imported to production:
+`guide-380-48d79c89bf` (Constantinople, with key answers) and
+`guide-382-5f2fe8306b` (**The Plague**, Lucas's next History lesson: garbled
+text layer, so all readings transcribed; 98% coverage, 12/12 items, 0 leaks,
+7 explanations / 496 words; key answers for all 9 exercise turns).
+
+Original sketch, kept for reference:
 - [ ] **Answer-key map (family idea, 2026-11-01):** when the chapter map is
       built (no AI: bookmarks/contents), also detect answer-key locations —
       contents entries such as "Answer Key", "Answers", "Respostas", "Gabarito",
