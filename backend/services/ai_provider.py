@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import os
 import uuid
 import hashlib
@@ -55,8 +56,13 @@ class ContentRejectedError(ValueError):
 
 
 class RateLimitError(ValueError):
-    def __init__(self, retry_after=60):
-        super().__init__("AI provider returned 429. Check the provider's quota and billing; try again later.")
+    def __init__(self, retry_after=60, provider_code=None, provider_type=None):
+        quota = provider_code in ('insufficient_quota','billing_hard_limit_reached','credit_balance_exhausted') or provider_type == 'insufficient_quota'
+        self.code = 'provider_quota' if quota else 'provider_rate_limit' if provider_code=='rate_limit_exceeded' or provider_type=='rate_limit_exceeded' else 'provider_429'
+        message = ('The script provider has no available API credits or quota. Restore its API billing credit or quota before retrying; waiting will not fix this. Saved work is kept.' if self.code=='provider_quota'
+            else f'The script provider is temporarily limiting requests. Try again after {math.ceil(retry_after)} seconds; the saved script is kept.' if self.code=='provider_rate_limit'
+            else "AI provider returned 429. Check the provider's quota and billing; try again later.")
+        super().__init__(message)
         self.retry_after = retry_after
 
 
@@ -212,7 +218,14 @@ class AIService:
                         delay = 60
                 except ValueError:
                     delay = 60
-                raise RateLimitError(delay)
+                try:
+                    error=response.json().get('error',{})
+                    provider_code=error.get('code') if isinstance(error,dict) else None
+                    provider_type=error.get('type') if isinstance(error,dict) else None
+                except (ValueError,AttributeError):
+                    provider_code=None
+                    provider_type=None
+                raise RateLimitError(delay,provider_code,provider_type)
             if response.status_code == 400 and "generativelanguage.googleapis.com" in url:
                 # Classify known refusals without returning upstream text, which
                 # can echo original book content, credentials or child evidence.

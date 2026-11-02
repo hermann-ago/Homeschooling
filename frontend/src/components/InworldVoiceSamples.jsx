@@ -2,13 +2,14 @@ import { useRef } from 'react';
 import { Button } from '../ui';
 import { modeHref } from '../api/mode';
 
-export default function InworldVoiceSamples({ packet, english, portuguese, onChoose, disabled }) {
+export default function InworldVoiceSamples({ packet, english, portuguese, onChoose, disabled,
+  instruction = 'Save settings after choosing a voice.', initialLanguage = 'en-US' }) {
   const players = useRef(new Map());
   if (!packet) return null;
   return <section aria-label="Inworld voice samples" className="flex flex-col gap-3">
     <h3 className="font-semibold">Choose a voice</h3>
-    <p className="text-xs text-muted">Free Inworld Flash previews. Selected for tutoring; Inworld does not publish popularity rankings. Save settings after choosing a voice.</p>
-    {packet.groups.map(group => <details key={`${group.language}-${group.gender}`} open={group.language === 'en-US' && group.gender === 'male'} className="rounded-xl border border-line bg-surface p-3">
+    <p className="text-xs text-muted">Free Inworld Flash previews. Selected for tutoring; Inworld does not publish popularity rankings. {instruction}</p>
+    {packet.groups.map(group => <details key={`${group.language}-${group.gender}`} open={group.language === initialLanguage && group.gender === 'male'} className="rounded-xl border border-line bg-surface p-3">
       <summary className="cursor-pointer font-semibold">{group.language === 'en-US' ? 'American English' : 'Brazilian Portuguese'} · {group.gender === 'male' ? 'Male' : 'Female'} · {group.voices.length} voices</summary>
       {group.language === 'pt-BR' && group.gender === 'male' && group.voices.length < 5 && <p className="mt-3 text-xs text-muted">All {group.voices.length} native Brazilian male voices available in the current catalog.</p>}
       <div className="mt-3 grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 16rem), 1fr))' }}>{group.voices.map(voice => {

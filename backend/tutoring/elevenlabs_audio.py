@@ -65,7 +65,8 @@ def timed_recording(result, sentences):
     timing = result.get('alignment') or {}
     starts, ends, chars = (timing.get(k) or [] for k in
         ('character_start_times_seconds', 'character_end_times_seconds', 'characters'))
-    if ''.join(chars) != text or len(starts) != len(text) or len(ends) != len(text):
+    if (any(not isinstance(c,str) or not c for c in chars) or ''.join(chars) != text
+            or len(starts) != len(chars) or len(ends) != len(chars)):
         raise ValueError('ElevenLabs timing does not match the complete original script. Saved response is kept.')
     if (any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in [*starts, *ends])
             or any(a > b for a, b in zip(starts, ends))
@@ -78,9 +79,17 @@ def timed_recording(result, sentences):
     # sub-frame tail discrepancy must not discard an otherwise valid recording.
     if not pcm or len(pcm) % 2 or not 0 < duration <= 1200 or max(ends) > duration + .02:
         raise ValueError('ElevenLabs returned an invalid PCM recording')
+    # Providers may group adjacent original characters, especially in URLs.
+    # Use only measured fragment boundaries; never invent character timings.
+    boundaries, position = {}, 0
+    for index, fragment in enumerate(chars):
+        boundaries[position] = starts[index]
+        position += len(fragment)
     offsets, position = [], 0
     for sentence in sentences:
-        offsets.append(starts[position])
+        if position not in boundaries:
+            raise ValueError('A provider timing fragment crosses a sentence boundary; its timing needs review')
+        offsets.append(boundaries[position])
         position += len(sentence['text']) + 1
     offsets[0] = 0  # Keep the actual leading silence with the first sentence.
     if any(b <= a for a, b in zip(offsets, offsets[1:])) or offsets[-1] >= duration:

@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from dependencies import context, current_device, require_host, require_family, live_context
@@ -55,6 +56,13 @@ class AISettingsRequest(BaseModel):
 class AIKeyRequest(BaseModel):
     provider: str
     key: str = Field(min_length=15, max_length=500)
+
+
+class InworldNarratorSettings(BaseModel):
+    model_config = {'extra': 'forbid'}
+    english_voice: str = Field(min_length=1, max_length=100)
+    portuguese_voice: str = Field(min_length=1, max_length=100)
+    learners: list[InworldLearnerNarrator] = Field(max_length=20)
 
 
 @router.get("/ai/status", dependencies=[Depends(require_family)])
@@ -181,6 +189,40 @@ def ai_settings(payload: AISettingsRequest):
     ctx.config.update(ai={**ctx.ai.settings, "provider": payload.provider, "spending_policy": "tracking_only"},
                       tts=voice_settings)
     return ai_status()
+
+
+@router.get('/ai/inworld/narrators', dependencies=[Depends(require_family)])
+def inworld_narrators():
+    from tutoring.inworld_voices import MODEL, narrator, learner_choices
+    ctx = context()
+    return {'provider': ctx.config.get('tts', {}).get('provider'), 'model': MODEL,
+        'connected': bool(ctx.ai.key('inworld')), 'english_voice': narrator(ctx, 'en-US'),
+        'portuguese_voice': narrator(ctx, 'pt-BR'), 'learners': learner_choices(ctx)}
+
+
+@router.put('/ai/inworld/narrators', dependencies=[Depends(require_family)])
+def save_inworld_narrators(payload: InworldNarratorSettings):
+    """Family-device preferences only; no credentials, provider changes or speech."""
+    from tutoring.inworld_voices import catalog
+    ctx = context()
+    if len({r.child_id for r in payload.learners}) != len(payload.learners) or any(
+            not ctx.store.get('children', r.child_id) for r in payload.learners):
+        raise HTTPException(400, 'Choose each existing learner once for narrator voices')
+    try:
+        voices = {v['id']: v['language'] for v in catalog(ctx)}
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    pairs = [(payload.english_voice, 'en-US'), (payload.portuguese_voice, 'pt-BR')]
+    pairs += [(getattr(row, field), language) for row in payload.learners
+        for field, language in (('english_voice', 'en-US'), ('portuguese_voice', 'pt-BR'))]
+    if any(voice and voices.get(voice) != language for voice, language in pairs):
+        raise HTTPException(400, 'Choose an available narrator in the selected language')
+    overrides = {row['child_id']: row for row in ctx.config.get('tts', {}).get('inworld_learner_voices', [])}
+    overrides.update({row.child_id: row.model_dump() for row in payload.learners})
+    ctx.config.update(tts={**ctx.config.get('tts', {}), 'inworld_voice_en': payload.english_voice,
+        'inworld_voice_pt': payload.portuguese_voice,
+        'inworld_learner_voices': list(overrides.values())})
+    return inworld_narrators()
 
 
 @router.get('/ai/inworld/voices', dependencies=[Depends(require_family)])
@@ -327,6 +369,52 @@ def test_mode(payload: TestModeRequest, request: Request, response: Response):
 
 
 # ── Storage: database, Drive folder, backups ────────────────────────────────
+
+
+@router.get('/network/camera', dependencies=[Depends(require_family)])
+def camera_connection(request: Request):
+    from security.https import certificate_info, local_names, manager, DEFAULT_PORT
+    ctx = live_context()
+    listener = manager(request.app, ctx)
+    certificate = certificate_info(ctx.config)
+    names = certificate['names'] if certificate else local_names()
+    hostname = request.url.hostname
+    if hostname not in names:
+        hostname = next((name for name in names if name[0].isdigit() and not name.startswith('127.')), 'localhost')
+    port = ctx.config.get('https', {}).get('port', DEFAULT_PORT)
+    return {'enabled': bool(ctx.config.get('https', {}).get('enabled')), 'running': listener.running,
+        'secure_url': f'https://{hostname}:{port}/',
+        'certificate_download': '/api/network/camera/certificate' if certificate else None,
+        'certificate_sha256': certificate['fingerprint'] if certificate else None,
+        'certificate_expires': certificate['expires'] if certificate else None,
+        'error': listener.error}
+
+
+@router.post('/network/camera/enable', dependencies=[Depends(require_family), Depends(require_host)])
+async def enable_camera_connection(request: Request):
+    from security.https import manager, DEFAULT_PORT
+    if context().is_test:
+        raise HTTPException(400, 'Leave test mode to change the home server connection.')
+    ctx = live_context()
+    listener = manager(request.app, ctx)
+    try:
+        await listener.start()
+        ctx.config.update(https={**ctx.config.get('https', {}), 'enabled': True,
+            'port': ctx.config.get('https', {}).get('port', DEFAULT_PORT)})
+    except (ValueError, OSError, RuntimeError) as exc:
+        listener.error = str(exc)
+        raise HTTPException(400, str(exc)) from None
+    return camera_connection(request)
+
+
+@router.get('/network/camera/certificate', dependencies=[Depends(require_family)])
+def download_home_certificate():
+    from security.https import files
+    path = files(live_context().config)['download']
+    if not path.exists():
+        raise HTTPException(404, 'Enable the secure camera connection on the home computer first.')
+    return FileResponse(path, media_type='application/pkix-cert', filename=path.name,
+        headers={'Cache-Control': 'no-store'})
 
 @router.get("/storage/status")
 def storage_status():

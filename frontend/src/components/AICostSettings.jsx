@@ -5,7 +5,6 @@ import { booksApi } from '../api/books';
 import { useDevice } from './deviceContext';
 import { Button, Field } from '../ui';
 import { voiceLabel } from '../utils/narratorVoices';
-import InworldVoiceSamples from './InworldVoiceSamples';
 
 const money = (n) => `US$${Number(n || 0).toFixed(2)}`;
 const clean = (e) => e.message.replace(/^\/[^:]+: /, '');
@@ -26,7 +25,6 @@ export default function AICostSettings() {
   const [problem, setProblem] = useState('');
   const [connection, setConnection] = useState(null);
   const {data:voiceCatalog}=useQuery({queryKey:['elevenlabs-voices'],queryFn:()=>booksApi.voices('elevenlabs'),enabled:Boolean(status?.keys?.elevenlabs) && draft?.voice_provider==='elevenlabs',staleTime:300000,retry:false});
-  const {data:inworldCatalog,error:inworldError}=useQuery({queryKey:['inworld-voices'],queryFn:()=>booksApi.voices('inworld'),enabled:Boolean(status?.keys?.inworld) && draft?.voice_provider==='inworld',staleTime:300000,retry:false});
   const load = async () => {
     const next = await systemApi.aiStatus();
     setStatus(next);
@@ -35,8 +33,6 @@ export default function AICostSettings() {
       voice_provider: next.voice.provider || 'google-gemini',
       ...(next.keys.inworld ? {
         inworld_enabled: Boolean(next.voice.inworld_enabled),
-        inworld_voice_en: next.voice.inworld_voice_en || 'Brian', inworld_voice_pt: next.voice.inworld_voice_pt || 'Bruna',
-        inworld_learner_voices: (next.voice.inworld_learner_voices || []).map(({child_id,english_voice,portuguese_voice})=>({child_id,english_voice,portuguese_voice})),
       } : {}),
       elevenlabs_enabled: Boolean(next.voice.elevenlabs_enabled),
       elevenlabs_voice_en: next.voice.elevenlabs_voice_en || 'hpp4J3VqNfWAUOO0d1Us',
@@ -98,21 +94,7 @@ export default function AICostSettings() {
           {draft.voice_provider === 'inworld' && <div className="flex flex-col gap-4 rounded-xl bg-paper p-3">
             <p className="text-xs text-muted">Inworld TTS-2 Flash · billed by characters. On-Demand voice generation is estimated at US$15 per million characters. Saved recordings are reused; previews below are free.</p>
             <label className="flex gap-2 text-sm"><input type="checkbox" checked={Boolean(draft.inworld_enabled)} onChange={e=>setDraft({...draft,inworld_enabled:e.target.checked})}/>Enable Inworld Flash narration</label>
-            {[['inworld_voice_en','English narrator','en-US'],['inworld_voice_pt','Portuguese narrator','pt-BR']].map(([field,label,language])=><label key={field} className="text-sm">{label}
-              <select value={draft[field] || ''} onChange={e=>setDraft({...draft,[field]:e.target.value})} className="block mt-1 w-full rounded-lg border border-line bg-surface p-2">
-                {(inworldCatalog?.groups||[]).filter(g=>g.language===language).flatMap(g=>g.voices).map(v=><option key={v.id} value={v.id}>{voiceLabel(v)}</option>)}
-                {!inworldCatalog?.voices?.some(v=>v.id===draft[field]) && <option value={draft[field] || ''}>{draft[field] || 'Choose a voice'}</option>}
-              </select></label>)}
-            {(draft.inworld_learner_voices||[]).map((row,index)=><fieldset key={row.child_id} className="rounded-lg border border-line p-3 flex flex-col gap-2">
-              <legend className="text-sm font-semibold">{status.voice.inworld_learner_voices?.find(r=>r.child_id===row.child_id)?.name || 'Learner'}’s Inworld voices</legend>
-              {[['english_voice','English narrator','en-US'],['portuguese_voice','Portuguese narrator','pt-BR']].map(([field,label,language])=><label key={field} className="text-sm">{label}<select value={row[field] || ''} onChange={e=>setDraft({...draft,inworld_learner_voices:draft.inworld_learner_voices.map((r,i)=>i===index?{...r,[field]:e.target.value || null}:r)})} className="block w-full mt-1 rounded-lg border border-line bg-surface p-2">
-                <option value="">Use family narrator</option>
-                {(inworldCatalog?.groups||[]).filter(g=>g.language===language).flatMap(g=>g.voices).map(v=><option key={v.id} value={v.id}>{voiceLabel(v)}</option>)}
-                {row[field] && !inworldCatalog?.voices?.some(v=>v.id===row[field])&&<option value={row[field]}>{row[field]}</option>}
-              </select></label>)}
-            </fieldset>)}
-            {inworldError && <p role="alert" className="text-sm text-problem">{clean(inworldError)}</p>}
-            <InworldVoiceSamples packet={inworldCatalog} english={draft.inworld_voice_en} portuguese={draft.inworld_voice_pt} disabled={busy} onChoose={(language,voice)=>setDraft({...draft,[language==='en-US'?'inworld_voice_en':'inworld_voice_pt']:voice})}/>
+            <a href="#narrator-voices" className="text-sm text-action underline">Choose narrator voices and listen to samples</a>
           </div>}
           {draft.voice_provider === 'elevenlabs' && <div className="flex flex-col gap-3 rounded-xl bg-paper p-3">
             <p className="text-xs text-muted">Flash v2.5 · saved timestamps keep highlighting and activity pauses. Usage is counted at a published starting-rate equivalent for cost tracking; your subscription credits and actual bill may differ.</p>

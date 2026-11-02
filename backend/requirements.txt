@@ -8,3 +8,4 @@ python-multipart==0.0.20
 psutil==7.1.0
 openpyxl==3.1.5
 tzdata==2026.4
+cryptography==50.0.1

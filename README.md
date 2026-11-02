@@ -43,6 +43,12 @@ OpenAI GPT-6 Luna tutors within guided lessons, using each learner's editable su
 
 See [SETUP_GUIDE.md](SETUP_GUIDE.md) for the Windows host, the Drive folder and using the app on other devices. See [docs/MCP.md](docs/MCP.md) for connecting a desktop AI tutor, and [docs/MIGRATION.md](docs/MIGRATION.md) for moving data from the previous hosted app and the History project.
 
+For webcams on other home computers, use **Settings → Camera access on other devices**
+to enable the secure LAN connection and complete the one-time certificate trust
+setup on that device. See [docs/CAMERA_ACCESS.md](docs/CAMERA_ACCESS.md). Ordinary HTTP
+network addresses cannot provide a live browser camera preview; saved-photo uploads
+remain available.
+
 Guided lessons use reusable tutoring activities, durable answer capture and a shared lesson engine. Parents and human tutors choose and review the material. The AI teaches the assigned source without adding unsolicited content warnings, judgments about its viewpoint, or reminders that the learner need not agree with the author. The book's original words and questions remain intact. See [docs/ACTIVITY_ENGINE.md](docs/ACTIVITY_ENGINE.md) for the 23 activities, confirmation/parent review, recovery, desktop access and the disposable offline rehearsal.
 
 New API lesson preparation uses original PDF pages for writing and review, with optional book JSON indexes. See [docs/PDF_FIRST_PREPARATION.md](docs/PDF_FIRST_PREPARATION.md) for the shared workflow, compatibility limits and the cleanup ledger of older paths to remove after verification.

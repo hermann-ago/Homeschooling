@@ -43,6 +43,7 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
   const [printing, setPrinting] = useState(false);
   const [printStatus, setPrintStatus] = useState('');
   const [printOptionsOpen, setPrintOptionsOpen] = useState(false);
+  const [savedPrintOptions, setSavedPrintOptions] = useState(null);
   const [tool, setTool] = useState('hand');
   const [color, setColor] = useState('#111827');
   const [strokeWidth, setStrokeWidth] = useState(0.005);
@@ -163,8 +164,10 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
   };
 
   const bookPage = page - offset;
+  const printRange = `${slot.document_id}.${physicalStart}.${boundedEnd}`;
   const printPages = async (options) => {
     pauseNarration();
+    setSavedPrintOptions({ range: printRange, options });
     setPrinting(true); setPrintStatus('Preparing lesson pages for printing…');
     try {
       await printLessonPages({ data: pdfData, first: physicalStart, last: boundedEnd,
@@ -178,7 +181,7 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
 
   return (
     <div className="pdf-reader relative flex flex-col h-full bg-surface min-h-0">
-      {printOptionsOpen && <LessonPrintDialog key={`${slot.document_id}.${physicalStart}.${boundedEnd}`} first={physicalStart} last={boundedEnd} offset={offset} busy={printing} onClose={() => setPrintOptionsOpen(false)} onPrint={printPages} />}
+      {printOptionsOpen && <LessonPrintDialog key={printRange} first={physicalStart} last={boundedEnd} offset={offset} initialOptions={savedPrintOptions?.range === printRange ? savedPrintOptions.options : undefined} busy={printing} onClose={() => setPrintOptionsOpen(false)} onPrint={printPages} />}
       {boundaryNote && (
         <div className="px-4 py-2 bg-action-soft border-b border-line text-[13px] text-action" data-testid="boundary-note">{boundaryNote}</div>
       )}

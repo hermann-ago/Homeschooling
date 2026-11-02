@@ -1,4 +1,5 @@
 import json
+import pytest
 from tests.test_interactive import prepare
 from tests.test_tutoring import seed_history
 from tutoring import curriculum_preparation as prep, family_skill
@@ -6,6 +7,47 @@ from tutoring import curriculum_preparation as prep, family_skill
 
 def params(s):return {'learner':s['lucas']['id'],'subject':s['history']['id'],'topic_ids':[s['genghis']['id']]}
 def body(s,**extra):return {'learner':s['lucas']['id'],'topic':s['genghis']['id'],'operation_id':'synthetic-prepare-01','target':'both',**extra}
+
+
+def test_script_credit_failure_survives_writer_and_job_without_starting_audio(harness,monkeypatch):
+    from services.ai_provider import RateLimitError
+    h=harness;s=seed_history(h)
+    monkeypatch.setattr(prep,'launch',lambda *a:None)
+    calls=[];voices=[]
+    def rejected(*args,**kwargs):
+        calls.append(True)
+        raise RateLimitError(provider_code='credit_balance_exhausted',provider_type='insufficient_quota')
+    monkeypatch.setattr(h.ctx.ai,'generate',rejected)
+    monkeypatch.setattr(prep.narration,'generate',lambda *a,**k:voices.append(True))
+    job=h.call('POST','/api/tutor/preparation',json=body(s)).json()
+    prep.run(h.ctx,job['id'])
+    saved=h.ctx.store.get('lesson_preparation_jobs',job['id'])
+    assert saved['status']=='paused' and saved['phase']=='script',saved
+    assert saved['error_code']=='provider_quota',saved
+    assert 'waiting will not fix' in saved['error']
+    assert calls==[True] and not voices
+    assert not h.ctx.store.all('guides') and not h.ctx.store.all('attempts')
+
+
+@pytest.mark.parametrize('code,retried',[('provider_rate_limit',True),('provider_quota',False),('provider_429',False)])
+def test_review_retries_only_a_known_temporary_rejection_once(harness,monkeypatch,code,retried):
+    from tutoring import script_review
+    h=harness;s,g=prepare(h,monkeypatch)
+    row=h.ctx.store.get('guides',g['guide_id'])
+    script_review.save(h.ctx,row,script_review.inputs(h.ctx,row),{'findings':[],
+        'error':'Provider rejected the review.','error_code':code,'retry_after':12},'ai')
+    reviews=[];delays=[];voices=[]
+    monkeypatch.setattr(h.ctx.ai,'generate',lambda *a,**k:reviews.append(True) or {'findings':[]})
+    monkeypatch.setattr(prep.time,'sleep',lambda seconds:delays.append(seconds))
+    monkeypatch.setattr(prep,'launch',lambda *a:None)
+    monkeypatch.setattr(prep.narration,'generate',lambda *a,**k:voices.append(True) or {'job_status':'ready','track_id':'saved-voice'})
+    h.config.update(tts={'provider':'inworld','inworld_enabled':True})
+    job=h.call('POST','/api/tutor/preparation',json=body(s,target='audio')).json()
+    prep.run(h.ctx,job['id'])
+    saved=h.ctx.store.get('lesson_preparation_jobs',job['id'])
+    assert saved['status']==('completed' if retried else 'paused'),saved
+    assert reviews==([True] if retried else []) and delays==([12] if retried else [])
+    assert voices==([True] if retried else [])
 
 
 def test_curriculum_uses_configured_inworld_with_child_narrator(harness, monkeypatch):

@@ -416,7 +416,7 @@ def plan_schema(requirements):
 
 def gemini_writer(prompt_text: str, model: str, *, pdf=None,replace_invalid=False,schema=None) -> dict:
     """Compatibility entrypoint; the shared service owns provider/model selection."""
-    from services.ai_provider import service,InvalidStructuredResponseError,UnusableResponseError
+    from services.ai_provider import service,InvalidStructuredResponseError,UnusableResponseError,RateLimitError
     try:
         return service().generate(prompt_text, schema=schema or GuidePlan, max_output=MAX_PLAN_OUTPUT,replace_invalid=replace_invalid,
             **({'pdf': pdf} if pdf is not None else {}),
@@ -426,6 +426,8 @@ def gemini_writer(prompt_text: str, model: str, *, pdf=None,replace_invalid=Fals
     except InvalidStructuredResponseError as error:
         raise GuideError("The AI returned an unusable lesson-plan reply. It is saved, but repeating Create cannot fix it. "
                          "You can explicitly request one replacement within the teaching allowance; no automatic retry was sent.",invalid_response=True) from error
+    except RateLimitError as error:
+        raise GuideError(f"The AI could not write the guide: {error}",reason=error.code) from error
     except ValueError as error:
         raise GuideError(f"The AI could not write the guide: {error}") from error
 

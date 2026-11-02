@@ -57,9 +57,10 @@ def allowed_host(host_header: str | None, extra: list[str] | tuple[str, ...] = (
     return host in names
 
 
-def same_origin(origin: str, host_header: str) -> bool:
+def same_origin(origin: str, host_header: str, scheme: str = 'http') -> bool:
     """Whether a browser's Origin header names the server it is talking to."""
-    return bool(host_header) and urlsplit(origin).netloc.lower() == host_header.strip().lower()
+    parsed = urlsplit(origin)
+    return bool(host_header) and parsed.scheme.lower() == scheme and parsed.netloc.lower() == host_header.strip().lower()
 
 
 class PrivateNetworkMiddleware:
@@ -79,7 +80,7 @@ class PrivateNetworkMiddleware:
             return await _deny(send, "Unrecognised server address")
         origin = headers.get(b"origin")
         changing = scope.get("method") in ("POST", "PUT", "PATCH", "DELETE")
-        if changing and origin is not None and not same_origin(origin.decode("latin-1"), host):
+        if changing and origin is not None and not same_origin(origin.decode("latin-1"), host, scope.get('scheme', 'http')):
             return await _deny(send, "Changes must come from the Homeschooling app")
         return await self.app(scope, receive, send)
 

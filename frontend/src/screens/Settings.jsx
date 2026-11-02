@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import FamilyTutorSkill from '../components/FamilyTutorSkill';
 import { useLocation } from 'react-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useLearner } from '../app/learnerContext';
@@ -15,6 +15,8 @@ import { keys, useAutoReplan, useFamilyProgress, useNarrationUsage, useSchoolYea
 import { useDevice } from '../components/deviceContext';
 import GradeSelect from '../components/GradeSelect';
 import AICostSettings from '../components/AICostSettings';
+import NarratorVoiceSettings from '../components/NarratorVoiceSettings';
+import CameraConnectionSettings from '../components/CameraConnectionSettings';
 import TestModeSettings from '../components/TestModeSettings';
 import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
@@ -444,13 +446,27 @@ export function HomeServer() {
 
 export default function Settings() {
   const { hash } = useLocation();
+  const client = useQueryClient();
+  const fetching = useIsFetching();
+  const located = useRef(null);
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
-  }, [hash]);
+    if (!hash) { located.current = null; return undefined; }
+    if (located.current === hash || client.isFetching()) return undefined;
+    // Voice samples and other sections above the anchor load asynchronously.
+    // Locate once after they settle, without pulling the parent back on polls.
+    const frame = requestAnimationFrame(() => {
+      if (client.isFetching()) return;
+      const section = document.getElementById(hash.slice(1));
+      if (section) { section.scrollIntoView({ block: 'start' }); located.current = hash; }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hash, fetching, client]);
   return (
     <div className="px-4 md:px-10 py-8 flex flex-col gap-6">
       <h1 className="font-display text-3xl md:text-4xl font-medium">Settings</h1>
       <TestModeSettings />
+      <NarratorVoiceSettings />
+      <CameraConnectionSettings />
       <FamilyTutorSkill />
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
         <div className="flex flex-col gap-5"><Family /><SchoolYear /></div>

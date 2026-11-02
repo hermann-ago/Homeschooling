@@ -34,7 +34,7 @@ def validate(packet, script):
     compiled = guide.build(packet['package']['sentences'], plan, faithful=True, instruction_only=True)
     lesson_quality.validate(compiled, packet['context']['source_requirements'])
     if book_questions.enabled(packet['context']):
-        book_questions.validate_activities(guide.guide_activities(compiled))
+        book_questions.validate_activities(guide.guide_activities(compiled), packet['context'])
     return script
 
 
@@ -58,8 +58,13 @@ def main():
         step.add_argument('--script', type=Path, required=True)
     args = parser.parse_args()
     if args.command == 'validate':
-        validate(read(args.packet), read(args.script))
+        packet = read(args.packet)
+        script = validate(packet, read(args.script))
+        from tutoring.page_script import teaching_summary
+        summary = teaching_summary(script, packet['package'])
+        save(args.script.parent / 'teaching-review.json', summary)
         print('Valid structured lesson; no API calls or audio generation.')
+        print(json.dumps(summary))
         return
     with httpx.Client(base_url=args.server, timeout=240) as client:
         if args.command == 'export':

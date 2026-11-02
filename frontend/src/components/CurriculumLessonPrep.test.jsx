@@ -18,7 +18,7 @@ it('distinguishes review in progress and a saved script needing source clarifica
   expect(prepare).toHaveBeenCalledWith('both');
 });
 beforeEach(()=>{localStorage.clear();api.estimate.mockResolvedValue({script:{allowed:true,reused:false,estimated_cost_usd:.01},audio:{allowed:true,estimated_cost_usd:null},allowed:true});});
-afterEach(()=>{cleanup();vi.resetAllMocks();});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.resetAllMocks();vi.unstubAllGlobals();});
 function dialog(extra={}) {
   const close=vi.fn();
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CurriculumPreparationDialog learner={1} topic={topic} status={ready} target="both" onClose={close} {...extra}/></QueryClientProvider>);
@@ -99,6 +99,30 @@ it('prevents generation when the cost check is blocked',async()=>{
   await screen.findByRole('alert');
   expect(screen.getByRole('button',{name:'Prepare in background'}).disabled).toBe(true);
   expect(api.start).not.toHaveBeenCalled();
+});
+
+it('queues on an HTTP phone without randomUUID and survives unavailable browser storage',async()=>{
+  vi.stubGlobal('crypto',{});
+  vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('Storage unavailable');});
+  api.start.mockRejectedValueOnce(new Error('Connection lost')).mockResolvedValueOnce({id:'phone-job',status:'queued'});
+  const close=dialog();
+  fireEvent.click(screen.getByRole('button',{name:'Check cost and prepare'}));
+  await screen.findByLabelText('Preparation estimate');
+  fireEvent.click(screen.getByRole('button',{name:'Prepare in background'}));
+  expect(await screen.findByRole('alert')).toHaveProperty('textContent','Connection lost');
+  expect(screen.getByRole('button',{name:'Prepare in background'}).disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button',{name:'Prepare in background'}));
+  await waitFor(()=>expect(close).toHaveBeenCalled());
+  expect(api.start.mock.calls[0][0].operation_id).toMatch(/^[A-Za-z0-9_-]{8,100}$/);
+  expect(api.start.mock.calls[1][0]).toEqual(api.start.mock.calls[0][0]);
+});
+
+it('shows active audio progress without offering another purchase',()=>{
+  dialog({status:{...ready,job:{status:'running',phase:'audio'},audio:{status:'running',parts:10,completed_parts:4}}});
+  expect(screen.getByText('4 of 10 voice sections synchronized.')).toBeTruthy();
+  expect(screen.getByText(/home computer continues preparing/)).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Check cost and prepare'})).toBeNull();
+  expect(screen.getAllByRole('button',{name:'Close'}).every(button=>!button.disabled)).toBe(true);
 });
 
 it('makes a known script replacement explicit and sends its durable recovery flag',async()=>{

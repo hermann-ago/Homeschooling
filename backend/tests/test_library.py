@@ -78,9 +78,9 @@ def test_upload_enroll_and_restart_are_local_durable_and_idempotent(harness, mon
     assert reading["topics"] == [] and reading["job"] is None
     assert h.ctx.store.all("book_imports") == []
     skill = h.call("GET", f"/api/subjects/{reading['subject_id']}/teaching-skill").json()["content"]
-    assert "two or three quiz questions" in skill
+    assert "without expecting" in skill and "automatic quiz" in skill
     assert "Parents and human tutors choose and review" in skill
-    assert "true/false or single-choice answers only" in skill
+    assert "reflection, discussion and brainstorming questions" in skill
     h.restart()
     assert get_book(h, learner=kid["id"])["readings"][0]["id"] == reading["id"]
     assert len(h.ctx.store.all("documents")) == 1 and len(h.ctx.store.all("library_readings")) == 1
@@ -132,16 +132,13 @@ def test_index_uses_existing_engine_reuses_scans_but_never_child_completion(harn
     h.call("POST", "/api/library/books/library-02/prepare", json={"child_id": second["id"]})
     assert len(h.ctx.store.all("book_imports")) == before
 
-    # The existing guided lesson and question engine also accept a library topic.
+    # The guided lesson engine accepts library reading without requiring quiz answers.
     # Provider replies are synthetic; source, HTTP, activities and records are real.
-    from tutoring import guide, interactive
+    from tutoring import guide
     from tests.test_activity_integration import http_event
     monkeypatch.setattr(guide, "write_plan", lambda *a, **kw: ({"mode": "expand", "segments": [
         {"type": "intro", "text": "Let us read the argument."},
         {"type": "read", "from": 0, "to": 999},
-        {"type": "activity", "activity_kind": "ask_question", "content": {
-            "prompt": "Who expects to benefit?", "choices": [{"id": "both", "label": "Both people"}, {"id": "none", "label": "Neither person"}],
-            "response_modes": ["choice"], "answer_format": "single_choice", "require_reasoning": False}},
         {"type": "recap", "text": "We checked the author's explanation."}]}, "synthetic-library-tutor"))
     monkeypatch.setattr(h.ctx.ai, "generate", lambda *a, **kw: {"findings": []})
     made = h.call("POST", "/api/tutor/reader/guide", json={"learner": second["id"], "topic": other["topics"][0]["id"]})
@@ -153,18 +150,15 @@ def test_index_uses_existing_engine_reuses_scans_but_never_child_completion(harn
     state = service(h.ctx).state(started.json()["session_id"])
     for _ in range(10):
         activity = state["active_activity"]
-        if activity["kind"] == "ask_question":
+        if activity["kind"] == "close_lesson":
             break
         state = http_event(h, state, "reading_done" if activity["kind"] == "read_source" and activity["status"] == "pending" else "continue")
-    assert state["active_activity"]["kind"] == "ask_question"
+    assert state["active_activity"]["kind"] == "close_lesson"
     assert not h.ctx.store.find("attempts", child_id=second["id"])
-    monkeypatch.setattr(interactive, "gemini_turn", lambda *a, **kw: {"feedback": "Each person expects to benefit.",
-        "result": "Correct", "ready_to_continue": True})
-    state = http_event(h, state, "submit_response", {"response_id": "library-understanding-1", "method": "choice", "choice_ids": ["both"], "assess_after_save": True})
-    attempts = h.ctx.store.find("attempts", child_id=second["id"])
-    assert len(attempts) == 1 and attempts[0]["topic_id"] == other["topics"][0]["id"]
-    assert "Both people" in attempts[0]["first_answer"]
     assert get_book(h, learner=second["id"])["readings"][0]["completed_topics"] == 0
+    state = http_event(h, state, "finish")
+    assert not h.ctx.store.find("attempts", child_id=second["id"])
+    assert get_book(h, learner=second["id"])["readings"][0]["completed_topics"] == 1
 
 
 def test_assigned_books_have_individual_curriculum_progress_without_automatic_schedule(harness):

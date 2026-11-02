@@ -75,9 +75,18 @@ def create_app(app_context=None) -> FastAPI:
             set_context(AppContext())
             context().announce()
         _keep_host_awake(True)
+        from security.https import manager
+        secure = manager(app, context())
+        if context().config.get('https', {}).get('enabled'):
+            try:
+                await secure.start()
+            except Exception as exc:
+                secure.error = str(exc)
+                logger.error('Secure home listener unavailable: %s', exc)
         try:
             yield
         finally:
+            await secure.stop()
             _keep_host_awake(False)
             context().shutdown()
 

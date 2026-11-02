@@ -3,7 +3,11 @@ import { fetchApi } from './client';
 export const systemApi = {
   checkElevenLabs: () => fetchApi('/ai/elevenlabs/check'),
   checkInworld: () => fetchApi('/ai/inworld/check'),
+  narratorSettings: () => fetchApi('/ai/inworld/narrators'),
+  saveNarratorSettings: data => fetchApi('/ai/inworld/narrators', { method: 'PUT', body: JSON.stringify(data) }),
   session: () => fetchApi('/session'),
+  cameraConnection: () => fetchApi('/network/camera'),
+  enableCameraConnection: () => fetchApi('/network/camera/enable', { method: 'POST' }),
   testMode: (enabled) => fetchApi('/test-mode', { method: 'POST', body: JSON.stringify({ enabled }) }),
   resumeTest: (token) => fetchApi('/test-mode', { method: 'POST', body: JSON.stringify({ enabled: true, token }) }),
   aiStatus: () => fetchApi('/ai/status'),

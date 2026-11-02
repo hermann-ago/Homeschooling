@@ -4,6 +4,7 @@ from contextlib import nullcontext
 import hashlib
 import json
 import threading
+import time
 
 from fastapi import BackgroundTasks
 from dependencies import select_context
@@ -149,10 +150,22 @@ def run(ctx, job_id):
             if not guide or not guide['current']:raise ValueError('Prepare an up-to-date tutor script first.')
             with ctx.store.transaction(kind='lesson.preparation.script') as tx:
                 tx.update('lesson_preparation_jobs',job_id,{'guide_id':guide['guide_id'],'phase':'review'})
+            from . import script_review
             from .script_review import require_audio
+            report=script_review.latest(selected,guide['guide_id'])
+            detail=(report or {}).get('data') or {}
+            if report and report['status']=='failed' and detail.get('error_code')=='provider_rate_limit':
+                # A known rejected request has no unknown purchase to repeat.
+                # Defer this one review once; never retry quota/billing errors,
+                # timeouts, refusals or uncertain outcomes automatically.
+                delay=max(1,min(float(detail.get('retry_after') or 60),120))
+                with ctx.store.transaction(kind='lesson.preparation.review_wait') as tx:
+                    tx.update('lesson_preparation_jobs',job_id,{'error':f'The provider is busy. Waiting {int(delay)} seconds before one review retry; the script is saved.'})
+                time.sleep(delay)
+                script_review.run(selected,selected.store.get('guides',guide['guide_id']),retry=True)
             require_audio(selected,guide)
             with ctx.store.transaction(kind='lesson.preparation.reviewed') as tx:
-                tx.update('lesson_preparation_jobs',job_id,{'phase':'audio' if job['target']!='guide' else 'script'})
+                tx.update('lesson_preparation_jobs',job_id,{'phase':'audio' if job['target']!='guide' else 'script','error':None})
             if job['target'] in ('audio','both'):
                 chosen=job.get('audio_provider')
                 voice_options={'provider':chosen} if chosen and chosen!='configured' else {}

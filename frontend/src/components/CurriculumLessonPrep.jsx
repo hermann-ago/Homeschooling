@@ -8,6 +8,9 @@ import { currentMode } from '../api/mode';
 import { Button, Dialog } from '../ui';
 import { DEFAULT_SCRIPT_CAP_USD, DEFAULT_AUDIO_CAP_USD } from '../utils/preparationLimits';
 import ScriptReview from './ScriptReview';
+import PreparationProgress from './PreparationProgress';
+import { reviewRecovered } from '../utils/preparationStatus';
+import { operationId, readSaved, writeSaved } from './activities/durable';
 
 const active = job => ['queued','running'].includes(job?.status);
 const clean = e => e.message.replace(/^\/[^:]+: /,'');
@@ -22,7 +25,7 @@ export function CurriculumPreparationCells({topic,status,onPrepare}) {
   const audioReady=status?.audio?.status==='ready';
   const audioPartial=status?.audio?.status==='ready_with_fallback';
   const noAudio=audioPartial && status.audio.recorded_parts===0;
-  const paused=status?.job?.status==='paused'&&(reviewBlocked||(status.job.phase==='audio'?!audioReady:!scriptReady));
+  const paused=status?.job?.status==='paused'&&!reviewRecovered(status);
   const narrator = status?.audio?.provider === 'inworld' ? 'Inworld TTS-2' : status?.audio?.provider === 'elevenlabs' ? 'ElevenLabs voice' : 'Google voice';
   const audioLabel=audioBusy ? status?.audio?.status==='aligning'?'Synchronizing…':'Preparing audio…'
     : noAudio?`${narrator} declined · no audio saved`:audioReady?`Ready · ${narrator}`:audioPartial?`${narrator} · some passages text-only`:status?.audio?.status==='missing'?'Not prepared':status?'Needs attention':'Checking…';
@@ -38,6 +41,7 @@ export function CurriculumPreparationCells({topic,status,onPrepare}) {
         aria-label={`${scriptReady?'Prepare options for':status.script_status==='outdated'?'Update tutor for':'Prepare tutor for'} ${topic.title}`}
         onClick={()=>onPrepare(scriptReady&&!reviewBlocked?'audio':'both')}>{scriptReady?'Preparation options':status.script_status==='outdated'?'Update tutor':'Prepare tutor'}</button>}
       {paused&&status.job.phase==='script'&&<span className="text-problem">Preparation paused</span>}
+      {working&&<button type="button" className="text-left text-action underline" onClick={()=>onPrepare(status.job.target)}>View preparation progress</button>}
     </div>
     <div className="flex-1 min-w-24 flex flex-col gap-1 text-xs" aria-label={`Advanced audio for ${topic.title}`}>
       <span className={audioReady?'text-action font-semibold':'text-muted'}><span className="font-medium text-muted">Audio: </span>{audioBusy&&<LoaderCircle className="inline mr-1 animate-spin" size={12}/>}{audioLabel}</span>
@@ -46,6 +50,7 @@ export function CurriculumPreparationCells({topic,status,onPrepare}) {
         aria-label={`Prepare advanced audio for ${topic.title}`} onClick={()=>onPrepare('audio')}>Prepare audio</button>}
       {status?.script_status==='outdated'&&!audioBusy&&<span className="text-muted">For the saved script</span>}
       {paused&&<button type="button" className="text-left text-problem hover:underline" onClick={()=>onPrepare(status.job.target)}>View issue / retry</button>}
+      {paused&&status.job.error&&<span role="alert" className="text-problem break-words">{status.job.error}</span>}
     </div>
   </>;
 }
@@ -62,6 +67,7 @@ export function CurriculumPreparationDialog({learner,topic,status,target:initial
   const [teachingProvider,setTeachingProvider]=useState(status?.job?.teaching_provider||'configured');
   const [audioProvider,setAudioProvider]=useState(status?.job?.audio_provider||'configured');
   const [rewrite,setRewrite]=useState(false);
+  const preparing=active(status?.job)||['queued','running','aligning'].includes(status?.audio?.status);
   const body={learner:Number(learner),topic:topic.id,target,maximum_guide_usd:DEFAULT_SCRIPT_CAP_USD,maximum_audio_usd:DEFAULT_AUDIO_CAP_USD,
     replace_invalid:target!=='audio'&&replaceInvalid,repair_audio:target!=='guide'&&repairAudio,teaching_provider:teachingProvider,audio_provider:audioProvider,rewrite:target!=='audio'&&rewrite};
   const reset=()=>{setEstimate(null);setProblem('');setOperation(null);};
@@ -75,28 +81,33 @@ export function CurriculumPreparationDialog({learner,topic,status,target:initial
   };
   const prepare=async()=>{
     setBusy(true);setProblem('');
-    const key=`homeschooling.curriculum-preparation.${currentMode}.${learner}.${topic.id}`;
-    let command=operation;
-    if(!command){
-      try{const stored=JSON.parse(localStorage.getItem(key)||'null');if(stored&&JSON.stringify(stored.body)===JSON.stringify(body)) command=stored.command;}catch{/* A new durable operation is saved before sending. */}
-      command ||= {...body,operation_id:crypto.randomUUID()};
-      localStorage.setItem(key,JSON.stringify({body,command}));setOperation(command);
-    }
     try{
-      await curriculumPrepApi.start(command);
-      localStorage.removeItem(key);
-      await client.invalidateQueries({queryKey:['curriculum-preparation']});
-      await client.invalidateQueries({queryKey:['reader']});onClose();
+      const key=`homeschooling.curriculum-preparation.${currentMode}.${learner}.${topic.id}`;
+      let command=operation;
+      if(!command){
+        const stored=readSaved(key);
+        if(stored&&JSON.stringify(stored.body)===JSON.stringify(body)) command=stored.command;
+        command ||= {...body,operation_id:operationId()};
+        setOperation(command);
+        writeSaved(key,{body,command});
+      }
+      const job=await curriculumPrepApi.start(command);
+      writeSaved(key,null);
+      client.setQueryData(['curriculum-preparation',currentMode,learner,topic.id],previous=>({...status,...previous,job}));
+      void client.invalidateQueries({queryKey:['curriculum-preparation']});
+      void client.invalidateQueries({queryKey:['reader']});onClose();
     }catch(e){setProblem(clean(e));}finally{setBusy(false);}
   };
   return <Dialog open title="Prepare lesson" description={topic.title} onClose={busy?undefined:onClose} width={560}
-    footer={<><Button disabled={busy} onClick={onClose}>Close</Button>{estimate
+    footer={<><Button disabled={busy} onClick={onClose}>Close</Button>{!preparing&&(estimate
       ?<Button variant="primary" disabled={busy||!estimate.allowed} onClick={prepare}>{busy?'Adding to preparation…':'Prepare in background'}</Button>
-      :<Button variant="primary" disabled={busy} onClick={preview}>{busy?'Checking…':'Check cost and prepare'}</Button>}</>}>
+      :<Button variant="primary" disabled={busy} onClick={preview}>{busy?'Checking…':'Check cost and prepare'}</Button>)}</>}>
     <div className="flex flex-col gap-4 text-sm">
 
       <p className="text-muted">Prepare materials here, without starting a student session. Existing lessons and answers keep their saved version.</p>
-      {status?.job?.error&&<p className="text-problem" role="note">Last preparation: {status.job.error}</p>}
+      <PreparationProgress status={status}/>
+      {!preparing&&<>
+      {status?.job?.error&&!reviewRecovered(status)&&<p className="text-problem" role="note">Last preparation: {status.job.error}</p>}
       <label className="flex flex-col gap-1">What to prepare<select aria-label="What to prepare" className="border border-line rounded-lg p-2" disabled={busy} value={target} onChange={e=>{setTarget(e.target.value);reset();}}>
         <option value="both">Guided lesson and voice</option><option value="guide">Guided lesson only</option>
         <option value="audio" disabled={status?.script_status!=='ready'}>Voice only</option>
@@ -122,6 +133,7 @@ export function CurriculumPreparationDialog({learner,topic,status,target:initial
         {estimate.script?.cached_failure?.code==='provider_refusal'&&<p role="alert" className="text-problem">The script provider declined this source. Repeating the same request will not fix it. Review the material or explicitly select another script provider above.</p>}
         {!estimate.allowed&&estimate.script?.cached_failure?.code!=='provider_refusal'&&<p role="alert" className="text-problem">Preparation needs attention. Check the source review and provider connection above.</p>}
       </div>}
+      </>}
       <p className="text-xs text-muted">Generation costs are tracked. Spending limits are managed with your providers. Progress is saved and matching materials are reused.</p>
       {problem&&<p role="alert" className="text-problem">{problem}</p>}
     </div>

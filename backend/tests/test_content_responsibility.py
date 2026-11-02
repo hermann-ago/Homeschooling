@@ -16,6 +16,8 @@ def test_preparation_keeps_content_review_with_family_even_with_old_subject_guid
             'family_tutoring': {'content': 'Teach warmly.', 'learner_profile': {}}})
     assert TEACHING_POLICY in prompt
     assert 'original words' in prompt
+    assert 'TEACH DURING READING' in prompt and 'there is no target number of pauses' in prompt
+    assert 'concrete everyday example' in prompt
     assert TEACHING_POLICY in interactive.SERVER_TUTOR_RULES
 
 

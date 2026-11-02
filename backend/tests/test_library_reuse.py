@@ -14,7 +14,8 @@ from tutoring import books, guide, library_materials
 def family(harness, monkeypatch):
     h = harness
     first, second = child(h, "First reader private name"), child(h, "Future reader private name")
-    pdf = make_pdf([["The first idea", "People exchange things because each expects to benefit from the exchange."]])
+    pdf = make_pdf([["The first idea", "People exchange things because each expects to benefit from the exchange.",
+        "For reflection: Why might both people choose to exchange?"]])
     assert upload(h, data=pdf).status_code == 200
     def scan(ctx, data, role, start, end):
         reader = PdfReader(io.BytesIO(data))
@@ -34,9 +35,6 @@ def family(harness, monkeypatch):
         return {"mode": "expand", "segments": [
             {"type": "intro", "text": "Let us explore this idea together."}, {"type": "read", "from": 0, "to": 999},
             {"type": "explain", "text": "An exchange is when people trade things."},
-            {"type": "activity", "activity_kind": "ask_question", "content": {
-                "prompt": "Who expects to benefit?", "choices": [{"id": "both", "label": "Both people"}, {"id": "none", "label": "Neither person"}],
-                "response_modes": ["choice"], "answer_format": "single_choice", "require_reasoning": False}},
             {"type": "recap", "text": "Each person expects to benefit."}]}, "synthetic-shared-writer"
     monkeypatch.setattr(guide, "write_plan", write)
     monkeypatch.setattr(h.ctx.ai, "generate", lambda *a, **kw: {"findings": []})
@@ -49,7 +47,7 @@ def make_guide(h, kid, reading, **extra):
     return response.json()
 
 
-def test_explanations_quiz_and_review_generate_once_for_future_children(family, monkeypatch):
+def test_read_along_explanations_and_review_generate_once_for_future_children(family, monkeypatch):
     h, first, second, readings, prompts = family
     with h.ctx.store.transaction() as tx:
         tx.insert('preferences', {'id': 'first-private', 'child_id': first['id'], 'key': 'teaching_style', 'value': 'PRIVATE-FIRST-LEARNER-NOTE'})
@@ -61,7 +59,9 @@ def test_explanations_quiz_and_review_generate_once_for_future_children(family, 
     assert first['name'] not in archived and 'PRIVATE-FIRST-LEARNER-NOTE' not in archived
     assert not any(key in material['data']['context'] for key in ('preferences', 'resume', 'recent_sessions', 'pending_actions', 'learning_memory', 'workbook_fingerprint'))
     assert material['file_path'].startswith('Family Library/library-02/Lesson Content/')
-    assert all(part['content'].get('prompt') for part in made['activities'] if part['kind'] == 'ask_question')
+    assert not any(part['kind'] in ('ask_question', 'request_book_work') for part in made['activities'])
+    assert any('Why might both people choose to exchange?' in part['content'].get('text', '')
+        for part in made['activities'] if part['kind'] == 'read_source')
     monkeypatch.setattr(guide, 'write_plan', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('Must reuse the saved book lesson')))
     monkeypatch.setattr(h.ctx.ai, 'generate', lambda *a, **kw: (_ for _ in ()).throw(AssertionError('No repeat paid review')))
     before = len(h.ctx.store.all('guides'))
@@ -78,6 +78,26 @@ def test_explanations_quiz_and_review_generate_once_for_future_children(family, 
         'topic': readings[1]['topics'][0]['id'], 'guide_id': reused['guide_id']})
     assert started.status_code == 200, started.text
     assert get_book(h, learner=second['id'])['readings'][0]['completed_topics'] == 0
+    from dependencies import select_context
+    from tests.test_activity_engine import event
+    from tutoring.activity_engine import service
+    session_id = started.json()['session_id']
+    h.restart()
+    engine = service(h.ctx)
+    state = engine.state(session_id)
+    with select_context(h.ctx):
+        while state['active_activity']['kind'] != 'close_lesson':
+            assert state['active_activity']['kind'] in ('introduce', 'read_source', 'explain_or_observe')
+            if state['active_activity']['kind'] == 'read_source':
+                state = event(engine, state, 'reading_done')
+            state = event(engine, state, 'continue')
+        state = event(engine, state, 'finish')
+    session = h.ctx.store.get('tutor_sessions', session_id)
+    assert session['status'] == 'completed'
+    assert session['completion_summary']['understanding'] == 'Not assessed'
+    assert not session['completion_summary']['attempt_ids']
+    assert not h.ctx.store.all('activity_responses') and not h.ctx.store.all('attempts')
+    assert get_book(h, learner=second['id'])['readings'][0]['completed_topics'] == 1
 
 
 def test_first_shared_lesson_can_be_estimated_without_private_learning_context_or_generation(family):
@@ -102,7 +122,7 @@ def test_codex_export_bypasses_cached_guide_without_paid_generation_or_student_c
     assert made['guide_id']
     assert base64.b64decode(packet['source_pdf_base64']).startswith(b'%PDF')
     assert 'BOOK READING QUESTION POLICY' in packet['prompt']
-    assert packet['context']['book_question_policy'] == 'book-choice-2'
+    assert packet['context']['book_question_policy'] == 'book-read-along-3'
     assert len(prompts) == 1
     assert {table: h.ctx.store.all(table) for table in before} == before
     assert h.call('POST', '/api/tutor/reader/guide', json={'learner': first['id'],
@@ -119,7 +139,7 @@ def test_canonical_reviewed_import_cannot_bypass_book_question_policy(family):
         'source_sha256': source['passage_sha256'], 'expected_skill_version': skills.packet(h.ctx.store, subject)['version'],
         'plan': {'mode': 'expand', 'segments': [{'type': 'intro', 'text': 'Let us read.'},
             {'type': 'read', 'from': 0, 'to': 999}, {'type': 'action', 'text': 'Write an explanation.', 'action_kind': 'answer'}]}})
-    assert result.status_code == 502 and 'single-choice' in result.text
+    assert result.status_code == 502 and 'without requiring answers' in result.text
     assert not h.ctx.store.all('guides')
 
 
@@ -129,12 +149,11 @@ def test_voice_guard_rejects_legacy_book_writing_before_any_provider_call(family
     h, first, _, readings, _ = family
     made = make_guide(h, first, readings[0])
     old = copy.deepcopy(made)
-    question = next(a for a in old['activities'] if a['kind'] == 'ask_question')
-    question['kind'] = 'request_book_work'
-    question['content'].update(answer_format='text', response_modes=['text'])
+    old['activities'].append({'id': 'invalid-writing', 'kind': 'request_book_work',
+        'content': {'prompt': 'Write an answer.', 'answer_format': 'text', 'response_modes': ['text']}})
     monkeypatch.setattr(elevenlabs_audio, 'generate', lambda *a, **kw: pytest.fail('Do not purchase voice for an invalid book lesson'))
     topic = h.ctx.store.get('topics', readings[0]['topics'][0]['id'])
-    with pytest.raises(ValueError, match='single-choice'):
+    with pytest.raises(ValueError, match='without requiring answers'):
         narration.generate(h.ctx, topic, old, provider='elevenlabs')
 
 

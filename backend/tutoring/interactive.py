@@ -169,13 +169,25 @@ class InteractiveTutor:
             if any(b["active_index"] for b in books) and recorded != self.ctx.books.fingerprint(topic["subject_id"]):
                 raise TutorError("The books or exercise mappings changed; update this guide before starting it")
         guide = guide_mod.package(self.ctx, guide_row, True)
-        if not guide["actions"]:
+        from . import book_questions
+        read_along = book_questions.read_along(guide_row.get('context_snapshot'))
+        if read_along:
+            activities = guide_mod.guide_activities(guide)
+            book_questions.validate_activities(activities, guide_row['context_snapshot'])
+            if not any(a['kind'] == 'read_source' for a in activities):
+                raise TutorError('A read-along lesson needs its assigned source reading')
+        if not guide["actions"] and not read_along:
             raise TutorError("Update this guided lesson to add student actions before starting it")
         source = passages.load(self.ctx, topic)
         if guide_row["source_sha256"] != source["passage_sha256"]:
             raise TutorError("The book pages changed; update the guided lesson before starting it")
         reviews = self.db.find("reviews", child_id=child_id)
         packet = self.tutor.context(child_id, topic["subject_id"])
+        if read_along:
+            # Earlier quiz/assignment evidence stays in records, not in this
+            # new reading-only lesson as a compulsory response detour.
+            for key in ('pending_actions', 'pending_assignments', 'pending_exercise_items', 'due_reviews'):
+                packet[key] = []
         packet['pending_actions'] = [a for a in packet['pending_actions']
             if a['topic_id']==topic_id and (tx.get('tutor_sessions', a['session_id']) or {}).get('status') != 'superseded'
             and (tx.get('tutor_sessions', a['session_id']) or {}).get('completion_source') not in ('manual','topic_completion')]
@@ -214,7 +226,7 @@ class InteractiveTutor:
                 initial_match = initial_match or added
         initial = initial_match
         initial_resume = 0
-        if started["next_prompt"]:
+        if started["next_prompt"] and not read_along:
             checkpoint = self.tutor.open_checkpoint(session["id"])
             previous_help = [o[k] for o in (checkpoint or {}).get("observations", [])
                              if o.get("prompt") == started["next_prompt"] for k in ("help", "explanation_supplied") if o.get(k)]

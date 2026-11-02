@@ -76,6 +76,7 @@ def neutral_context(ctx, data):
     """Whitelist source inputs; exclude names, ages, answers and all learner state."""
     from .family_skill import current, digest
     from .book_questions import VERSION as question_policy
+    from .page_script import BOOK_TEACHING_POLICY
     family = current(ctx.store)
     sources = copy.deepcopy(data.get("subject_sources") or {})
     # A selected source concept may refer to another child's local topic.
@@ -90,7 +91,8 @@ def neutral_context(ctx, data):
             "source_annotations": copy.deepcopy(data.get("source_annotations") or []),
             "family_tutoring": {"version": family["version"], "content": family["content"],
                 "learner_profile": {}, "sha256": digest(family["content"], {})},
-            "library_shared_policy": VERSION, 'book_question_policy': question_policy}
+            "library_shared_policy": VERSION, 'book_question_policy': question_policy,
+            'book_teaching_policy': BOOK_TEACHING_POLICY}
 
 
 def key(ctx, topic, passage, language, skill, data):
@@ -99,7 +101,7 @@ def key(ctx, topic, passage, language, skill, data):
     doc = ctx.store.get("documents", topic["document_id"])
     return sha256_text([VERSION, doc["sha256"],
         {k: topic.get(k) for k in ("title", "page_start", "page_end", "pdf_page_offset", "start_at", "stop_before")},
-        passage["passage_sha256"], language, skill["sha256"], data["family_tutoring"]["sha256"], data.get('book_question_policy'),
+        passage["passage_sha256"], language, skill["sha256"], data["family_tutoring"]["sha256"], data.get('book_question_policy'), data.get('book_teaching_policy'),
         data["source_requirements"], data.get("subject_sources"), data.get("source_annotations"), data.get('selected_source_pages', []),
         # Assessment-only source notes matter to review even when not narrated.
         source_notes(ctx.store, topic, assessment=True),

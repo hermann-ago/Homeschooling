@@ -19,10 +19,18 @@ creates student answers, completion, mastery or a pretend lesson session.
    page map, source coverage and content responsibility policy. Storybook pages
    attached to a class must include their complete final paragraphs. Never add
    unsolicited content warnings or reminders to disagree with the author.
-4. Book curriculum checks use **true/false or single-choice only**, normally two
-   or three short questions after the reading. Printed brainstorming questions
-   are optional source material, never required written/cursive tasks. Do not
-   hide a writing task inside `book_work` or spoken teacher text.
+   Identify the passage's purpose and central meaning in context before adding
+   explanations: an argument, theme, concept or story's significance, as appropriate
+   to its genre. Explain useful relationships and reasoning rather than incidental
+   plot trivia. Use relevant examples and comparisons. Pacing follows understanding,
+   with no target number of pauses, fixed spacing or explanation word minimum.
+   Preserve a scene, poem or argument's continuity when appropriate.
+4. Extra reading books are **read-along**, not workbook assignments. Read printed
+   reflection, brainstorming and discussion questions in source order as the
+   author's food for thought. Do not omit them, turn them into waiting/graded
+   questions, replace them with choice checks or add an automatic quiz. Use read
+   and say turns without expecting answers. Ordinary curriculum textbooks and
+   workbooks retain their required exercises. Answer actual learner questions.
 5. Validate, fix any findings, then import through the normal server workflow:
 
    ```powershell
@@ -32,8 +40,14 @@ creates student answers, completion, mastery or a pretend lesson session.
 
    Import checks current source and skill versions, compiles activities, checks
    source coverage, and saves a family/Codex review. It never starts voice.
+   Validation also writes `teaching-review.json`, with reading/explanation word
+   counts and the number of explanations between readings. Review these alongside
+   the source: counts are informational, never quotas or a measure of usefulness.
+   The compiler rejects answerable activities in new read-along book scripts.
 6. Inspect `saved-guide.json`: full class, first introduction, final closing,
-   correct source pages, correct response controls and approved review. Read it
+   correct source pages, useful explanations/comparisons in the reading flow,
+   correct response controls and approved review. Explanations use say turns;
+   they are not extra questions and must not be merged into the author's text. Read it
    again through `/api/tutor/reader?learner=1&topic=1689`. Rehearse session launches
    only against a separate test database, never the child's actual records.
 7. Only after the script is final, request narration from Lesson & voice. Inspect

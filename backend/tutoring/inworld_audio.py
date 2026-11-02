@@ -50,10 +50,15 @@ def recording(ctx, result, sentences, language):
     timing = (result.get('timestampInfo') or {}).get('characterAlignment') or {}
     chars, starts, ends = (timing.get(k, []) for k in
         ('characters', 'characterStartTimeSeconds', 'characterEndTimeSeconds'))
-    # Flash includes an empty terminal marker for the WAV tail. It is not a
-    # spoken character; remove only this marker, preserving every script letter.
-    if len(chars) == len(starts) == len(ends) and chars and chars[-1] == '':
-        chars, starts, ends = chars[:-1], starts[:-1], ends[:-1]
+    # Flash may include empty timing markers between synthesis chunks as well
+    # as at the WAV tail. They carry no script character. Remove those entries
+    # together, retaining the provider's original times for every real character.
+    # Never repair mismatched arrays or interpolate timestamps.
+    if len(chars) == len(starts) == len(ends):
+        kept = [(c, start, end) for c, start, end in zip(chars, starts, ends) if c != '']
+        chars = [c for c, _, _ in kept]
+        starts = [start for _, start, _ in kept]
+        ends = [end for _, _, end in kept]
     canonical = {'audio_base64': base64.b64encode(pcm).decode(), 'alignment': {
         'characters': chars,
         'character_start_times_seconds': starts,

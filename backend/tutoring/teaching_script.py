@@ -254,8 +254,9 @@ These skills guide teaching, not the output protocol. Use the compact AUTHORING 
 below even if an older saved skill describes engine tools, response modes or UI fields.
 
 Write natural spoken words, with a reason to care, useful explanation and room to think.
-Organize a few meaningful teaching sections: enjoy the complete reading, discuss when useful,
-then teach and practise. Keep titles, attribution and a continued passage together across pages.
+Organize a few meaningful teaching sections. For book chapters, place substantive say
+explanations and everyday comparisons between coherent reading sections, without dropping
+or reordering source text. Keep titles, attribution and a continued paragraph together across pages.
 Do not interrupt a story for each paragraph, turn every word into a new explanation, repeat a
 direction before its question, or ask optional questions duplicating the book's work.
 {PREPARATION_INSTRUCTIONS}

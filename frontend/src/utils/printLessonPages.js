@@ -1,5 +1,5 @@
 import { pdfjs } from 'react-pdf';
-import { lessonPrintLayout, selectLessonPrintPages } from './lessonPrintOptions';
+import { arrangeLessonPrintSides, lessonPrintLayout } from './lessonPrintOptions';
 
 const PRINT_DPI = 150;
 let printFrame = null;
@@ -7,7 +7,8 @@ let printFrame = null;
 /** Print a selected, pre-arranged set of book pages without opening another tab. */
 export async function printLessonPages({ data, first, last, title = 'Lesson pages', offset = 0,
   selection, parity, reverse, pagesPerSheet = 1, paper = 'A4', orientation = 'portrait', onProgress, onReady }) {
-  const pages = selectLessonPrintPages({ first, last, offset, selection, parity, reverse });
+  const sides = arrangeLessonPrintSides({ first, last, offset, selection, parity, reverse, pagesPerSheet, paper, orientation });
+  const total = sides.flatMap(side => side.pages).filter(number => number !== null).length;
   const layout = lessonPrintLayout({ pagesPerSheet, paper, orientation });
   let loading, pdf, frame;
   try {
@@ -38,23 +39,28 @@ export async function printLessonPages({ data, first, last, title = 'Lesson page
       img { display: block; width: 100%; height: 100%; object-fit: contain; }
     </style></head><body></body></html>`);
     doc.close(); doc.title = title;
-    let sheet;
-    for (const [index, number] of pages.entries()) {
-      const page = await pdf.getPage(number);
-      const normal = page.getViewport({ scale: 1 });
-      const scale = Math.min(PRINT_DPI / 72, Math.sqrt(8_000_000 / (normal.width * normal.height)));
-      const viewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
-      try {
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport, intent: 'print', background: '#ffffff' }).promise;
-        if (index % pagesPerSheet === 0) { sheet = doc.createElement('section'); sheet.className = 'sheet'; doc.body.append(sheet); }
-        const cell = doc.createElement('div'); cell.className = 'cell';
-        const image = doc.createElement('img'); image.alt = `Book page ${number - offset}`;
-        image.src = canvas.toDataURL('image/png'); cell.append(image); sheet.append(cell);
-        if (image.decode) await image.decode();
-      } finally { canvas.width = 0; canvas.height = 0; page.cleanup(); }
-      onProgress?.({ done: index + 1, total: pages.length });
+    let done = 0;
+    for (const side of sides) {
+      const sheet = doc.createElement('section'); sheet.className = 'sheet';
+      sheet.dataset.side = side.number;
+      doc.body.append(sheet);
+      for (const number of side.pages) {
+        const cell = doc.createElement('div'); cell.className = 'cell'; sheet.append(cell);
+        if (number === null) continue;
+        const page = await pdf.getPage(number);
+        const normal = page.getViewport({ scale: 1 });
+        const scale = Math.min(PRINT_DPI / 72, Math.sqrt(8_000_000 / (normal.width * normal.height)));
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        try {
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport, intent: 'print', background: '#ffffff' }).promise;
+          const image = doc.createElement('img'); image.alt = `Book page ${number - offset}`;
+          image.src = canvas.toDataURL('image/png'); cell.append(image);
+          if (image.decode) await image.decode();
+        } finally { canvas.width = 0; canvas.height = 0; page.cleanup(); }
+        onProgress?.({ done: ++done, total });
+      }
     }
     onReady?.();
     preview.addEventListener('afterprint', () => { frame.remove(); if (printFrame === frame) printFrame = null; }, { once: true });

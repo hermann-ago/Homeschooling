@@ -49,6 +49,7 @@ def inputs(ctx,row):
     return {'version':VERSION if frozen.get('lesson_sources') else 1,
         'material_content_policy':3,
         **({'book_question_policy':frozen['book_question_policy']} if frozen.get('book_question_policy') else {}),
+        **({'book_teaching_policy':frozen['book_teaching_policy']} if frozen.get('book_teaching_policy') else {}),
         **({'preparation_policy':frozen['preparation_policy']} if frozen.get('preparation_policy') else {}),
         **({'lesson_sources':frozen['lesson_sources']} if frozen.get('lesson_sources') else {}),
         'rubric':{k:rubric[k] for k in ('key','version','content','sha256')},
@@ -122,6 +123,7 @@ def public(row):
         'needs_source_review':'Script saved · source clarification needed',
         'failed':'Script saved · review could not finish'}
     return {'status':row['status'],'method':row['method'],'summary':summaries[row['status']],
+        **({'error':row['data']['error']} if row['status']=='failed' and (row.get('data') or {}).get('error') else {}),
         'advice_count':sum(f['severity']=='advice' for f in (row.get('data') or {}).get('findings',[]))}
 
 
@@ -150,6 +152,12 @@ def save(ctx,row,data,result,method):
     with ctx.store.transaction(kind='lesson.script_review',summary='Saved script review; no student records changed') as tx:
         prior=tx.get('lesson_script_reviews',record['id'])
         record['review_number']=1+max((r.get('review_number') or 0 for r in tx.find('lesson_script_reviews',guide_id=row['id'])),default=0)
+        if prior and (prior.get('review_number') or 0)<record['review_number']-1:
+            # A new review may reach the same outcome as an older review after
+            # an intervening failure. Preserve the new successful attempt's
+            # place in history instead of leaving that failure visibly latest.
+            record['id']='review-'+sha256_text([record['id'],record['review_number']])
+            prior=None
         saved = prior if prior else tx.insert('lesson_script_reviews',record)
     if method != 'shared_book_review' and (row.get('context_snapshot') or {}).get('library_material_key'):
         from .library_materials import refresh_review
@@ -204,9 +212,7 @@ def _run(ctx,row,*,human=False,retry=False):
     prompt+='CURRENT FEEDBACK POLICY:\n'+feedback_policy+'\n'
     from . import book_questions
     if book_questions.enabled(data):
-        prompt += book_questions.REVIEW + '\nCheck generated questions for clear, source-supported choices, '
-        prompt += 'one unambiguous answer and no hidden request to type an explanation. '
-        prompt += 'Check that questions follow coherent reading sections; do not demand more interruptions.\n'
+        prompt += (book_questions.REVIEW if book_questions.read_along(data) else book_questions.LEGACY_REVIEW) + '\n'
     from .page_script import VERSION as teaching_version
     focused=data.get('preparation_policy')==teaching_version
     if focused:
@@ -248,7 +254,8 @@ def _run(ctx,row,*,human=False,retry=False):
     except Exception as exc:
         # AIService preserves cache identities and uncertain spending reservations.
         # A later manual retry uses the identical input, never a blind replacement.
-        return save(ctx,row,data,{'findings':[],'error':str(exc)[:1200]},'ai')
+        return save(ctx,row,data,{'findings':[],'error':str(exc)[:1200],
+            **({'error_code':exc.code,'retry_after':exc.retry_after} if hasattr(exc,'retry_after') and hasattr(exc,'code') else {})},'ai')
 
 
 def require_audio(ctx,guide):
@@ -258,7 +265,9 @@ def require_audio(ctx,guide):
     from . import book_questions, library_materials
     topic = ctx.store.get('topics', row['topic_id'])
     if topic and library_materials.book_for(ctx.store, topic['subject_id']):
-        book_questions.validate_activities(guide.get('activities') or inputs(ctx, row)['activities'])
+        book_questions.validate_activities(guide.get('activities') or inputs(ctx, row)['activities'], row.get('context_snapshot'))
     if not (row.get('context_snapshot') or {}).get('script_review_policy') and not latest(ctx,row['id']):return
     report=status(ctx,row)
-    if report['status']!='approved':raise ValueError(report['summary']+'. Audio has not been requested. Review the saved script first.')
+    if report['status']!='approved':
+        reason=(' '+report['error']) if report.get('error') else ''
+        raise ValueError(report['summary']+'.'+reason+' Audio has not been requested. Review the saved script first.')

@@ -134,10 +134,7 @@ def test_original_page_script_replaces_whitespace_stall_once_without_accepting_p
     script = {'welcome': 'Let us read the next chapter.', 'turns': [
         {'type': 'read', 'text': 'An invented bird shared its grain.\n\nThe mouse thanked it.',
          'document_id': 3, 'page_start': 17, 'page_end': 19},
-        {'type': 'book_work', 'document_id': 3, 'page': 20, 'prompt': 'What did the bird share?',
-         'response': {'format': 'text', 'choices': [], 'matching_items': [], 'matching_options': [], 'allow_reuse': False}},
-        {'type': 'ask', 'purpose': 'discussion', 'prompt': 'The mouse thanked the bird.',
-         'response': {'format': 'true_false', 'choices': []}}], 'closing': 'We reached the end.'}
+        {'type': 'say', 'text': 'Sharing the grain gave the mouse something to eat.'}], 'closing': 'We reached the end.'}
     sent = []
     def respond(request):
         if request.url.path.endswith('/input_tokens'):
@@ -170,8 +167,8 @@ def test_original_page_script_replaces_whitespace_stall_once_without_accepting_p
                 assert ai.generate(prompt, schema=schema, max_output=16384) == recovered
     plan = page_script.compile_script(recovered, passage, context, 'en-US')
     assert plan['segments'][1]['text'] == script['turns'][0]['text']
-    assert plan['segments'][2]['content']['prompt'] == 'What did the bird share?'
-    assert plan['segments'][3]['content']['response_modes'] == ['choice']
+    assert plan['segments'][2]['text'] == script['turns'][1]['text']
+    assert not any(s['type'] in ('activity', 'action') for s in plan['segments'])
     assert plan['segments'][-1]['text'] == script['closing']
     assert len(sent) == 2
 

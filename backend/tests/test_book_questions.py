@@ -18,7 +18,7 @@ def script(response=None, purpose='discussion'):
 
 
 PASSAGE = {'sentences': [{'text': 'Both people expected to benefit from the trade.'}]}
-CONTEXT = {'book_question_policy': book_questions.VERSION}
+CONTEXT = {'book_question_policy': 'book-choice-2'}
 
 
 @pytest.mark.parametrize('response', [
@@ -116,6 +116,9 @@ def test_prepared_json_review_retry_restart_and_second_reader(harness, monkeypat
             job = h.ctx.books.begin(tx, reading['subject_id'], path, 'textbook')
         h.ctx.books.process(job['id'])
         readings.append(library.reading_view(h.ctx.store, reading))
+    neutral_context = library_materials.neutral_context
+    monkeypatch.setattr(library_materials, 'neutral_context', lambda ctx, data:
+        {**neutral_context(ctx, data), 'book_question_policy': 'book-choice-2'})
     requests = []
 
     def generate(prompt, **kwargs):
@@ -142,7 +145,7 @@ def test_prepared_json_review_retry_restart_and_second_reader(harness, monkeypat
     assert len(requests) == 2
     row = h.ctx.store.get('guides', made['guide_id'])
     assert row['context_snapshot']['teaching_script']['script'] == page_script.Script.model_validate(script()).model_dump()
-    assert row['context_snapshot']['book_question_policy'] == book_questions.VERSION
+    assert row['context_snapshot']['book_question_policy'] == 'book-choice-2'
     original = copy.deepcopy(row)
     reused = prepare(second, readings[1])
     assert reused['reused_book_material'] and len(requests) == 2

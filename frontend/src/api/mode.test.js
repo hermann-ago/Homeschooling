@@ -1,7 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { MODE_KEY, switchBrowserMode } from './mode';
+import { MODE_KEY, modeHref, switchBrowserMode } from './mode';
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('keeps section anchors after the mode query so Settings shortcuts reach their section', () => {
+  expect(modeHref('/settings#narrator-voices')).toBe('/settings?app_mode=live#narrator-voices');
+  expect(modeHref('/lesson?learner=1&topic=2#book')).toBe('/lesson?learner=1&topic=2&app_mode=live#book');
+  expect(modeHref('/api/voices/Brian/preview')).toBe('/api/voices/Brian/preview?app_mode=live');
+});
 
 it('reloads even when already on the test-mode settings URL', () => {
   const values = new Map();

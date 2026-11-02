@@ -3,7 +3,10 @@ export const MODE_KEY = 'homeschooling.test-mode';
 export const currentMode = typeof window === 'undefined' ? 'live' : window.localStorage.getItem(MODE_KEY) || 'live';
 
 export function modeHref(path) {
-  return `${path}${path.includes('?') ? '&' : '?'}app_mode=${encodeURIComponent(currentMode)}`;
+  const position = path.indexOf('#');
+  const base = position < 0 ? path : path.slice(0, position);
+  const fragment = position < 0 ? '' : path.slice(position);
+  return `${base}${base.includes('?') ? '&' : '?'}app_mode=${encodeURIComponent(currentMode)}${fragment}`;
 }
 
 export function switchBrowserMode(token) {

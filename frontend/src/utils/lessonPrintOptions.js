@@ -31,3 +31,21 @@ export function lessonPrintLayout({ pagesPerSheet = 1, paper = 'A4', orientation
   const columns = pagesPerSheet === 4 || pagesPerSheet === 2 && orientation === 'landscape' ? 2 : 1;
   return { pagesPerSheet, width, height, columns, rows: pagesPerSheet / columns };
 }
+
+/** Arrange first, then select physical sides for either manual-duplex pass. */
+export function arrangeLessonPrintSides(options) {
+  const { pagesPerSheet = 1, parity = 'all', reverse = false } = options;
+  lessonPrintLayout(options);
+  if (!['all', 'odd', 'even'].includes(parity)) throw new Error('Choose all sides, front sides or back sides.');
+  const pages = selectLessonPrintPages({ ...options, parity: 'all', reverse: false });
+  const sides = [];
+  const addSide = cells => sides.push({ number: sides.length + 1, pages: cells });
+  for (let index = 0; index < pages.length; index += pagesPerSheet) {
+    addSide(Array.from({ length: pagesPerSheet }, (_, cell) => pages[index + cell] ?? null));
+  }
+  // Keep an unmatched final front paired with a blank back. Omitting it from
+  // a reversed back pass would shift every remaining back onto the wrong sheet.
+  if (parity !== 'all' && sides.length % 2) addSide(Array(pagesPerSheet).fill(null));
+  const chosen = sides.filter(side => parity === 'all' || side.number % 2 === (parity === 'odd' ? 1 : 0));
+  return reverse ? chosen.reverse() : chosen;
+}

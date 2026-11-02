@@ -822,7 +822,8 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         if not authored:
             plan = guide_mod.sanitize_planner_activities(plan, allowed)
         guide_mod.validate_source_references(context(), subject["id"], plan)
-        if not authored and not any(isinstance(s, dict) and (s.get("type") == "action" or
+        from tutoring import book_questions
+        if not authored and not book_questions.read_along(learner_context) and not any(isinstance(s, dict) and (s.get("type") == "action" or
                 (s.get("type") == "activity" and guide_mod.requires_response(s.get("activity_kind"), s.get("content") or {})))
                 for s in plan.get("segments", [])):
             prompt = ("O que você aprendeu? Conte uma ideia com suas palavras." if language == "pt-BR"
@@ -841,7 +842,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         built['source_coverage']=lesson_quality.validate(built,learner_context['source_requirements'])
         from tutoring import book_questions
         if book_questions.enabled(learner_context):
-            try: book_questions.validate_activities(guide_mod.guide_activities(built))
+            try: book_questions.validate_activities(guide_mod.guide_activities(built), learner_context)
             except ValueError as exc: raise guide_mod.GuideError(str(exc)) from exc
     except guide_mod.GuideError as exc:
         if exc.invalid_response:

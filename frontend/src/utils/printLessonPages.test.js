@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const pdf = vi.hoisted(() => ({ getDocument: vi.fn() }));
 vi.mock('react-pdf', () => ({ pdfjs: pdf }));
 import { printLessonPages } from './printLessonPages';
-import { lessonPrintLayout, selectLessonPrintPages } from './lessonPrintOptions';
+import { arrangeLessonPrintSides, lessonPrintLayout, selectLessonPrintPages } from './lessonPrintOptions';
 
 let preview, loaded, page, decode;
 beforeEach(() => {
@@ -52,16 +52,62 @@ it('prints assigned pages in an invisible frame only after every image loads, wi
   expect(document.querySelector('iframe')).toBeNull();
 });
 
-it('applies book-number parity and reverse order, then arranges two pages per sheet including a partial last sheet', async () => {
+it('selects arranged front sides and reverses sides without reversing their book pages', async () => {
   await printLessonPages({ data: new Uint8Array([1]), first: 10, last: 14, offset: 5,
     selection: '5–9', parity: 'odd', reverse: true, pagesPerSheet: 2, paper: 'Letter', orientation: 'landscape' });
-  expect(loaded.getPage.mock.calls.map(([number]) => number)).toEqual([14, 12, 10]);
+  expect(loaded.getPage.mock.calls.map(([number]) => number)).toEqual([14, 10, 11]);
   const sheets = preview.document.querySelectorAll('.sheet');
   expect(sheets).toHaveLength(2);
-  expect([...sheets[0].querySelectorAll('img')].map(image => image.alt)).toEqual(['Book page 9', 'Book page 7']);
-  expect(sheets[1].querySelectorAll('img')).toHaveLength(1);
+  expect([...sheets[0].querySelectorAll('img')].map(image => image.alt)).toEqual(['Book page 9']);
+  expect([...sheets[1].querySelectorAll('img')].map(image => image.alt)).toEqual(['Book page 5', 'Book page 6']);
+  expect([...sheets].map(sheet => sheet.dataset.side)).toEqual(['3', '1']);
+  expect(sheets[0].querySelectorAll('.cell')).toHaveLength(2);
   expect(preview.document.querySelector('style').textContent).toContain('object-fit: contain');
   expect(preview.document.querySelector('style').textContent).toContain('repeat(2, minmax(0, 1fr))');
+});
+
+it('preserves a blank final back when reversing a manual two-sided print run', async () => {
+  await printLessonPages({ data: new Uint8Array([1]), first: 1, last: 5, pagesPerSheet: 2, parity: 'even', reverse: true });
+  expect(loaded.getPage.mock.calls.map(([number]) => number)).toEqual([3, 4]);
+  const sheets = [...preview.document.querySelectorAll('.sheet')];
+  expect(sheets.map(sheet => sheet.dataset.side)).toEqual(['4', '2']);
+  expect(sheets[0].querySelectorAll('.cell')).toHaveLength(2);
+  expect(sheets[0].querySelectorAll('img')).toHaveLength(0);
+  expect([...sheets[1].querySelectorAll('img')].map(image => image.alt)).toEqual(['Book page 3', 'Book page 4']);
+  expect(preview.print).toHaveBeenCalledTimes(1);
+});
+
+it('prints an intentionally blank back without requesting a nonexistent PDF page', async () => {
+  await printLessonPages({ data: new Uint8Array([1]), first: 2, last: 2, parity: 'even', pagesPerSheet: 4 });
+  expect(loaded.getPage).not.toHaveBeenCalled();
+  expect(preview.document.querySelectorAll('.sheet')).toHaveLength(1);
+  expect(preview.document.querySelector('.sheet').dataset.side).toBe('2');
+  expect(preview.document.querySelectorAll('.cell')).toHaveLength(4);
+  expect(preview.print).toHaveBeenCalledTimes(1);
+  expect(loaded.destroy).toHaveBeenCalledTimes(1);
+});
+
+it.each([1, 2, 4])('pairs every front with its back and keeps blank slots at %i pages per side', pagesPerSheet => {
+  const options = { first: 2, last: 10, offset: 1, pagesPerSheet };
+  const fronts = arrangeLessonPrintSides({ ...options, parity: 'odd' });
+  const backs = arrangeLessonPrintSides({ ...options, parity: 'even' });
+  expect(fronts.length).toBe(backs.length);
+  const combined = fronts.flatMap((front, index) => {
+    expect(backs[index].number).toBe(front.number + 1);
+    expect(front.pages).toHaveLength(pagesPerSheet);
+    expect(backs[index].pages).toHaveLength(pagesPerSheet);
+    return [...front.pages, ...backs[index].pages];
+  });
+  expect(combined.filter(page => page !== null)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10]);
+  expect(arrangeLessonPrintSides({ ...options, parity: 'even', reverse: true })).toEqual([...backs].reverse());
+});
+
+it('groups a sparse selection before splitting sides and does not add a blank side to all-sides printing', () => {
+  const options = { first: 10, last: 20, selection: '10, 12, 15–17', pagesPerSheet: 2 };
+  expect(arrangeLessonPrintSides({ ...options, parity: 'odd' }).map(side => side.pages)).toEqual([[10, 12], [17, null]]);
+  expect(arrangeLessonPrintSides({ ...options, parity: 'even' }).map(side => side.pages)).toEqual([[15, 16], [null, null]]);
+  expect(arrangeLessonPrintSides({ ...options, reverse: true }).map(side => side.pages)).toEqual([[17, null], [15, 16], [10, 12]]);
+  expect(() => arrangeLessonPrintSides({ ...options, parity: 'unknown' })).toThrow('Choose all sides');
 });
 
 it('does not open a print dialog for an invalid range or a failed partial render', async () => {

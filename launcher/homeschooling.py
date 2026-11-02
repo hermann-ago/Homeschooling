@@ -161,7 +161,7 @@ def start(config: HostConfig, port: int, open_browser: bool):
     record = _read_record(config)
     if _process(record):
         print(f"The home server is already running (PID {record['pid']}).")
-        announce(record["port"], open_browser)
+        announce(record["port"], open_browser, config.get('https'))
         return 0
     if record:
         record_path(config).unlink(missing_ok=True)  # stale record from an earlier run
@@ -205,7 +205,7 @@ def start(config: HostConfig, port: int, open_browser: bool):
     if os.name != "nt":
         os.chmod(path, 0o600)
     config.update(port=port)
-    announce(port, open_browser)
+    announce(port, open_browser, config.get('https'))
     return 0
 
 
@@ -221,11 +221,16 @@ def server_environment(config: HostConfig):
     return environment
 
 
-def announce(port: int, open_browser: bool):
+def announce(port: int, open_browser: bool, secure=None):
     print("\nHomeschooling is running.")
     print(f"  On this computer:   http://localhost:{port}")
     for address in lan_addresses():
         print(f"  Other home devices: http://{address}:{port}")
+        if secure and secure.get('enabled'):
+            print(f"  Camera connection:  https://{address}:{secure.get('port', 8443)}")
+    if secure and secure.get('enabled'):
+        print('Windows network photos: open Windows Camera from the lesson, then choose the saved photo.')
+        print('Optional live browser preview: Settings > Camera & photos > secure connection setup.')
     print("Keep this computer awake and on the home network while others use it.")
     print("Nothing is exposed to the internet; no router or tunnel settings are needed.")
     if open_browser:

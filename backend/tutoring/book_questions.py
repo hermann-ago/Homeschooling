@@ -1,26 +1,30 @@
-"""Versioned, selection-only comprehension checks for optional family reading."""
+"""Read-along policy for extra reading; legacy selection lessons stay readable."""
 from typing import Literal
 
 from pydantic import Field, model_validator
 
 from .activities import Choice, Content, QuestionContent
 
-VERSION = 'book-choice-2'
+VERSION = 'book-read-along-3'
 
 AUTHORING = '''BOOK READING QUESTION POLICY (overrides older teaching guidance)
-Keep reading enjoyable and continuous. Finish a coherent story/section before its
-brief comprehension check; normally use two or three questions, one at a time.
-Every AI-generated ask must use purpose discussion and response format single_choice
-with two to four short, distinct choices, or true_false. Yes/no questions use
-single_choice with localized Yes and No labels. Include one clear answer and
-plausible alternatives grounded in the assigned text; keep the answer private.
-No typed explanations, retellings, matching, multi-select or extra "why?" task.
-You can check reasoning by offering possible reasons as choices. Do not ask a
-question inside say/welcome/closing that would need an unrepresented answer.
-This selection-only rule also applies to printed discussion and brainstorming
-questions. They are not mandatory writing assignments for book reading. Replace
-them with a few source-grounded selection checks or omit them; keep the original
-story and explanatory reading intact. Never use book_work to bypass this rule.'''
+Extra reading books are read-along lessons, not workbook assignments. Read the
+assigned source completely and in order, including its printed reflection,
+brainstorming and discussion questions. Keep these questions in read turns as
+the author's words: they offer context or food for thought, not a request for
+the reader to submit an answer. Do not convert them to ask/book_work, replace
+them with choice checks, or silently drop them. Do not add an automatic quiz,
+retelling, written/cursive task or an answer request hidden in teacher narration.
+Use only read and say turns. The normal reading/Continue controls can advance
+the lesson without assessing listening as mastery. Respond to actual learner
+questions when asked; do not invent responses or require a follow-up answer.
+Understand the passage's purpose before explaining: its central idea, argument,
+theme or what a story illustrates. Teach that meaning, with relevant causal
+links or comparisons, rather than incidental plot trivia or generic vocabulary.
+Adapt to any genre and subject; do not force every book into a moral or argument.
+Let explanations and their placement follow the material, without a target
+number, spacing or word count. Preserve continuity when an interruption would
+weaken understanding. No question or explanation is required at each break.'''
 
 FEEDBACK = '''BOOK READING FEEDBACK POLICY (overrides older feedback guidance)
 Keep feedback brief and return to reading. A selection is a complete answer;
@@ -32,7 +36,7 @@ evidence_requirement answer and require_reasoning false. Do not add another
 question after a correct answer. A free student question gets a concise answer,
 without a compulsory follow-up. Selection shows recognition, not explained mastery.'''
 
-REVIEW = '''BOOK READING QUESTION POLICY
+LEGACY_REVIEW = '''BOOK READING QUESTION POLICY
 Generated checks use ask_question, answer_format single_choice with two to four
 distinct choices or true_false, response_modes ["choice"], answer evidence and no
 required reasoning. The authoring purpose discussion compiles to ask_question;
@@ -42,9 +46,23 @@ one at a time. Do not require typed explanations, retelling, matching or multi-s
 Printed brainstorming and discussion questions must not become writing tasks.
 All answerable activities, including book_work, use true_false or single_choice.'''
 
+REVIEW = '''BOOK READING QUESTION POLICY
+For extra reading, preserve printed reflection/brainstorming/discussion questions
+as narrated source text, not answerable activities. Do not demand a quiz, choice
+conversion, typed response or retelling. Flag any required answer as a task error.
+Check the explanations against the passage's actual purpose and central meaning,
+not incidental plot details. Adapt to its genre and subject; do not impose a
+particular theme, number of pauses, spacing or minimum explanation length.
+Printed questions in read_source are not missing response stops. Distinguish
+the author's rhetorical questions from teacher-added requests for an answer.'''
+
 
 def enabled(context):
-    return (context or {}).get('book_question_policy') in ('book-choice-1', VERSION)
+    return (context or {}).get('book_question_policy') in ('book-choice-1', 'book-choice-2', VERSION)
+
+
+def read_along(context):
+    return (context or {}).get('book_question_policy') == VERSION
 
 
 def validate_book_work(turn):
@@ -54,12 +72,14 @@ def validate_book_work(turn):
         validate_labels(turn.response.choices)
 
 
-def validate_activities(activities):
+def validate_activities(activities, context=None):
     from .activity_engine import RESPONSE_KINDS
     for activity in activities:
         kind, content = activity['kind'], activity.get('content') or {}
         if kind not in RESPONSE_KINDS:
             continue
+        if read_along(context):
+            raise ValueError('Extra reading books read printed reflection questions aloud without requiring answers or adding a quiz.')
         if (kind not in ('ask_question', 'request_book_work') or content.get('answer_format') not in ('true_false', 'single_choice')
                 or content.get('response_modes') != ['choice'] or content.get('require_reasoning')):
             raise ValueError('Update this book lesson to true/false or single-choice questions before preparing voice.')

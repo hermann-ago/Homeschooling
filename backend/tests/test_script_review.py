@@ -96,6 +96,18 @@ def test_review_schema_limits_findings_to_actual_activity_ids():
         with pytest.raises(ValueError):schema.model_validate({'findings':[{**valid['findings'][0],'activity_ids':[bad]}]})
 
 
+def test_failed_review_exposes_provider_reason_without_discarding_saved_script(harness, monkeypatch):
+    h=harness;s,g=prepare(h,monkeypatch)
+    row=h.ctx.store.get('guides',g['guide_id'])
+    data=script_review.inputs(h.ctx,row)
+    script_review.save(h.ctx,row,data,{'findings':[],'error':'AI provider returned 429. Try again later.'},'ai')
+    public=script_review.status(h.ctx,row)
+    assert public['status']=='failed' and '429' in public['error']
+    with pytest.raises(ValueError,match='429.*Audio has not been requested'):
+        script_review.require_audio(h.ctx,g)
+    assert h.ctx.store.get('guides',row['id'])==row
+
+
 def test_reviewer_receives_real_acknowledgment_and_waiting_rules(harness,monkeypatch):
     h=harness;s,g=prepare(h,monkeypatch);row=h.ctx.store.get('guides',g['guide_id'])
     with h.ctx.store.transaction() as tx:tx.delete('lesson_script_reviews',script_review.latest(h.ctx,row['id'])['id'])

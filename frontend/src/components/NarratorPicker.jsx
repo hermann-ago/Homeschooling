@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { booksApi } from '../api/books';
 import { Button } from '../ui';
 import { voiceLabel } from '../utils/narratorVoices';
+import InworldVoiceSamples from './InworldVoiceSamples';
 
 export default function NarratorPicker({topic,onChanged}) {
   const client=useQueryClient();
@@ -15,7 +16,8 @@ export default function NarratorPicker({topic,onChanged}) {
   const voices=(data?.voices||[]).filter(v=>!current?.language || !v.language || v.language===current.language);
   const value=chosen||current?.voice||'';
   const voice=voices.find(v=>v.id===value);
-  const visible=voices.filter(v=>v.id===value||`${v.name} ${v.description} ${Object.values(v.labels).join(' ')}`.toLowerCase().includes(filter.toLowerCase()));
+  const sampleGroups=data?.groups?.filter(group=>group.language===current?.language);
+  const visible=voices.filter(v=>v.id===value||`${v.name} ${v.description} ${Object.values(v.labels || {}).join(' ')}`.toLowerCase().includes(filter.toLowerCase()));
   const save=async()=>{
     setBusy(true);setMessage('');
     try{await booksApi.saveNarrator(topic,value);await client.invalidateQueries({queryKey:['lesson-narrator',topic]});await client.invalidateQueries({queryKey:['reader']});await client.invalidateQueries({queryKey:['curriculum-preparation']});onChanged?.();setMessage('Narrator selected. Create the recorded voice to hear this lesson with it.');}
@@ -29,7 +31,11 @@ export default function NarratorPicker({topic,onChanged}) {
       {visible.map(v=><option key={v.id} value={v.id}>{voiceLabel(v)}</option>)}
     </select></label>
     {voice?.description&&<p className="text-muted">{voice.description}</p>}
-    {voice?.preview_url&&<audio key={voice.id} controls preload="none" src={voice.preview_url} aria-label={`Preview ${voice.name}`} className="w-full"/>}
+    {sampleGroups?.length > 0 ? <InworldVoiceSamples packet={{groups:sampleGroups}} english={value} portuguese={value} disabled={busy}
+      initialLanguage={current.language}
+      instruction="Choose a voice, then save it for this lesson below."
+      onChoose={(_language,voice)=>{setChosen(voice);setMessage('');}}/>
+      : voice?.preview_url&&<audio key={voice.id} controls preload="none" src={voice.preview_url} aria-label={`Preview ${voice.name}`} className="w-full"/>}
     <Button size="sm" disabled={busy||!voice} onClick={save}>Use narrator for this lesson</Button>
     {(message||error)&&<p role="status">{message||error.message}</p>}
   </div>;

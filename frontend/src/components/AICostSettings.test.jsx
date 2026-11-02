@@ -14,7 +14,7 @@ const status = { provider: 'openai', keys: { openai: false, google: true }, voic
 beforeEach(() => { vi.clearAllMocks(); api.voices.mockResolvedValue({voices:[]}); api.aiStatus.mockResolvedValue(status); api.aiKey.mockResolvedValue({ configured: true }); });
 afterEach(cleanup);
 
-it('saves Flash sample choices while children inherit and refreshes lesson narrator caches', async () => {
+it('links to the visible narrator section and does not overwrite its choices when saving provider settings', async () => {
   const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   const voices = ['Brian','Dennis'].map(id=>({id,name:id,labels:{},language:'en-US',preview_url:`/api/ai/inworld/voices/${id}/preview`}));
@@ -22,13 +22,14 @@ it('saves Flash sample choices while children inherit and refreshes lesson narra
   api.aiStatus.mockResolvedValue({...status,keys:{...status.keys,inworld:true},voice:{provider:'inworld',inworld_enabled:true,
     inworld_voice_en:'Brian',inworld_voice_pt:'Bruna',inworld_learner_voices:[{child_id:1,name:'Lucas',english_voice:null,portuguese_voice:null}]}});
   render(<DeviceContext.Provider value={{host:true}}><AICostSettings/></DeviceContext.Provider>,client);
-  fireEvent.click(await screen.findByRole('button',{name:'Use Dennis for English'}, {timeout:5000}));
+  expect(await screen.findByRole('link',{name:'Choose narrator voices and listen to samples'})).toBeTruthy();
   fireEvent.click(screen.getByRole('button',{name:'Save teaching and voice settings'}));
-  await waitFor(()=>expect(api.aiSettings).toHaveBeenCalledWith(expect.objectContaining({voice_provider:'inworld',
-    inworld_voice_en:'Dennis',inworld_learner_voices:[{child_id:1,english_voice:null,portuguese_voice:null}]})));
+  await waitFor(()=>expect(api.aiSettings).toHaveBeenCalledWith(expect.objectContaining({voice_provider:'inworld'})));
   expect(api.aiSettings.mock.calls[0][0]).not.toHaveProperty('inworld_model');
+  expect(api.aiSettings.mock.calls[0][0]).not.toHaveProperty('inworld_voice_en');
+  expect(api.aiSettings.mock.calls[0][0]).not.toHaveProperty('inworld_learner_voices');
   expect(invalidate).toHaveBeenCalledWith({queryKey:['narrator-voices']});
-  expect(api.voices).toHaveBeenCalledWith('inworld');
+  expect(api.voices).not.toHaveBeenCalled();
 });
 
 it('shows and saves each learner’s narrator choices without sending display names', async () => {

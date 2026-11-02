@@ -163,6 +163,79 @@ def test_flash_terminal_timing_marker_needs_no_local_alignment(harness, monkeypa
     assert duration > 0 and offsets == [0] and source == 'provider-alignment'
 
 
+def test_flash_internal_empty_markers_preserve_exact_script_and_resume_paid_reply(harness, monkeypatch):
+    from tutoring import narration_alignment
+    calls = []
+    text = 'Read the passage. ... And continue the quotation.'
+    def respond(request):
+        calls.append(True)
+        reply = speech(text).json()
+        timing = reply['timestampInfo']['characterAlignment']
+        for index in (len(text), 17, 17):
+            boundary = timing['characterEndTimeSeconds'][index - 1]
+            timing['characters'].insert(index, '')
+            timing['characterStartTimeSeconds'].insert(index, boundary)
+            timing['characterEndTimeSeconds'].insert(index, boundary)
+        return httpx.Response(200, json=reply)
+    s, package = setup(harness, respond)
+    package = {**package, 'sentences': [{'text': 'Read the passage.'}, {'text': '...'},
+        {'text': 'And continue the quotation.'}], 'activities': [{'start_sentence': 0, 'end_sentence': 2}]}
+    original = inworld_audio.recording
+    monkeypatch.setattr(inworld_audio, 'recording', lambda *a: (_ for _ in ()).throw(ValueError('Old timing reader failed')))
+    with pytest.raises(ValueError, match='Old timing reader'):
+        inworld_audio.generate(harness.ctx, s['genghis'], package)
+    monkeypatch.setattr(inworld_audio, 'recording', original)
+    monkeypatch.setattr(narration_alignment, 'align', lambda *a: pytest.fail('Exact provider timings need no acoustic fallback'))
+    made = inworld_audio.generate(harness.ctx, s['genghis'], package)
+    assert made['job_status'] == 'ready' and len(calls) == 1
+    assert package['sentences'][1]['text'] == '...'
+    row = harness.ctx.store.get('audio_tracks', made['track_id'])
+    manifest = json.loads(harness.ctx.file_bytes(row['manifest_path']))
+    assert audio.validate_manifest(manifest, package['passage_sha256'], 3)[0]
+    assert manifest['timing'] == 'provider-alignment'
+
+
+def test_flash_grouped_url_characters_resume_saved_audio_with_exact_boundaries(harness,monkeypatch):
+    from tutoring import narration_alignment
+    calls=[]
+    text='Read https://www.example.com/source. Keep reading.'
+    def respond(request):
+        calls.append(True)
+        result=speech(text).json()
+        timing=result['timestampInfo']['characterAlignment']
+        at=text.index('/w')
+        timing['characters'][at:at+2]=['/w']
+        timing['characterStartTimeSeconds'].pop(at+1)
+        timing['characterEndTimeSeconds'].pop(at)
+        return httpx.Response(200,json=result)
+    s,package=setup(harness,respond)
+    package={**package,'sentences':[{'text':'Read https://www.example.com/source.'},{'text':'Keep reading.'}],
+        'activities':[{'start_sentence':0,'end_sentence':1}]}
+    original=inworld_audio.recording
+    monkeypatch.setattr(inworld_audio,'recording',lambda *a:(_ for _ in ()).throw(ValueError('Older timestamp reader')))
+    with pytest.raises(ValueError,match='Older timestamp reader'):
+        inworld_audio.generate(harness.ctx,s['genghis'],package)
+    monkeypatch.setattr(inworld_audio,'recording',original)
+    monkeypatch.setattr(narration_alignment,'align',lambda *a:pytest.fail('Exact fragment boundaries need no fallback'))
+    made=inworld_audio.generate(harness.ctx,s['genghis'],package)
+    assert made['job_status']=='ready' and len(calls)==1
+    row=harness.ctx.store.get('audio_tracks',made['track_id'])
+    manifest=json.loads(harness.ctx.file_bytes(row['manifest_path']))
+    assert manifest['timing']=='provider-alignment'
+    assert audio.validate_manifest(manifest,package['passage_sha256'],2)[0]
+
+
+def test_grouped_timing_never_invents_a_sentence_boundary():
+    from tutoring.elevenlabs_audio import timed_recording
+    result=response_for('First. Next.').json()
+    timing=result['alignment'];at=len('First.')
+    timing['characters'][at:at+2]=[' N']
+    timing['character_start_times_seconds'].pop(at+1)
+    timing['character_end_times_seconds'].pop(at)
+    with pytest.raises(ValueError,match='crosses a sentence boundary'):
+        timed_recording(result,[{'text':'First.'},{'text':'Next.'}])
+
+
 def test_child_can_inherit_changed_family_narrator_without_purchasing(harness):
     s, _ = setup(harness, lambda request: pytest.fail('Preferences never synthesize'))
     child = s['lucas']['id']
@@ -174,3 +247,28 @@ def test_child_can_inherit_changed_family_narrator_without_purchasing(harness):
     assert choice['english_voice'] is None
     assert inworld_voices.narrator(harness.ctx, 'en-US', child) == 'Oliver'
     assert not harness.ctx.ai.ledger.requests()
+
+
+def test_phone_can_save_only_narrator_preferences_without_speech_or_account_changes(harness):
+    from fastapi.testclient import TestClient
+    s, _ = setup(harness, lambda request: pytest.fail('Preference changes must never synthesize'))
+    with harness.ctx.store.transaction() as tx:
+        future = tx.insert('children', {'name': 'Future learner'})
+    retained = {'child_id': future['id'], 'english_voice': 'Dennis', 'portuguese_voice': 'Maitê'}
+    harness.config.update(tts={**harness.config.get('tts'), 'inworld_learner_voices': [retained]})
+    remote = TestClient(harness.app, client=('192.168.1.9', 1234))
+    before = dict(harness.config.get('tts'))
+    payload = {'english_voice': 'Oliver', 'portuguese_voice': 'Bruna',
+        'learners': [{'child_id': s['lucas']['id'], 'english_voice': None, 'portuguese_voice': None}]}
+    saved = remote.put('/api/ai/inworld/narrators', json=payload)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['english_voice'] == 'Oliver' and 'synthetic-inworld-key' not in saved.text
+    assert harness.config.get('tts')['provider'] == before['provider']
+    assert retained in harness.config.get('tts')['inworld_learner_voices']
+    assert harness.ctx.ai.key('inworld') == 'synthetic-inworld-key-never-real'
+    assert not harness.ctx.ai.ledger.requests()
+    assert remote.put('/api/ai/settings', json={'voice_provider': 'elevenlabs'}).status_code == 403
+    assert remote.put('/api/ai/inworld/narrators', json={**payload, 'provider': 'elevenlabs'}).status_code == 422
+    assert remote.put('/api/ai/inworld/narrators', json={**payload, 'english_voice': 'Bruna'}).status_code == 400
+    assert harness.call('PUT', '/api/ai/inworld/narrators', role='tutor', json=payload).status_code == 403
+    assert inworld_voices.narrator(harness.ctx, 'en-US', s['lucas']['id']) == 'Oliver'

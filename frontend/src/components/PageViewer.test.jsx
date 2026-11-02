@@ -151,4 +151,32 @@ describe('PageViewer sizing', () => {
     expect(screen.getByRole('button', { name: 'Print lesson pages' }).disabled).toBe(true);
     expect(viewerMocks.print).not.toHaveBeenCalled();
   });
+
+  it('retains the selected range and multi-page layout when reopening for the back pass', async () => {
+    viewerMocks.print.mockImplementation(async ({ onReady }) => onReady());
+    const slot = { document_id: 9, page_from: 10, page_to: 15, pdf_page_offset: 4 };
+    const view = render(<FeedbackProvider><PageViewer slot={slot} /></FeedbackProvider>);
+    await screen.findByTestId('pdf-page');
+    fireEvent.click(screen.getByRole('button', { name: 'Print lesson pages' }));
+    fireEvent.change(screen.getByLabelText('Book pages'), { target: { value: '10–14' } });
+    fireEvent.change(screen.getByLabelText('Pages per sheet'), { target: { value: '2' } });
+    fireEvent.change(screen.getByLabelText('Sides to print'), { target: { value: 'odd' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open print dialog' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Print lesson pages' }));
+    expect(screen.getByLabelText('Book pages').value).toBe('10–14');
+    expect(screen.getByLabelText('Pages per sheet').value).toBe('2');
+    fireEvent.change(screen.getByLabelText('Sides to print'), { target: { value: 'even' } });
+    expect(screen.getByText('Back of sheet 1: 12, 13')).toBeTruthy();
+    expect(screen.getByText('Back of sheet 2: blank, blank')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open print dialog' }));
+    await waitFor(() => expect(viewerMocks.print).toHaveBeenCalledTimes(2));
+    expect(viewerMocks.print.mock.calls[1][0]).toMatchObject({ selection: '10–14', pagesPerSheet: 2, parity: 'even' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    view.rerender(<FeedbackProvider><PageViewer slot={{ ...slot, page_from: 20, page_to: 21 }} /></FeedbackProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Print lesson pages' }).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Print lesson pages' }));
+    expect(screen.getByLabelText('Book pages').value).toBe('20–21');
+    expect(screen.getByLabelText('Sides to print').value).toBe('all');
+  });
 });

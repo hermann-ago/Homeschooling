@@ -15,7 +15,7 @@ export default function ScriptReview({guideId}) {
       await refetch();await client.invalidateQueries({queryKey:['curriculum-preparation']});
     } catch(e){setProblem(e.message);} finally{setBusy(false);}
   };
-  return <details className="bg-paper rounded-lg p-3 text-sm">
+  return <details className="bg-paper rounded-lg p-3 text-sm" open={data?.status.status==='failed' ? true : undefined}>
     <summary className="cursor-pointer font-semibold">Script review</summary>
     {data&&<><p className="mt-2">{data.status.summary}</p><p className="text-xs text-muted mt-1">A source-consistency and teaching review. It does not independently verify every fact.</p>
       {data.review?.data?.provider&&<p className="text-xs text-muted mt-1">Review provider: {data.review.data.provider==='google'?'Google':'OpenAI'}</p>}

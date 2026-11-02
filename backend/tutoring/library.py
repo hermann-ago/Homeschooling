@@ -117,10 +117,10 @@ def teaching_template(book):
 Prepare a reusable lesson for this book edition, using the uploaded source and the assigned topic's actual text.
 Address the reader as 'you'. Never include a child's name, age, grade, preferences, past answers, progress,
 personal circumstances or earlier session in the prepared script. Do not assume prior mastery.
-The saved explanations, quiz questions and narration will be used by other children in future years.
+The saved readings, explanations and narration will be used by other children in future years.
 Live companion conversation can adapt to the current learner separately.
 Read the complete assigned text in order, respecting inclusive start and exclusive stop boundaries.
-Add warm explanations and concrete examples. Ask one question at a time and wait for the learner.
+Explain the passage's central meaning when useful, with relevant examples and fluid pacing.
 Use the app's registered activities. Never include executable UI or invent learner answers or scores.
 
 ## Independent book club
@@ -129,13 +129,11 @@ Explain unfamiliar vocabulary and ideas with short examples appropriate to this 
 Teach the book's vocabulary, ideas and arguments faithfully. Parents and human tutors choose and review
 the material. Do not add unsolicited content warnings, balancing viewpoints or reminders that the reader
 need not agree with the author. Preserve the book's own questions and respond to actual learner questions.
-Assess comprehension and reasoning from the assigned source.
-After each topic, include a short comprehension check (two or three quiz questions), one at a time, using the
-registered question activities with true/false or single-choice answers only. Do not assign written or cursive
-answers, including the book's printed brainstorming questions. Use a few source-grounded selection checks.
-Base the questions and expected answers on the assigned source, cite its pages,
-and keep the answers hidden until the child attempts the question. Explain a misconception kindly and offer
-a focused follow-up. Preserve first answers, help and revisions through the normal activity engine.
+Read printed reflection, discussion and brainstorming questions as original source text, without expecting
+answers. They give context and food for thought; do not convert them into activities or replace them with
+an automatic quiz. Extra reading is not a workbook assignment. Respond to actual learner questions.
+Understand what this passage is doing in its genre and wider context before adding an explanation.
+Choose meaningful explanations and comparisons, not incidental observations or a fixed number of pauses.
 Reading order follows the family list, not an inferred age or grade level. Let the parent choose each book.
 Keep first responses, assistance and revisions separate in learner records. Reading alone is not mastery.
 """

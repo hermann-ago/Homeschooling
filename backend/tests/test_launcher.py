@@ -21,3 +21,13 @@ def test_autostart_starts_windowless_without_opening_a_browser(monkeypatch):
     assert command.startswith(f'"{scripts / "pythonw.exe"}" "')
     assert f'"{Path(launcher.__file__).resolve()}"' in command
     assert command.endswith(" start --no-browser")
+
+
+def test_secure_addresses_are_announced_with_windows_console_safe_text(monkeypatch, capsys):
+    monkeypatch.setattr(launcher, 'lan_addresses', lambda: ['192.168.15.5'])
+    launcher.announce(8000, False, {'enabled': True, 'port': 8443})
+    output = capsys.readouterr().out
+    assert 'https://192.168.15.5:8443' in output
+    assert 'open Windows Camera from the lesson' in output
+    assert 'Optional live browser preview' in output
+    output.encode('cp1252')
