@@ -120,8 +120,20 @@ def _now():
 
 
 def language_for(subject_name: str | None) -> str:
-    """The narration language of a subject: Portuguese subjects are read in Brazilian Portuguese."""
+    """Fallback when no topic records a language: guess from the subject's name."""
     return "pt-BR" if "portug" in (subject_name or "").lower() else "en-US"
+
+
+LANGUAGES = {"pt": "pt-BR", "pt-br": "pt-BR", "en": "en-US", "en-us": "en-US"}
+
+
+def language_of(store, subject: dict) -> str:
+    """The subject's teaching and narration language, from its topics' recorded
+    languages (the books' own language), so any subject name works."""
+    from collections import Counter
+    seen = Counter(LANGUAGES.get(str(t.get("language") or "").casefold()) for t in store.find("topics", subject_id=subject["id"]))
+    seen.pop(None, None)
+    return seen.most_common(1)[0][0] if seen else language_for(subject.get("name"))
 
 
 def month_key(moment: datetime | None = None) -> str:

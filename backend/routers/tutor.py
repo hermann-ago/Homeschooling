@@ -334,7 +334,7 @@ def _narrator(topic: dict, voice: str | None = None, rate: float | None = None, 
     """The requested voice, else the learner's confirmed narrator preference, else the host default,
     keeping only voices in the subject's language."""
     subject = store().get("subjects", topic["subject_id"])
-    language = audio_mod.language_for(subject["name"])
+    language = audio_mod.language_of(store(), subject)
     tts = context().config.get("tts", {})
     selected_provider=provider or tts.get('provider','google-gemini')
     if selected_provider == 'inworld':
@@ -367,7 +367,7 @@ def _generate(topic: dict, voice: str, rate: float, dry_run: bool, approval: dic
             from tutoring.narration import generate
             subject = store().get("subjects", topic["subject_id"])
             return generate(context(), topic, package, voice=voice, rate=rate, dry_run=dry_run,
-                            language=audio_mod.language_for(subject["name"]))
+                            language=audio_mod.language_of(store(), subject))
         if dry_run:
             return audio_mod.generate(context(), store_tx_readonly(), topic, package, voice=voice, rate=rate,
                                       dry_run=True)
@@ -430,7 +430,7 @@ def import_narration(learner: int = Form(...), topic: int = Form(...), guide_id:
         if not isinstance(descriptions, list):
             raise ValueError('Audio block metadata must be a list')
         return install(context(), selected, guide, descriptions, data, voice=voice,
-                       language=audio_mod.language_for(subject['name']), rate=speaking_rate)
+                       language=audio_mod.language_of(store(), subject), rate=speaking_rate)
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -495,7 +495,7 @@ def reader_narration(payload: ReaderNarrationRequest):
             from tutoring.narration import generate
             subject = store().get("subjects", topic["subject_id"])
             return generate(context(), topic, guide, voice=voice, rate=rate, dry_run=payload.dry_run,
-                            language=audio_mod.language_for(subject["name"]), maximum_usd=payload.maximum_usd,
+                            language=audio_mod.language_of(store(), subject), maximum_usd=payload.maximum_usd,
                             **({'provider':selected_provider} if selected_provider else {}), **repair_options)
         if payload.dry_run:
             return audio_mod.generate(context(), store_tx_readonly(), topic, guide, voice=voice, rate=rate, dry_run=True)
@@ -679,7 +679,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         return {"reused": True, "estimated_cost_usd": 0, "allowed": True, "guide_id": existing["guide_id"]} if payload.dry_run else existing
     subject = store().get("subjects", topic["subject_id"])
     child = store().get("children", payload.learner)
-    language = audio_mod.language_for(subject["name"])
+    language = audio_mod.language_of(store(), subject)
     configured = context().config.get("ai", {}).get("guide_model")
     models = (configured, *guide_mod.DEFAULT_MODELS) if configured else guide_mod.DEFAULT_MODELS
     from tutoring import skills
@@ -985,7 +985,7 @@ def action_audio(session_id: str, payload: ActionAudioRequest):
     voice, rate = _narrator(topic)
     try:
         return generate(context(), topic, package, voice=voice, rate=rate, dry_run=payload.dry_run,
-            language=audio_mod.language_for(subject["name"]), purpose="feedback")
+            language=audio_mod.language_of(store(), subject), purpose="feedback")
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -1018,7 +1018,7 @@ def feedback_audio(session_id: str, payload: FeedbackAudioRequest):
     else:voice, rate = _narrator(topic,provider=provider)
     try:
         result = generate(context(), topic, package, voice=voice, rate=rate, dry_run=payload.dry_run,
-                          language=audio_mod.language_for(subject["name"]), purpose="feedback",maximum_usd=payload.maximum_usd,
+                          language=audio_mod.language_of(store(), subject), purpose="feedback",maximum_usd=payload.maximum_usd,
                           **({'provider':provider} if provider else {}))
         return result
     except ValueError as exc:

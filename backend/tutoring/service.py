@@ -617,7 +617,7 @@ class TutorService:
             resume_lesson = {"title": self.store.get("topics", unfinished["topic_id"])["title"],
                              "path": self.reader_path(unfinished)}
         return {"learner": {"child_id": child_id, "name": self.store.get("children", child_id)["name"]},
-                "subject_name": subject["name"], "language": audio_mod.language_for(subject["name"]),
+                "subject_name": subject["name"], "language": audio_mod.language_of(self.store, subject),
                 "session_id": session_id,
                 "interactive": bool(playback), "resume_lesson": resume_lesson,
                 "resume_current_lesson": {"path": self.reader_path(same_lesson)}
@@ -717,18 +717,18 @@ class TutorService:
             from .elevenlabs_audio import narrator
             subject = self.store.get('subjects', topic['subject_id'])
             from .voice_choices import selected
-            preferred_voice = selected(self.store, topic['id']) or narrator(self.ctx, audio_mod.language_for(subject['name']), subject['child_id'])
+            preferred_voice = selected(self.store, topic['id']) or narrator(self.ctx, audio_mod.language_of(self.store, subject), subject['child_id'])
         if preferred_provider == 'inworld':
             from .inworld_voices import narrator, selected
             subject = self.store.get('subjects', topic['subject_id'])
             choice = selected(self.store, topic['id'])
-            preferred_voice = choice or narrator(self.ctx, audio_mod.language_for(subject['name']), subject['child_id'])
+            preferred_voice = choice or narrator(self.ctx, audio_mod.language_of(self.store, subject), subject['child_id'])
             if choice:
                 explicit = None
         if preferred_provider == "kokoro-local":
             from .local_audio import narrator
             subject = self.store.get("subjects", topic["subject_id"])
-            preferred_voice = narrator(self.ctx, audio_mod.language_for(subject["name"]))
+            preferred_voice = narrator(self.ctx, audio_mod.language_of(self.store, subject))
         rows = {r['id']: r for r in self.store.find("audio_tracks", topic_id=topic["id"])}
         from .library_materials import book_for, audio_rows
         book = book_for(self.store, topic['subject_id'])

@@ -64,3 +64,14 @@ def test_checked_source_corrects_old_capture_without_rewriting_it(harness):
         tx.update('book_companions',row['id'],{'data':row['data']})
     assert activity_content(h.ctx,action)==content
     assert task_content({**content,'evidence_requirement':'spelling'},{'instruction':quote})['evidence_requirement']=='spelling'
+
+
+def test_original_page_scripts_keep_the_writers_declared_evidence():
+    # A handwriting task the writer chose from the page is not relaxed by subject heuristics.
+    content = {'prompt': 'Coloque o til nas palavras.', 'evidence_requirement': 'handwriting',
+               'response_modes': ['photo', 'parent_review']}
+    playback = {'context_snapshot': {'prepared_guide': {'teaching_script': {'version': 'original-pages-3'}}}}
+    ctx = SimpleNamespace(store=SimpleNamespace(get=lambda table, key: playback if table == 'lesson_playback' else
+                                                pytest.fail('Declared evidence needs no companion lookup')))
+    action = {'session_id': 's', 'activity_kind': 'request_book_work', 'activity_content': content}
+    assert activity_content(ctx, action) == content

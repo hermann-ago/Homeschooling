@@ -76,13 +76,13 @@ class NarratorChoice(BaseModel):
 def topic_narrator(topic_id: int):
     from tutoring.voice_choices import selected
     from tutoring.elevenlabs_audio import narrator
-    from tutoring.audio import language_for
+    from tutoring.audio import language_of
     topic = get_or_404(store(), 'topics', topic_id, 'Lesson')
     subject = store().get('subjects', topic['subject_id'])
     if context().config.get('tts', {}).get('provider') == 'inworld':
         from tutoring.inworld_voices import narrator, selected
-        return {'provider': 'inworld', 'language': language_for(subject['name']), 'voice': selected(store(), topic_id) or narrator(context(), language_for(subject['name']), subject['child_id'])}
-    return {'voice': selected(store(), topic_id) or narrator(context(), language_for(subject['name']), subject['child_id'])}
+        return {'provider': 'inworld', 'language': language_of(store(), subject), 'voice': selected(store(), topic_id) or narrator(context(), language_of(store(), subject), subject['child_id'])}
+    return {'voice': selected(store(), topic_id) or narrator(context(), language_of(store(), subject), subject['child_id'])}
 
 
 @router.put('/topics/{topic_id}/narrator')
@@ -97,8 +97,8 @@ def save_topic_narrator(topic_id: int, payload: NarratorChoice):
         if not choice:
             raise ValueError('Choose a narrator available in your connected account.')
         if provider == 'inworld':
-            from tutoring.audio import language_for
-            if choice['language'] != language_for(store().get('subjects', topic['subject_id'])['name']):
+            from tutoring.audio import language_of
+            if choice['language'] != language_of(store(), store().get('subjects', topic['subject_id'])):
                 raise ValueError('Choose a narrator in the lesson language.')
         with write('lesson.narrator', 'Selected a narrator without generating or replacing recordings') as tx:
             old = tx.get('topic_narrators', str(topic_id))

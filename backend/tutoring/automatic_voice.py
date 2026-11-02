@@ -23,7 +23,7 @@ def status(ctx, guide_id, *, all_jobs=None,provider=None):
             from .elevenlabs_audio import narrator
         topic = ctx.store.get('topics', guide['topic_id'])
         subject = ctx.store.get('subjects', topic['subject_id'])
-        voice = selected(ctx.store, topic['id']) or narrator(ctx, audio.language_for(subject['name']), subject['child_id'])
+        voice = selected(ctx.store, topic['id']) or narrator(ctx, audio.language_of(ctx.store, subject), subject['child_id'])
         jobs = [j for j in jobs if j.get('voice') == voice]
         recordings = [j for j in recordings if j.get('voice') == voice]
     if not jobs and not recordings:
@@ -65,7 +65,7 @@ def schedule(ctx, topic, guide, voice, rate, tasks):
             job.update(status="running")
             ctx.ai.ledger.save_job(key, job)
             subject = ctx.store.get("subjects", topic["subject_id"])
-            result = narration.generate(ctx, topic, guide, voice=voice, rate=rate, language=audio.language_for(subject["name"]),maximum_usd=DEFAULT_AUDIO_CAP_USD)
+            result = narration.generate(ctx, topic, guide, voice=voice, rate=rate, language=audio.language_of(ctx.store, subject),maximum_usd=DEFAULT_AUDIO_CAP_USD)
             job.update(status=result.get("job_status", "ready"), track_id=result["track_id"])
         except Exception as exc:
             # The original recording job retains reservations and completed parts.

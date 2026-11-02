@@ -38,12 +38,23 @@ def task_content(content, task):
     return content
 
 
+def writer_declared(ctx, action):
+    """Original-page scripts declare each exercise's evidence (response.format),
+    which the writer chose while looking at the page; it is not second-guessed."""
+    playback = ctx.store.get('lesson_playback', action.get('session_id')) if action.get('session_id') else None
+    prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
+    return (prepared.get('teaching_script') or {}).get('version', '').startswith('original-pages-')
+
+
 def activity_content(ctx, action):
     original = dict(action.get('activity_content') or {})
     if original.get('evidence_requirement') == 'spelling':
         original['response_modes']=list(dict.fromkeys(['text',*[mode for mode in original.get('response_modes',[]) if mode not in ('device_dictation','written_steps')]]))
     if action.get('activity_kind') != 'request_book_work' or action.get('assignment_item_id') or original.get('evidence_requirement') not in ('handwriting','spelling'):
         return original
+    if writer_declared(ctx, action):
+        return original
+    # Older guides: correct an over-broad evidence gate from checked companion tasks.
     from .book_companion import row_id
     from .books import READING_ROLES
     from .lesson_quality import task_matches

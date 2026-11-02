@@ -344,6 +344,21 @@ Original sketch, kept for reference:
 - Done when: a subject named anything, in English or Portuguese, gets correct
   capture behaviour from the item's declared evidence type.
 
+**Status (2026-11-02): done.**
+- [x] Evidence: the writer's `response.format` (text, spelling, handwriting,
+      written_steps, diagram, observe, choices) already compiles to the capture
+      contract. `capture_policy.activity_content` no longer second-guesses it for
+      original-page scripts (`writer_declared`); its Portuguese regexes and
+      companion lookups now apply only to older guides.
+- [x] Language: `audio.language_of(store, subject)` uses the most common
+      language recorded on the subject's topics (the books' language), falling
+      back to the name only when none is recorded. All 17 call sites moved from
+      `language_for(subject['name'])`. A Portuguese "Ciências" now teaches in pt-BR.
+- [x] New-subject template slimmed to subject-specific notes + book list (the
+      family style and the app's rules cover the rest). Starter guides are still
+      suggested by name for History/Math/Portuguese — a convenience only.
+- [x] Locale labels (Verdadeiro/Falso) were already keyed by language.
+
 ### Step 6 — Retire old contracts and old pipelines (P5)
 - [ ] Audit callers of `guide.prompt`/`ProviderGuidePlan`, `teaching_script`,
       `subject_analysis`, `book_companion`, `collections`, `map_review`.

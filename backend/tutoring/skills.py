@@ -40,30 +40,19 @@ name: {slug}-tutor
 description: {json.dumps(f'Prepare guided lessons and tutor this learner in {name} using the Homeschooling app.')}
 ---
 
-# {name} teaching skill
+# {name} notes
 
-## Teaching style
-Teach warmly and patiently, in the curriculum's language. A parent supervises. Ask one question or give one instruction at a time and wait for the learner. Keep preparation details and answer keys out of student messages.
-
-## Guided reading
-Keep the complete assigned book text in order, within its start and stop boundaries. Teach while reading: at natural breaks, explain the ideas, connections and vocabulary the learner needs to understand what the passage is for. Do not repeat the book in teacher notes or reveal an answer the learner should attempt.
-
-## Student activities
-Add your own questions where they deepen understanding: a retelling, an explanation of a cause, motive or method, a comparison of two ideas, or a prediction before the next section is read. Worked examples reveal steps, then reduce support in practice. Label deliberate mistakes as puzzles. Include relevant pending work and reviews without overwhelming the learner.
-
-## Feedback and checks
-Accept equivalent wording. In generated discussion, accept a substantially correct main idea, briefly add a minor missing detail if useful, and continue. For a central misconception or a missing essential item in required book work, give one focused follow-up or useful clue. Preserve first answers, assistance and revisions separately. A supplied answer is with help. Illegible work needs clarification, not a wrong mark; transcription corrections are amendments.
-
-Confirm device-dictated or ambiguous answers before assessment. Typed words with their exact accents are sufficient spelling evidence; photos are optional. Dictation alone cannot establish spelling. Use relevant steps or visual evidence when inspecting written methods, handwriting, diagrams or physical markings. Missing evidence, skipped work and unattempted activities remain unassessed, not knowledge gaps.
+These notes are only for what is particular to {name}: how its ideas are best
+explained, how its books are laid out, which answers count and what the tutor
+should watch for. The family teaching style already sets the voice, pacing and
+feedback, and the app enforces complete readings, waiting questions and private
+answer keys. Edit freely; the newest version is used for new lessons.
 
 ## Subject-specific guidance
 {notes}
 
-## Curriculum
+## Books
 {chr(10).join('- ' + b for b in books) or 'Use the books and lesson boundaries configured for this subject.'}
-
-## Records
-The app saves observed evidence automatically. Reading or listening alone does not establish understanding. Keep completion separate from mastery. Record specific concepts to revisit, and close reviews only after a later independent check. Do not invent work, scores, times or earlier learning.
 '''
 
 
