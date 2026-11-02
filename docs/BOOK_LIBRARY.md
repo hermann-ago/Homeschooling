@@ -31,16 +31,16 @@ become mandatory written or cursive work. The original story and commentary stay
 They follow coherent reading sections and normally use two or three quick checks.
 Live feedback retains the same selection interaction. Existing saved sessions
 keep their original script; preparing a new version applies the new policy.
-See [Structured lesson authoring](STRUCTURED_LESSON_AUTHORING.md) for the shared
-writing, validation, source review and rendering path used across subjects.
+See [How a lesson is made](LESSON_PIPELINE.md) for the shared writing,
+validation, review and grading path used across subjects.
 For preparation with Codex without a paid lesson-writing API, follow
 [Codex lesson workflow](CODEX_LESSON_WORKFLOW.md).
 
 For workbooks and other related sources, use Books and pages for this lesson in
 preparation options to add original PDF ranges from the subject collection.
-Answer-key pages stay in private review and assessment inputs. The same workflow
+Answer-key pages are found automatically and stay teacher-only. The same workflow
 is the default across textbooks, workbooks, combined books, tests and references.
-See [Chapter maps and original lesson pages](ORIGINAL_PAGES_WORKFLOW.md).
+See [How a lesson is made](LESSON_PIPELINE.md).
 
 ## Shared preparation and independent learning
 

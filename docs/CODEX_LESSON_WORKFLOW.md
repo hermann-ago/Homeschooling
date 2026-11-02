@@ -14,17 +14,14 @@ creates student answers, completion, mastery or a pretend lesson session.
    backend/venv/Scripts/python.exe backend/tools/lesson_workflow.py export --learner 1 --topic 1689 --out tmp/lesson-1689
    ```
 
-3. Read `prompt.txt`, inspect the original `source.pdf` pages, and write
-   `script.json` using `schema.json`. Follow the supplied skill, source ownership,
-   page map, source coverage and content responsibility policy. Storybook pages
-   attached to a class must include their complete final paragraphs. Never add
-   unsolicited content warnings or reminders to disagree with the author.
-   Identify the passage's purpose and central meaning in context before adding
-   explanations: an argument, theme, concept or story's significance, as appropriate
-   to its genre. Explain useful relationships and reasoning rather than incidental
-   plot trivia. Use relevant examples and comparisons. Pacing follows understanding,
-   with no target number of pauses, fixed spacing or explanation word minimum.
-   Preserve a scene, poem or argument's continuity when appropriate.
+3. Read `prompt.txt` — it is exactly what the app's own writer receives, and
+   its rules are the rules — inspect `source.pdf`, and write `script.json` to
+   `schema.json`. Where NUMBERED PAGE TEXT matches the page, read turns can cite
+   `first`/`last` sentence numbers instead of re-typing; transcribe garbled
+   stretches (running headers, split words, captions) as `text` with pages.
+   When ANSWER KEY PAGES are listed (attached after the student pages), copy
+   each book exercise's answers into its teacher-only `answer` / `answer_page`.
+   See `docs/LESSON_PIPELINE.md` for the contract.
 4. Extra reading books are **read-along**, not workbook assignments. Read printed
    reflection, brainstorming and discussion questions in source order as the
    author's food for thought. Do not omit them, turn them into waiting/graded
@@ -41,7 +38,9 @@ creates student answers, completion, mastery or a pretend lesson session.
    Import checks current source and skill versions, compiles activities, checks
    source coverage, and saves a family/Codex review. It never starts voice.
    Validation also writes `teaching-review.json`, with reading/explanation word
-   counts and the number of explanations between readings. Review these alongside
+   counts and the number of explanations between readings. For a fuller check,
+   copy `saved-guide.json` into an eval folder and run `tools/lesson_eval.py`
+   (it flags questions spoken in narration and answers revealed near questions). Review these alongside
    the source: counts are informational, never quotas or a measure of usefulness.
    The compiler rejects answerable activities in new read-along book scripts.
 6. Inspect `saved-guide.json`: full class, first introduction, final closing,

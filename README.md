@@ -51,7 +51,7 @@ remain available.
 
 Guided lessons use reusable tutoring activities, durable answer capture and a shared lesson engine. Parents and human tutors choose and review the material. The AI teaches the assigned source without adding unsolicited content warnings, judgments about its viewpoint, or reminders that the learner need not agree with the author. The book's original words and questions remain intact. See [docs/ACTIVITY_ENGINE.md](docs/ACTIVITY_ENGINE.md) for the 23 activities, confirmation/parent review, recovery, desktop access and the disposable offline rehearsal.
 
-New API lesson preparation uses original PDF pages for writing and review, with optional book JSON indexes. See [docs/PDF_FIRST_PREPARATION.md](docs/PDF_FIRST_PREPARATION.md) for the shared workflow, compatibility limits and the cleanup ledger of older paths to remove after verification.
+Lesson preparation reads each lesson's original PDF pages, finds its answer-key pages, and writes a teacher's script with the book text, explanations, every exercise and teacher-only key answers. See [docs/LESSON_PIPELINE.md](docs/LESSON_PIPELINE.md) for how it works and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the overall layout. Coding agents start with [AGENTS.md](AGENTS.md).
 
 ## Development
 
