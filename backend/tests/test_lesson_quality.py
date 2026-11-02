@@ -100,24 +100,6 @@ def test_quality_checks_reject_missing_literature_and_tasks(harness,mutation):
     with pytest.raises(guide.GuideError):lesson_quality.validate(guide.build(package['sentences'],resolved),manifest)
 
 
-def test_reviewed_plan_import_checks_source_skill_permissions_and_never_buys_a_script(harness,monkeypatch):
-    child,subject,topic,package,manifest,plan=fixture(harness)
-    monkeypatch.setattr(harness.ctx.ai,'generate',lambda *_a,**_k:pytest.fail('Reviewed import cannot buy a script'))
-    from tutoring.skills import current
-    skill=current(harness.ctx.store,subject['id'])
-    payload={'learner':child['id'],'topic':topic['id'],'source_sha256':package['passage_sha256'],
-        'expected_skill_version':skill['version'] if skill else 0,'plan':plan}
-    path='/api/tutor/reader/guide/import'
-    assert harness.call('POST',path,role='tutor',json=payload).status_code==403
-    assert harness.call('POST',path,json={**payload,'source_sha256':'0'*64}).status_code==409
-    result=harness.call('POST',path,json=payload)
-    assert result.status_code==200,result.text
-    assert result.json()['source_coverage']['readings_preserved']==1
-    assert result.json()['model']=='codex-reviewed'
-    assert not harness.ctx.ai.ledger.requests()
-    assert not harness.ctx.store.all('tutor_sessions') and not harness.ctx.store.all('attempts')
-
-
 def test_each_original_task_has_its_own_waiting_step(harness):
     _,_,_,package,manifest,plan=fixture(harness)
     manifest['tasks'].append({**manifest['tasks'][0],'id':'original-task-2','reference':'2'})

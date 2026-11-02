@@ -18,9 +18,8 @@ def test_codex_structured_import_uses_original_pages_without_paid_calls(harness,
     script={'welcome':'Let us read together.','turns':[
         {'type':'read','text':'Original story.','document_id':topic['document_id'],
          'page_start':topic['page_start'],'page_end':topic['page_start']},
-        {'type':'book_work','document_id':topic['document_id'],'page':topic['page_start'],
-         'prompt':'Point to the title on this page.','response':{'format':'observe'}},
-        {'type':'ask','prompt':'Choose a title.','response':{'format':'single_choice','choices':['Story','Map']}}],
+        # A library read-along book: reading and teaching only, no answerable work.
+        {'type':'say','text':'The title tells us whose story this is.'}],
         'closing':'We can return to this story.'}
     payload={'learner':kid['id'],'topic':topic['id'],'source_sha256':package['passage_sha256'],
         'expected_skill_version':skill['version'],'script':script}

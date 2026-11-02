@@ -40,7 +40,7 @@ name: {slug}-tutor
 description: {json.dumps(f'Prepare guided lessons and tutor this learner in {name} using the Homeschooling app.')}
 ---
 
-# {name} notes
+# {name} teaching skill
 
 These notes are only for what is particular to {name}: how its ideas are best
 explained, how its books are laid out, which answers count and what the tutor

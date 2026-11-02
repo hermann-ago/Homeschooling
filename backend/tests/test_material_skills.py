@@ -19,25 +19,6 @@ def test_editable_material_skills_keep_versions_and_do_not_generate(harness,monk
     assert before=={t:h.ctx.store.all(t) for t in before}
 
 
-def test_skill_change_invalidates_cost_preview_without_starting_job(harness):
-    from tests.test_subject_analysis import setup_collection
-    h=harness
-    subject,collection,base=setup_collection(h)
-    preview=h.call('GET',base+'/preview').json()
-    item=h.call('GET','/api/material-skills').json()['skills'][0]
-    assert h.call('PUT','/api/material-skills/'+item['key'],json={
-        'content':item['content']+'\nA newly saved source rule.', 'expected_version':item['version']}).status_code==200
-    result=h.call('POST',base+'/analyze',json={'fingerprint':preview['fingerprint'],'maximum_usd':.1})
-    assert result.status_code==400
-    assert not h.ctx.store.all('collection_analysis_jobs')
-    fresh=h.call('GET',base+'/preview').json()
-    started=h.call('POST',base+'/analyze',json={'fingerprint':fresh['fingerprint'],'maximum_usd':.1})
-    assert started.status_code==200,started.text
-    frozen=h.ctx.store.get('collection_analysis_jobs',started.json()['id'])['plan']['material_skills'][item['key']]
-    assert isinstance(frozen['created_at'],str)
-    assert frozen['version']==1 and 'newly saved source rule' in frozen['content']
-
-
 def test_test_mode_skill_edits_leave_family_versions_and_files_unchanged(harness):
     h=harness
     item=h.call('GET','/api/material-skills').json()['skills'][0]

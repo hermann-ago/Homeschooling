@@ -6,7 +6,6 @@ from datetime import date
 import pytest
 
 from tests.test_tutoring import seed_history
-from tests.test_map_review import mapped, read
 from services.test_mode import manager
 from tutoring.learning_memory import evidence_state, summarize
 
@@ -116,31 +115,6 @@ def test_parent_correction_preserves_assistance_and_concurrent_amendment_has_one
     assert sorted(results) == [200, 409]
     data = h.call('GET', path(s)).json()
     assert data['topics'][0]['state'] == 'needs_help' and data['topics'][0]['independent_checks'] == 0
-
-
-def test_exact_concepts_and_explicit_links_keep_legacy_unknown_without_provider_calls(mapped):
-    h, mid, sent, base, _ = mapped
-    subject_id = int(base.split('/')[3]); subject = h.ctx.store.get('subjects', subject_id); child_id = subject['child_id']
-    c = read(h, mid)['concepts'][0]
-    with h.ctx.store.transaction() as tx:
-        topic = tx.insert('topics', {'subject_id': subject_id, 'title': 'Observed topic', 'page_start': 1, 'page_end': 1})
-        tx.insert('tutor_sessions', {'id': 'observed', 'child_id': child_id, 'subject_id': subject_id, 'topic_id': topic['id'], 'date': date(2026, 9, 24), 'status': 'completed'})
-        tx.insert('attempts', {'id': 'evidence', 'session_id': 'observed', 'child_id': child_id, 'topic_id': topic['id'], 'question_ref': '1', 'first_answer': 'People travelled.', 'first_result': 'Correct', 'independence': 'independent'})
-        for aid, concept in [('exact', c['title']), ('ambiguous', 'Almost ' + c['title'])]:
-            tx.insert('reviews', {'id': aid, 'child_id': child_id, 'topic_id': topic['id'], 'concept': concept, 'status': 'Open'})
-    endpoint = f'/api/records/learning/{child_id}/{subject_id}'
-    data = h.call('GET', endpoint).json()
-    assert data['unmapped_evidence'] == ['evidence'] and data['unmapped_reviews'] == ['ambiguous']
-    payload = {'expected_revision': 0, 'evidence_kind': 'attempt', 'evidence_id': 'evidence', 'map_id': mid,
-        'concept_id': c['id'], 'status': 'linked', 'note': 'The question assesses this specific concept.'}
-    response = h.call('POST', endpoint + '/link', json=payload)
-    assert response.status_code == 200, response.text
-    assert not response.json()['unmapped_evidence'] and response.json()['evidence'][0]['mapping_origin'] == 'parent_link'
-    assert h.call('POST', endpoint + '/link', json=payload).status_code == 409
-    assert h.call('POST', endpoint + '/link', json={**payload, 'expected_revision': 1, 'concept_id': 'invented'}).status_code == 400
-    assert len(sent) == 4 and 'PRIVATE TEACHER ANSWER' not in response.text
-    h.restart()
-    assert h.call('GET', endpoint).json()['evidence'][0]['concept_ids'] == [c['id']]
 
 
 def test_ownership_bridge_and_test_mode_cannot_mutate_real_memory(harness):

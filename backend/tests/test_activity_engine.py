@@ -427,31 +427,6 @@ def test_source_acknowledgment_cannot_bypass_missing_written_evidence(harness, m
     assert not harness.ctx.store.all('attempts')
 
 
-def test_required_book_source_note_preserves_exercise_identity_and_unassessed_answer(harness, monkeypatch):
-    from tests.test_workbooks import workbook_guide
-    _, _, legacy = workbook_guide(harness, monkeypatch)
-    engine = service(harness.ctx)
-    state = event(engine, engine.state(legacy['session_id']), 'physical_complete')
-    action = harness.ctx.store.get('lesson_actions', f"{state['session_id']}:{state['active_activity']['id']}")
-    item = harness.ctx.store.get('assignment_items', action['assignment_item_id'])
-    def assess(prompt, *_args, **_kwargs):
-        tasks = json.loads(prompt.split('Item context is teacher-only:\n')[1])
-        return {'feedback': 'The source has a disputed detail.', 'items': [{'item_id': task['item_id'],
-            'feedback': 'The source has a disputed detail.', 'result': 'Source disputed', 'ready_to_continue': True} for task in tasks]}
-    monkeypatch.setattr(interactive, 'gemini_workbook', assess)
-    state = event(engine, state, 'submit_response', {'response_id': 'book-source-answer', 'text': 'According to the book.', 'assess_after_save': True})
-    assert state['active_activity']['responses'][0]['source_disputed']
-    attempts = harness.ctx.store.all('attempts')
-    state = event(engine, state, 'acknowledge_source_issue', {'response_id': 'book-source-answer'})
-    reviewed = harness.ctx.store.get('assignment_items', item['id'])
-    assert reviewed['status'] == 'reviewed'
-    assert reviewed['snapshot'] == item['snapshot'] and reviewed['version_id'] == item['version_id']
-    assert state['active_activity']['id'] != action['action_id']
-    assert harness.ctx.store.all('attempts') == attempts
-    assert attempts[0]['first_result'] == 'Source disputed'
-    assert not harness.ctx.store.all('reviews')
-
-
 def test_prediction_and_worked_example_hide_unreached_content(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     assert "SECRET-KEY-ANSWER" not in json.dumps(state, default=str)

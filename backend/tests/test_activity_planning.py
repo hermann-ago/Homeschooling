@@ -100,50 +100,6 @@ def test_checked_shared_stem_task_uses_page_quote_instead_of_guessed_sentence():
         with pytest.raises(guide.GuideError):guide.sanitize_planner_activities(changed,book_source=source)
 
 
-def test_preparation_accepts_a_real_paper_task_without_an_exercise_catalog(harness,monkeypatch):
-    import hashlib
-    from tests.pdf_fixture import make_pdf
-    from tests.test_lesson_overview import reach_question
-    from tests.test_activity_engine import event
-    from tutoring.activity_engine import service
-    h=harness
-    pdf=make_pdf([['Trace the letter R.']])
-    path=h.add_file(pdf,'Books/Tracing.pdf')
-    with h.ctx.store.transaction() as tx:
-        child=tx.insert('children',{'name':'Practice learner'})
-        subject=tx.insert('subjects',{'child_id':child['id'],'name':'Portuguese'})
-        book=tx.insert('documents',{'original_filename':'Tracing.pdf','file_path':path,'page_count':1,
-            'sha256':hashlib.sha256(pdf).hexdigest(),'size_bytes':len(pdf),'source':'drive'})
-        topic=tx.insert('topics',{'subject_id':subject['id'],'document_id':book['id'],'title':'Letter R','page_start':1,'page_end':1})
-    plan=worksheet_plan()
-    ref=plan['segments'][2]['content']['source_refs'][0]
-    ref.update(document_id=book['id'],page=1)
-    from tutoring.script_review import Review
-    from tutoring.books import ScanResult
-    def source_and_review(*args,**kwargs):
-        if isinstance(kwargs.get('schema'), type) and issubclass(kwargs['schema'], Review):return {'findings':[]}
-        assert kwargs.get('schema') is ScanResult
-        return {'pages':[{'page':1,'text':'Trace the letter R.','native_reliable':False,'student_safe':True}],
-                'exercises':[{'reference':'1','pages':[1],'prompt':'Trace the letter R.','kind':'handwritten'}],
-                'answers':[]}
-    monkeypatch.setattr(h.ctx.ai,'generate',source_and_review)
-    monkeypatch.setattr(guide,'write_plan',lambda *_a,**_k:(copy.deepcopy(plan),'offline synthetic tutor'))
-    result=h.call('POST','/api/tutor/reader/guide',json={'learner':child['id'],'topic':topic['id'],'prepare_voice':False})
-    assert result.status_code==200,result.text
-    prepared=result.json()
-    started=h.call('POST','/api/tutor/interactive/start',json={'learner':child['id'],'topic':topic['id'],'guide_id':prepared['guide_id']})
-    assert started.status_code==200,started.text
-    engine=service(h.ctx)
-    state=reach_question(engine,engine.state(started.json()['session_id']))
-    assert state['active_activity']['kind']=='request_book_work'
-    assert state['active_activity']['interaction']['status']=='awaiting_work'
-    state=event(engine,state,'physical_complete')
-    assert state['active_activity']['interaction']['status']=='awaiting_input'
-    assert not h.ctx.store.all('attempts') and not h.ctx.store.all('assignment_items')
-    h.restart()
-    assert service(h.ctx).state(state['session_id'])['active_activity']['kind']=='request_book_work'
-
-
 def test_saved_provider_reply_can_be_revalidated_without_a_second_purchase(harness,monkeypatch):
     import json
     import httpx
@@ -227,15 +183,3 @@ def test_planner_source_ownership_and_private_pages_are_validated_before_save(ha
             guide.validate_source_references(harness.ctx, subject, {"nested": [ref]})
 
 
-def test_combined_book_illustration_requires_a_checked_student_safe_original_page(harness):
-    seeded = seed_history(harness)
-    with harness.ctx.store.transaction() as tx:
-        tx.insert("subject_books", {"id": "combined-book", "subject_id": seeded["history"]["id"],
-                  "document_id": seeded["book"]["id"], "role": "combined"})
-    source = {"type": "book_illustration", "document_id": seeded["book"]["id"], "page": 2}
-    with pytest.raises(guide.GuideError, match="student-safe"):
-        guide.validate_source_references(harness.ctx, seeded["history"]["id"], source)
-    with harness.ctx.store.transaction() as tx:
-        tx.insert("book_units", {"id": "safe-synthetic-scan", "sha256": seeded["book"]["sha256"], "role": "combined",
-                  "version": scan_version("combined"), "data": {"pages": [{"page": 2, "student_safe": True, "teacher_material": False}]}})
-    assert guide.validate_source_references(harness.ctx, seeded["history"]["id"], source) == source

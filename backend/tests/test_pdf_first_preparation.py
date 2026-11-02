@@ -67,33 +67,6 @@ def test_source_bundle_rejects_changed_editions_and_cross_subject_links(harness,
     with pytest.raises(GuideError):visual_source.linked(h.ctx,seed['genghis'],pdf,metadata,exercises)
 
 
-def test_review_uses_frozen_pdf_after_book_changes_and_reuses_saved_report(harness,monkeypatch):
-    h=harness;seed,g=prepare(h,monkeypatch)
-    row=h.ctx.store.get('guides',g['guide_id'])
-    data=script_review.inputs(h.ctx,row)
-    frozen=visual_source.review_pdf(h.ctx,row)
-    assert data['version']==2 and 'felt tents' in text(frozen)
-    old_id=script_review.latest(h.ctx,row['id'])['id']
-    with h.ctx.store.transaction() as tx:tx.delete('lesson_script_reviews',old_id)
-    # The exact provider PDF is durable; retry must not read a replacement edition.
-    h.add_file(make_pdf([['A replacement edition.']]),seed['book']['file_path'])
-    calls=[]
-    def review(prompt,**kwargs):
-        calls.append(kwargs['pdf'])
-        assert kwargs['pdf']==frozen and 'stop_before' in prompt
-        assert not h.ctx.store._lock._is_owned()
-        return {'findings':[{'category':'task','severity':'blocking','activity_ids':[g['activities'][0]['id']],
-            'detail':'An assigned visual task is omitted.','suggestion':'Add its waiting activity.'}]}
-    monkeypatch.setattr(h.ctx.ai,'generate',review)
-    assert script_review.run(h.ctx,row)['status']=='needs_changes'
-    assert script_review.run(h.ctx,row)['status']=='needs_changes' and len(calls)==1
-    with pytest.raises(ValueError,match='Audio has not'):script_review.require_audio(h.ctx,g)
-    h.restart()
-    assert visual_source.review_pdf(h.ctx,row)==frozen
-    assert script_review.status(h.ctx,row)['status']=='needs_changes'
-    assert not h.ctx.store.all('attempts')
-
-
 def test_general_export_excludes_private_source_artifacts_and_assessment_context(harness,monkeypatch):
     from storage.backups import export_excel
     from openpyxl import load_workbook
@@ -125,32 +98,6 @@ def test_pdf_edition_change_invalidates_new_preparation_but_preserves_pinned_ses
     with h.ctx.store.transaction() as tx:tx.update('documents',seed['book']['id'],{'sha256':'0'*64})
     assert not h.ctx.tutor.guide(topic,package)['current']
     assert h.ctx.tutor.guide(topic,package,g['guide_id'])['current']
-
-
-def test_planner_and_reviewer_receive_linked_sources_through_canonical_executor(harness,monkeypatch):
-    from tutoring import guide
-    h=harness;seed,_,_=linked_sources(h)
-    calls=[]
-    def writer(prompt,models,**kwargs):
-        calls.append(('writer',kwargs['pdf']))
-        assert 'Student exercises' in text(kwargs['pdf']) and 'Private key' not in text(kwargs['pdf'])
-        assert 'stop_before' in prompt and 'PRIVATE ANSWERS' not in prompt
-        return {'mode':'expand','segments':[{'type':'read','from':0,'to':99}]},'synthetic'
-    def reviewer(prompt,**kwargs):
-        calls.append(('reviewer',kwargs['pdf']))
-        assert 'Private key' in text(kwargs['pdf'])
-        assert [p.extract_text() for p in PdfReader(io.BytesIO(kwargs['pdf'])).pages[:3]]==[
-            p.extract_text() for p in PdfReader(io.BytesIO(calls[0][1])).pages]
-        return {'findings':[]}
-    monkeypatch.setattr(guide,'write_plan',writer)
-    monkeypatch.setattr(h.ctx.ai,'generate',reviewer)
-    response=h.call('POST','/api/tutor/reader/guide',json={
-        'learner':seed['lucas']['id'],'topic':seed['genghis']['id'],'prepare_voice':False})
-    assert response.status_code==200,response.text
-    assert response.json()['script_review']['status']=='approved'
-    assert [c[0] for c in calls]==['writer','reviewer']
-    assert all(secret not in response.text for secret in ('PRIVATE ANSWERS','Private key','lesson_sources','answer_source'))
-    assert not h.ctx.store.all('attempts') and not h.ctx.store.all('assignment_items')
 
 
 def test_unavailable_frozen_review_source_fails_without_a_new_provider_request(harness,monkeypatch):

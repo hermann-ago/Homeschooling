@@ -367,7 +367,31 @@ Original sketch, kept for reference:
 - [ ] Verify historical playback and an existing pinned session still open.
 - Done when: one writer contract remains; backend line count drops noticeably.
 
+**Status (2026-11-02): done for tests and dead code; module removal deferred.**
+- [x] Triage of all 96 baseline failures: every one tested a retired feature or
+      an intentionally changed contract (whole-book scanning/analysis → 410,
+      book-companion creation, exercise catalog in guides, lesson source
+      inventory, spending caps that refuse requests, old prompt wording). None
+      was a live bug. 1 test was fixed (Codex import for a read-along book);
+      66 stale tests were removed and 5 wholly stale files deleted.
+- [x] Unreachable code after the 7 retired endpoints' `raise HTTPException(410)`
+      removed (`routers/books.py`).
+- [x] Reviewer now receives the writer's NON_NEGOTIABLES and, for scripts with
+      recorded answers, the `answer_key` to spot-check (older guides' review
+      identities unchanged).
+- [ ] Deleting retired modules (`subject_analysis`, `book_companion`,
+      `map_review`, `collections`, `lesson_source_index`, the legacy `guide`
+      prompt): still imported by read paths for saved maps, historical guides
+      and legacy grading. Removing them needs a call-graph audit and a backup
+      restore + historical playback test; deferred as low value / non-zero risk.
+
 ### Step 7 — Docs consolidation (P6)
+
+**Status (2026-11-02): done.** `docs/LESSON_PIPELINE.md` (the pipeline as
+built), `docs/ARCHITECTURE.md`, root `AGENTS.md` (+ `CLAUDE.md` importing it),
+15 superseded docs and 2 retired Codex skills moved to `docs/archive/` and
+`tutor/archive/`; README, BOOK_LIBRARY and CODEX_LESSON_WORKFLOW repointed.
+
 - [ ] `docs/ARCHITECTURE.md` (layers, invariants, data ownership) and
       `docs/LESSON_PIPELINE.md` (the five stages above, as built).
 - [ ] Move pilot logs and superseded workflow docs to `docs/archive/`.

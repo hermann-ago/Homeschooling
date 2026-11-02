@@ -8,24 +8,6 @@ from tests.test_interactive import prepare, start, change
 from tutoring import books, interactive
 
 
-def test_scan_accepts_single_chapter_qualified_numbers_but_rejects_missing_and_duplicate_questions(harness, monkeypatch):
-    pdf = make_pdf([["Chapter 41 Test", "1. Where did they settle?", "2. Why did they leave?"]])
-    result = {"pages": [{"page": 1, "text": "", "native_reliable": True,
-        "student_safe": True, "teacher_material": False, "headings": []}], "exercises": [
-        {"reference": "Chapter 41, 1", "chapter": 41, "pages": [1], "prompt": "Where did they settle?", "kind": "handwritten"},
-        {"reference": "Chapter 41, 2", "chapter": 41, "pages": [1], "prompt": "Why did they leave?", "kind": "handwritten"}]}
-    monkeypatch.setattr(books, "numbered_source", lambda *args: [(41, 1, 1), (41, 1, 2)])
-    monkeypatch.setattr(books, "ask", lambda *args: result)
-    assert len(books.scan_unit(harness.ctx, pdf, "test", 1, 1)["exercises"]) == 2
-    result["exercises"].pop()
-    with pytest.raises(ValueError, match="omitted original"):
-        books.scan_unit(harness.ctx, pdf, "test", 1, 1)
-    result["exercises"] += [{**result["exercises"][0], "reference": "2"}, dict(result["exercises"][0])]
-    with pytest.raises(ValueError, match="duplicated"):
-        books.scan_unit(harness.ctx, pdf, "test", 1, 1)
-    assert books.question_number("Questions 1–3") is None
-
-
 def add_catalog(harness, seeded, count=2):
     harness.ctx.books.backfill()
     pdf = make_pdf([["Student exercises", "1. What did Genghis do?", "2. Where did they live?"], ["Answer key", "PRIVATE ANSWERS"]])
@@ -62,38 +44,6 @@ def test_incoming_stage_nested_picker_and_paired_import(harness):
     links = harness.ctx.store.all("subject_books")
     assert next(b for b in links if b["role"] == "workbook")["companion_id"] == next(b for b in links if b["role"] == "textbook")["id"]
     assert harness.call("POST", f"/api/subjects/{subject['id']}/book-imports", json={"books": [{"path": "../evil.pdf", "role": "textbook"}]}).status_code == 403
-
-
-def test_import_units_survive_failure_restart_and_collision(harness, monkeypatch):
-    with harness.ctx.store.transaction() as tx:
-        child = tx.insert("children", {"name": "Lucas"})
-        subject = tx.insert("subjects", {"child_id": child["id"], "name": "History", "folder": "Lucas/History"})
-    pdf = make_pdf([[f"Page {n}", "A sufficiently long original teaching passage."] for n in range(1, 11)])
-    harness.add_file(pdf, "Incoming Books/Textbook.pdf")
-    harness.add_file(make_pdf([["A different book"]]), "Lucas/History/Books/Textbook.pdf")
-    response = harness.call("POST", f"/api/subjects/{subject['id']}/book-imports", json={"books": [{"path": "Incoming Books/Textbook.pdf", "role": "textbook"}]}).json()
-    job_id = response["jobs"][0]["id"]
-    calls = []
-    def scan(ctx, source, role, first, last):
-        calls.append(first)
-        if first == 9 and calls.count(9) == 1:
-            raise ValueError("network failure")
-        return {"pages": [{"page": n, "text": f"Page {n}\nA sufficiently long original teaching passage.", "headings": [f"Page {n}"], "student_safe": True} for n in range(first,last+1)], "exercises": []}
-    monkeypatch.setattr(books, "scan_unit", scan)
-    harness.ctx.books.process(job_id)
-    assert harness.ctx.store.get("book_imports", job_id)["status"] == "failed"
-    assert (harness.drive / "Incoming Books/Textbook.pdf").exists()
-    harness.restart()
-    assert harness.call("POST", f"/api/book-imports/{job_id}/retry").status_code == 200
-    retried = harness.ctx.store.get("book_imports", job_id)
-    assert retried["done"] == 8 and retried["stage"] == "Reading pages"
-    harness.ctx.books.process(job_id)
-    job = harness.ctx.store.get("book_imports", job_id)
-    assert calls == [1, 9, 9]
-    assert job["status"] == "ready" and job["destination_path"].endswith("Textbook-2.pdf")
-    assert not (harness.drive / "Incoming Books/Textbook.pdf").exists()
-    assert (harness.drive / job["destination_path"]).read_bytes() == pdf
-    assert len(harness.ctx.store.all("topics")) == 10
 
 
 def test_eligibility_uses_subsections_and_optional_status(harness, monkeypatch):
@@ -172,55 +122,6 @@ def workbook_guide(harness, monkeypatch):
     return seeded, guide, state
 
 
-def test_one_photo_saves_separate_answers_and_missing_work_stays_pending(harness, monkeypatch):
-    seeded, guide, state = workbook_guide(harness, monkeypatch)
-    assert len(harness.ctx.store.all("assignment_items")) == 2
-    photo = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZlUAAAAASUVORK5CYII=")
-    uploaded = harness.call("POST", f"/api/tutor/sessions/{state['session_id']}/evidence", data={"expected_revision": state["revision"], "action_id": state["playback"]["action_id"]}, files={"file": ("answers.png", photo, "image/png")}).json()
-    state = harness.call("GET", f"/api/tutor/sessions/{state['session_id']}/conversation").json()
-    def assess(prompt, images, models, **kwargs):
-        tasks = json.loads(prompt.split("Item context is teacher-only:\n")[1])
-        return {"feedback": "One answer checked; one still missing.", "items": [{"item_id": t["item_id"], "feedback": "Correct." if i == 0 else "Please send the missing answer.", "result": "Correct" if i == 0 else "Unanswered", "transcription": "He united the tribes." if i == 0 else None, "ready_to_continue": i == 0} for i,t in enumerate(tasks)]}
-    monkeypatch.setattr(interactive, "gemini_workbook", assess)
-    payload = {"action_id": state["playback"]["action_id"], "message_id": "photo-items", "evidence_ids": [uploaded["evidence_id"]]}
-    state = change(harness, state, "answer", **payload)
-    statuses = [i["status"] for i in harness.ctx.store.all("assignment_items")]
-    assert sorted(statuses) == ["pending", "reviewed"]
-    attempts = harness.ctx.store.find("attempts", session_id=state["session_id"])
-    assert len(attempts) == 2 and len({a["exercise_id"] for a in attempts}) == 2
-    assert any(a["first_result"] == "Unanswered" and a["independence"] == "not_assessed" for a in attempts)
-    change(harness, state, "answer", **payload)
-    assert len(harness.ctx.store.find("attempts", session_id=state["session_id"])) == 2
-    harness.restart()
-    restored = harness.call("GET", f"/api/tutor/sessions/{state['session_id']}/conversation").json()
-    assert restored["playback"]["action_id"] == state["playback"]["action_id"]
-    assert "PRIVATE ANSWERS" not in json.dumps(restored)
-
-
-def test_mapping_versions_pin_started_work_and_mark_future_guides_stale(harness, monkeypatch):
-    seeded, guide, state = workbook_guide(harness, monkeypatch)
-    ex = harness.ctx.store.get("exercises", "exercise-test-0")
-    response = harness.call("PUT", "/api/exercises/exercise-test-0", json={"expected_revision": ex["revision"], "optional": True,
-        "requirements": [{"topic_id": seeded["genghis"]["id"], "evidence": "They lived in felt tents."}]})
-    assert response.status_code == 200, response.text
-    assert len(harness.call("GET", "/api/exercises/exercise-test-0/history").json()) == 2
-    assert harness.ctx.store.all("assignment_items")[0]["version_id"] == "version-test-0"
-    params = {"learner": seeded["lucas"]["id"], "topic": seeded["genghis"]["id"]}
-    assert not harness.call("GET", "/api/tutor/reader", params=params).json()["guide"]["current"]
-    assert harness.call("GET", "/api/tutor/reader", params={**params,"session":state["session_id"]}).json()["guide"]["current"]
-
-
-def test_failed_assessment_preserves_work_and_skip(harness, monkeypatch):
-    _, _, state = workbook_guide(harness, monkeypatch)
-    monkeypatch.setattr(interactive, "gemini_workbook", lambda *args: (_ for _ in ()).throw(ValueError("offline")))
-    state = change(harness, state, "answer", action_id=state["playback"]["action_id"], message_id="saved-failure", text="He united the tribes.")
-    assert state["error"] and state["playback"]["action_id"]
-    assert harness.ctx.store.get("lesson_dialogue", "saved-failure")["text"] == "He united the tribes."
-    assert not harness.ctx.store.all("attempts")
-    state = change(harness, state, "skip")
-    assert any(i["status"] == "skipped" for i in harness.ctx.store.all("assignment_items"))
-
-
 def test_practice_after_final_topic_does_not_change_reading_completion(harness, monkeypatch):
     seeded, _ = prepare(harness, monkeypatch)
     add_catalog(harness, seeded, 1)
@@ -278,23 +179,6 @@ def test_reviewed_maps_keys_and_old_answers_are_preserved(harness, monkeypatch, 
     assert changed[first["exercise_id"]]["status"] == "needs_review"
 
 
-def test_scan_covers_scanned_pages_and_refuses_omissions(harness, monkeypatch):
-    pdf = make_pdf([[], ["Student question"], ["Answer key", "SECRET ANSWER"]])
-    proposed = {"pages": [
-        {"page": 1, "text": "Faithfully transcribed scanned page", "student_safe": True, "headings": []},
-        {"page": 2, "text": "Student question", "student_safe": True, "headings": []},
-        {"page": 3, "text": "Answer key SECRET ANSWER", "student_safe": True, "headings": []},
-    ], "exercises": [{"reference": "1", "section": "Practice", "pages": [1, 2], "prompt": "Original instructions continued on page two", "kind": "handwritten"}]}
-    monkeypatch.setattr(books, "ask", lambda *args: books.ScanResult.model_validate(proposed).model_dump())
-    result = books.scan_unit(harness.ctx, pdf, "workbook", 1, 3)
-    assert result["pages"][0]["text"] == "Faithfully transcribed scanned page"
-    assert not result["pages"][2]["student_safe"]
-    assert result["exercises"][0]["pages"] == [1, 2]
-    proposed["pages"].pop()
-    with pytest.raises(ValueError, match="omitted"):
-        books.scan_unit(harness.ctx, pdf, "workbook", 1, 3)
-
-
 def test_new_sessions_cannot_start_guides_missing_new_core_exercises(harness, monkeypatch):
     seeded, guide = prepare(harness, monkeypatch)
     add_catalog(harness, seeded, 1)
@@ -326,28 +210,3 @@ def test_changed_incoming_content_and_shared_learner_sources_are_retained(harnes
     assert not (harness.drive / "Mila/History/Books/Source.pdf").exists()
 
 
-def test_answer_supplied_during_reading_cannot_be_independent_work(harness, monkeypatch):
-    seeded, _ = prepare(harness, monkeypatch)
-    add_catalog(harness, seeded, 1)
-    guide = harness.call("POST", "/api/tutor/reader/guide", json={"learner": seeded["lucas"]["id"], "topic": seeded["genghis"]["id"], "rewrite": True}).json()
-    state = start(harness, seeded, guide)
-    state = change(harness, state, "playback", sentence_index=0, ask_question=True)
-    monkeypatch.setattr(interactive, "gemini_turn", lambda *args: {"feedback": "The answer is: He united the tribes.", "result": "Unanswered", "ready_to_continue": True})
-    state = change(harness, state, "answer", action_id=state["playback"]["action_id"], message_id="reading-help", text="Tell me what he did with the tribes.")
-    state = change(harness, state, "continue")
-    generic = guide["actions"][0]
-    state = change(harness, state, "playback", sentence_index=generic["resume_index"], action_id=generic["id"])
-    state = change(harness, state, "skip")
-    state = change(harness, state, "continue")
-    work = next(a for a in guide["actions"] if a.get("exercise_id"))
-    state = change(harness, state, "playback", sentence_index=work["resume_index"], action_id=work["id"])
-    def assess(prompt, images, models, **kwargs):
-        tasks = json.loads(prompt.split("Item context is teacher-only:\n")[1])
-        assert "Other help supplied during this lesson" in prompt
-        return {"feedback": "Correct with the supplied answer.", "items": [{"item_id": t["item_id"], "feedback": "Correct.", "result": "Correct", "ready_to_continue": True} for t in tasks]}
-    monkeypatch.setattr(interactive, "gemini_workbook", assess)
-    state = change(harness, state, "answer", action_id=work["id"], message_id="assisted-item", text="He united the tribes.")
-    attempt = harness.ctx.store.find("attempts", exercise_id="exercise-test-0")[0]
-    assert attempt["independence"] == "with_help" and attempt["help_given"]
-    review = harness.ctx.store.find("reviews", exercise_id="exercise-test-0")[0]
-    assert review["status"] == "Open"

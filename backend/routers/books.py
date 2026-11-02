@@ -212,17 +212,6 @@ def book_companions(subject_id: int):
 @router.post("/subjects/{subject_id}/book-companions/{document_id}")
 def create_book_companion(subject_id: int, document_id: int):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    from tutoring.book_companion import source_for, from_scans, persist, summary, row_id
-    try:
-        source, doc = source_for(context(), subject_id, document_id)
-        previous = store().get("book_companions", row_id(doc["sha256"], source["role"]))
-        body = from_scans(context(), source, doc)
-        with write("books.companion", "Saved a book JSON using local extraction and previously checked pages") as tx:
-            result = persist(context(), tx, subject_id, doc, body, previous["revision"] if previous else 0)
-        return summary(store().get("book_companions", result["id"]))
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/subjects/{subject_id}/book-companions/{document_id}/export")
@@ -275,25 +264,6 @@ def companion_source_page(subject_id: int, document_id: int, page: int):
 async def import_book_companion(subject_id: int, document_id: int, file: UploadFile = File(...), expected_revision: int = Form(...),
                                 source_review: bool = Form(False), note: str = Form('')):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    import json
-    from pydantic import ValidationError
-    from tutoring.book_companion import MAX_JSON_BYTES, source_for, import_file, summary
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    try:
-        if expected_revision < 0:
-            raise ValueError("Reload the book before importing")
-        data = await file.read(MAX_JSON_BYTES + 1)
-        if len(data) > MAX_JSON_BYTES:
-            raise ValueError("Choose a book JSON smaller than 32 MiB")
-        payload = json.loads(data)
-        # Verify availability outside the short persistence transaction.
-        _, doc = source_for(context(), subject_id, document_id)
-        context().file_bytes(doc["file_path"], doc["sha256"])
-        with write("books.companion_import", "Imported a validated source-only book representation") as tx:
-            row = import_file(context(), tx, subject_id, document_id, payload, expected_revision, source_review=source_review, note=note)
-        return summary(store().get("book_companions", row["id"]))
-    except (ValueError, ValidationError, UnicodeError) as exc:
-        raise HTTPException(400, str(exc)[:1600]) from exc
 
 
 class CollectionBook(BaseModel):
@@ -365,20 +335,6 @@ def offline_source_map_schema():
 @router.post('/subjects/{subject_id}/book-collection/import-map')
 async def import_offline_source_map(subject_id:int,file:UploadFile=File(...)):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    import json
-    from tutoring.offline_materials import SourceMap,save
-    get_or_404(store(),'subjects',subject_id,'Subject')
-    try:
-        body=await file.read(33554433)
-        if len(body)>33554432:raise ValueError('Choose a source map smaller than 32 MiB')
-        payload=SourceMap.model_validate_json(body)
-        with write('materials.import_codex','Imported a source-bound Codex material map without API generation') as tx:
-            result=save(context(),tx,subject_id,payload)
-        from tutoring.subject_knowledge import ensure
-        ensure(context(),store().get('subject_maps',result['map_id'])['collection_id'])
-        return result
-    except ValueError as exc:
-        raise HTTPException(400,str(exc)[:1800]) from exc
 
 
 class ContinueAnalysis(BaseModel):
@@ -397,14 +353,6 @@ def preview_subject_analysis(subject_id: int):
 @router.post("/subjects/{subject_id}/book-collection/analyze")
 def start_subject_analysis(subject_id: int, payload: StartAnalysis):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    from services.ai_budget import micros
-    try:
-        with write("subject_analysis.start", "Started a subject review within a parent-selected job limit") as tx:
-            jid = context().subject_analysis.start(tx, subject_id, payload.fingerprint, micros(payload.maximum_usd))
-        return context().subject_analysis.public_job(store().get("collection_analysis_jobs", jid))
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/subjects/{subject_id}/book-collection/analysis")
@@ -419,30 +367,11 @@ from tutoring.material_review import MaterialReview
 @router.post('/subjects/{subject_id}/book-collection/source-review')
 def apply_material_source_review(subject_id: int, payload: MaterialReview):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    from tutoring.material_review import apply
-    get_or_404(store(),'subjects',subject_id,'Subject')
-    try:
-        with write('materials.source_review','Saved a new source-map snapshot without AI generation') as tx:
-            mid=apply(context(),tx,subject_id,payload)
-        from tutoring.subject_knowledge import ensure
-        ensure(context(),store().get('subject_maps',mid)['collection_id'])
-        return {'map_id':mid,'ai_generation':False}
-    except ValueError as exc:
-        raise HTTPException(400,str(exc)) from exc
 
 
 @router.post("/subject-analysis/{job_id}/continue")
 def continue_subject_analysis(job_id: str, payload: ContinueAnalysis):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    job = get_or_404(store(), "collection_analysis_jobs", job_id, "Subject review")
-    from services.ai_budget import micros
-    try:
-        with write("subject_analysis.continue", "Continued a saved subject review") as tx:
-            context().subject_analysis.resume(tx, store().get("collection_analysis_jobs", job_id),
-                                             micros(payload.maximum_usd) if payload.maximum_usd is not None else None)
-        return context().subject_analysis.public_job(store().get("collection_analysis_jobs", job_id))
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/subject-analysis/{job_id}/pause")
@@ -707,12 +636,6 @@ class RematchBook(BaseModel):
 @router.post("/subject-books/{book_id}/rematch")
 def rematch(book_id: str, payload: RematchBook):
     raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-    try:
-        with write("books.rematch", "Improved remaining reading links") as tx:
-            job = context().books.rematch(tx, book_id, payload.topic_id)
-        return store().get("book_imports", job["id"])
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 class ExerciseEdit(BaseModel):
