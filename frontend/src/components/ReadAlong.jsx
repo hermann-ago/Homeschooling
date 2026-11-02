@@ -455,8 +455,8 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
             <p className="mt-0.5 text-muted">Read this part yourself, or use device voice.</p></div>
         </div>}
         {runs.map((run) => (run.kind === 'teacher' ? (
-          <div key={run.items[0]} className="rounded-xl bg-action-soft/70 px-3.5 py-2.5 text-[16px]">
-            <span className="block mb-0.5 text-[11px] font-bold tracking-[0.8px] uppercase text-action">Teacher</span>
+          <div key={run.items[0]} className="teacher-note text-[16px]">
+            <span className="teacher-note-label">Teacher</span>
             <p className="m-0">{run.items.map(flow)}</p>
             {sentences[run.items.at(-1)]?.pause_after && renderAction?.(sentences[run.items.at(-1)].pause_after)}
           </div>

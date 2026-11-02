@@ -117,8 +117,9 @@ def test_learning_memory_keeps_learning_without_record_identifiers():
 
 
 def test_read_along_block_only_for_book_reading():
-    assert lesson_prompt.READ_ALONG not in prompt(visual_source=VISUAL)
-    assert lesson_prompt.READ_ALONG in prompt(visual_source=VISUAL, book_question_policy=READ_ALONG_POLICY)
+    assert 'READ-ALONG BOOK' not in prompt(visual_source=VISUAL)
+    assert lesson_prompt.READ_ALONG_QUIZ in prompt(visual_source=VISUAL, book_question_policy=READ_ALONG_POLICY)
+    assert lesson_prompt.READ_ALONG in prompt(visual_source=VISUAL, book_question_policy='book-read-along-3')
 
 
 def test_optional_sections_are_omitted_when_empty_and_shown_when_present():

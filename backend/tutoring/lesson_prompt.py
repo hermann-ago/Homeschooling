@@ -60,6 +60,18 @@ questions as part of the text (food for thought, no answer expected). Add no
 quiz, retelling or writing task. Teaching between sections matters even more
 here: it is the child's only help in understanding the book.'''
 
+READ_ALONG_QUIZ = '''READ-ALONG BOOK
+This is an extra reading book, not a workbook lesson. Read the whole chapter
+with say turns between sections; teaching between sections matters even more
+here, as it is the child's main help in understanding the book. Read the
+author's printed reflection, discussion and brainstorming questions as part
+of the text (food for thought, no answer expected).
+After the last reading and a short closing explanation, end with a quiz of 3
+to 5 ask turns (purpose discussion) that check the chapter's central ideas:
+what happened and why, what the story shows, how ideas connect. Each is
+single_choice with 2 to 4 distinct choices, or true_false. No trivia, no
+typed answers, no writing task, and no question before the reading is done.'''
+
 OUTPUT_FORMAT = '''OUTPUT FORMAT
 Return one compact JSON object matching the supplied schema: welcome, turns,
 closing. No markdown fences or text outside it. Paragraph breaks go inside
@@ -144,7 +156,7 @@ Subject: {subject}. Grade: {grade or 'not supplied'}. Lesson: {passage['title']}
 Preparation policy: {policy}.''',
         NON_NEGOTIABLES,
         HOW_TO_TEACH,
-        READ_ALONG if read_along else '',
+        (READ_ALONG_QUIZ if book_questions.end_quiz(context) else READ_ALONG) if read_along else '',
         _block('FAMILY TEACHING STYLE (the family\'s own words)', instructions(family)),
         _block('SUBJECT SKILL (the family\'s notes for this subject; the teaching parts apply now, '
                'feedback and grading parts apply later during the lesson; the non-negotiables win any conflict)', skill),

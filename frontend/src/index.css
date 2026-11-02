@@ -119,14 +119,20 @@
   border-radius: 2px;
 }
 
-.activity-introduction {
-  font-family: var(--font-introduction);
-  background: var(--color-action-soft);
-  border: 1px solid color-mix(in srgb, var(--color-action) 25%, transparent);
+.activity-introduction { font-family: var(--font-introduction); }
+/* The tutor's own words, kept visibly apart from the author's: a soft yellow note. */
+.teacher-note {
+  background: #FFF6D8;
+  border: 1px solid #F0D58A;
+  border-left: 4px solid #E3B341;
   border-radius: 1rem;
-  padding: 1rem;
+  padding: .85rem 1rem;
   line-height: 1.65;
+  color: var(--color-ink);
 }
+.teacher-note-label { display: block; margin-bottom: .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8A6100; }
+/* The sentence being spoken inside a note, stronger than the note itself. */
+.teacher-note [aria-current="true"] { background: #F5C842; border-radius: 4px; box-shadow: 0 0 0 2px #F5C842; }
 
 /* Lesson workspace: the book and conversation own the available height. */
 .app-shell, .lesson-workspace { height: var(--app-height, 100dvh); }
@@ -251,7 +257,16 @@
   /* During a lesson the parent preparation tools give the reading area their room. */
   .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar { display: none; }
   .lesson-workspace-switch { padding-top: .3rem; padding-bottom: .3rem; }
-  .tutor-chat-header { padding: .35rem .75rem; }
+  .tutor-chat-header { padding: .35rem .75rem; grid-template-columns: minmax(0, 1fr) auto; column-gap: .35rem; }
+  /* One header row on phones: voice controls beside Take a break and the menu. */
+  .tutor-chat-header > .tutor-header-top { grid-column: 2; grid-row: 1; }
+  .tutor-chat-header > .tutor-header-top > p:first-child { display: none; }
+  .tutor-chat-header > .tutor-session-controls { grid-column: 1; grid-row: 1; }
+  .tutor-chat-header > :not(.tutor-header-top):not(.tutor-session-controls) { grid-column: 1 / -1; }
+  .tutor-chat-header .tutor-session-controls { grid-template-columns: minmax(5.5rem, 1fr) auto auto; }
+  .tutor-chat-header .tutor-session-controls > .lesson-options { display: none; }
+  .tutor-chat-header .tutor-session-controls label:nth-child(2) select { width: 3.25rem; }
+  .tutor-chat-header .tutor-header-top .app-button { padding-left: .4rem; padding-right: .4rem; }
   .tutor-composer { margin: 0 .4rem .4rem; max-height: 80%; }
   .tutor-composer[data-expanded="true"] { height: 94%; max-height: 94%; }
   .tutor-composer[data-minimized="true"] { height: auto; max-height: none; }

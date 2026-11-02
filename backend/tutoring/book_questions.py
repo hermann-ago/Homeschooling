@@ -5,7 +5,9 @@ from pydantic import Field, model_validator
 
 from .activities import Choice, Content, QuestionContent
 
-VERSION = 'book-read-along-3'
+# 4: read-along plus a short choice quiz at the end of the chapter; 3: no answers at all.
+VERSION = 'book-read-along-4'
+READ_ALONG = ('book-read-along-3', VERSION)
 
 AUTHORING = '''BOOK READING QUESTION POLICY (overrides older teaching guidance)
 Extra reading books are read-along lessons, not workbook assignments. Read the
@@ -56,12 +58,26 @@ particular theme, number of pauses, spacing or minimum explanation length.
 Printed questions in read_source are not missing response stops. Distinguish
 the author's rhetorical questions from teacher-added requests for an answer.'''
 
+REVIEW_QUIZ = '''BOOK READING QUESTION POLICY
+For extra reading, preserve printed reflection/brainstorming/discussion questions
+as narrated source text, not answerable activities. The lesson ends, after the
+whole reading, with a quiz of 3 to 5 single-choice or true/false questions on the
+chapter's central ideas. Flag a missing or trivial quiz, a question before the
+reading is complete, a typed or writing response, or a quiz answer the reading
+does not support. Check the explanations against the passage's actual purpose
+and central meaning, not incidental plot details.'''
+
 
 def enabled(context):
-    return (context or {}).get('book_question_policy') in ('book-choice-1', 'book-choice-2', VERSION)
+    return (context or {}).get('book_question_policy') in ('book-choice-1', 'book-choice-2', *READ_ALONG)
 
 
 def read_along(context):
+    return (context or {}).get('book_question_policy') in READ_ALONG
+
+
+def end_quiz(context):
+    """Read-along lessons that close with a short choice quiz on the chapter."""
     return (context or {}).get('book_question_policy') == VERSION
 
 
@@ -78,7 +94,7 @@ def validate_activities(activities, context=None):
         kind, content = activity['kind'], activity.get('content') or {}
         if kind not in RESPONSE_KINDS:
             continue
-        if read_along(context):
+        if read_along(context) and not end_quiz(context):
             raise ValueError('Extra reading books read printed reflection questions aloud without requiring answers or adding a quiz.')
         if (kind not in ('ask_question', 'request_book_work') or content.get('answer_format') not in ('true_false', 'single_choice')
                 or content.get('response_modes') != ['choice'] or content.get('require_reasoning')):

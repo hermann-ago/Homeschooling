@@ -36,7 +36,8 @@ def test_teaching_breaks_survive_compilation_without_changing_or_reordering_sour
     'The stars shine above the sea.\n\nWhat images stay with you?',
 ])
 def test_any_genre_can_read_printed_questions_without_assessment(source):
-    context = {'book_question_policy': book_questions.VERSION,
+    # The reading-only policy (book-read-along-3) that earlier chapters keep.
+    context = {'book_question_policy': 'book-read-along-3',
         'visual_source': {'pages': [{'document_id': 1, 'page': 1, 'role': 'assigned_reading'}]}}
     passage = {'sentences': [{'text': source}]}
     value = {'welcome': 'Let us read.', 'turns': [{'type': 'read', 'text': source,
@@ -61,3 +62,27 @@ def test_any_genre_can_read_printed_questions_without_assessment(source):
     with pytest.raises(ValueError, match='without requiring answers'):
         book_questions.validate_activities([{'kind': 'ask_question', 'content': {
             'choices': [{'label': 'Yes'}, {'label': 'No'}], 'answer_format': 'single_choice', 'response_modes': ['choice']}}], context)
+
+
+def test_read_along_chapters_end_with_a_short_choice_quiz():
+    context = {'book_question_policy': book_questions.VERSION,
+        'visual_source': {'pages': [{'document_id': 1, 'page': 1, 'role': 'assigned_reading'}]}}
+    source = 'The traveller shared a meal.\n\nFor reflection\n\nWhat does generosity mean?'
+    passage = {'sentences': [{'text': source}]}
+    read = {'type': 'read', 'text': source, 'document_id': 1, 'page_start': 1, 'page_end': 1}
+    quiz = {'type': 'ask', 'prompt': 'What did the traveller do?', 'purpose': 'discussion',
+            'response': {'format': 'single_choice', 'choices': ['Shared a meal', 'Ran away']}}
+    assigned = page_script.schema(passage, context, 'en-US')
+    assert {'$ref': '#/$defs/Ask'} in assigned.provider_json_schema()['properties']['turns']['items']['anyOf']
+    script = {'welcome': 'Let us read.', 'turns': [read, {'type': 'say', 'text': 'Sharing costs something.'}, quiz],
+              'closing': 'Well read.'}
+    plan = page_script.compile_script(assigned.model_validate(script).model_dump(), passage, context, 'en-US')
+    built = guide.build(passage['sentences'], plan, faithful=True, instruction_only=True)
+    asked = [a for a in built['activities'] if a['kind'] == 'ask_question']
+    assert len(asked) == 1 and asked[0]['content']['response_modes'] == ['choice']
+    book_questions.validate_activities(built['activities'], context)
+    # The printed questions are still read, never answered; no question comes before the reading ends.
+    with pytest.raises(ValueError, match='before any quiz'):
+        assigned.model_validate({**script, 'turns': [quiz, read]})
+    with pytest.raises(ValueError):
+        assigned.model_validate({**script, 'turns': [read, {**quiz, 'response': {'format': 'text'}}]})

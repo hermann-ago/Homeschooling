@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import clsx from 'clsx';
 import { Button } from '../../ui';
 import { beginNarration, registerNarrator } from '../../utils/narration';
 import { activityDefinition, responseStage } from './registry';
@@ -72,7 +73,11 @@ function VisualAid({ visual, onSource }) {
 }
 
 /** Content rendering is deliberately ordinary React text, never arbitrary HTML. */
-export default function ActivityCard({ activity, language, busy, onEvent, onSource, renderReading, state, readOnly = false, docked = false }) {
+/** The tutor's own commentary, as opposed to the book's words or exercises. */
+const teacherWords = (activity) => ['introduce', 'close_lesson'].includes(activity.kind)
+  || (activity.kind === 'explain_or_observe' && activity.origin !== 'required_book');
+
+export default function ActivityCard({ activity, language, busy, onEvent, onSource, renderReading, renderTeacherText, state, readOnly = false, docked = false }) {
   const content = activity.content || {};
   const definition = activityDefinition(activity);
   const stage = responseStage(activity);
@@ -95,8 +100,11 @@ export default function ActivityCard({ activity, language, busy, onEvent, onSour
   }
   return <div className="flex flex-col gap-3">
     {content.title && <h3 className="font-semibold text-lg">{content.title}</h3>}
-    {activity.kind === 'introduce'
-      ? <div className="activity-introduction rounded-xl bg-action-soft p-4 text-action whitespace-pre-wrap">{content.text}</div>
+    {teacherWords(activity) && content.text
+      ? <div className={clsx('teacher-note', activity.kind === 'introduce' && 'activity-introduction')}>
+          <span className="teacher-note-label">Teacher</span>
+          <div className="whitespace-pre-wrap">{renderTeacherText?.(activity) || content.text}</div>
+        </div>
       : content.text && !(definition.family === 'reading' && renderReading) && <p className="whitespace-pre-wrap leading-relaxed">{content.text}</p>}
     {definition.family === 'reading' && renderReading?.({ activity, state, complete: () => onEvent('reading_done') })}
     {definition.family === 'reading' && !renderReading && !readOnly && !docked && activity.status === 'pending' && <Button size="sm" disabled={busy} onClick={() => onEvent('reading_done')}>I have finished this reading</Button>}

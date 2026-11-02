@@ -154,6 +154,19 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     onChange={changeSettings} onReplay={() => transport?.replay?.()}
     canReplay={Boolean(!busy && !state.on_break && transport?.place === narrationPlace(activity) && transport.available && transport.replay)}
     error={transport?.place === narrationPlace(activity) ? transport.error : null} />;
+  // The tutor's commentary, sentence by sentence, marking the one being spoken.
+  const teacherText = (activity) => {
+    const range = narrationRange(guide, activity);
+    if (!range) return null;
+    const speaking = transport?.place === narrationPlace(activity) && transport.playing;
+    return guide.sentences.slice(range.start, range.end + 1).map((sentence, offset) => {
+      const index = range.start + offset;
+      return <span key={index}>
+        {offset > 0 && (sentence.paragraphBoundary ? '\n\n' : ' ')}
+        <span aria-current={speaking && index === activeIndex ? 'true' : undefined}>{sentence.text}</span>
+      </span>;
+    });
+  };
   const narration = ({ activity, state, busy }) => {
     if (!activity || state.status === 'completed') return null;
     const range = narrationRange(guide, activity);
@@ -227,7 +240,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
       <Button variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
-      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderNarration={narration} renderSessionControls={sessionControls}
+      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;

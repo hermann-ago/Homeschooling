@@ -79,8 +79,14 @@ class Script(Content):
 def compile_script(value, passage, context, language):
     from .guide import GuidePlan
     script = Script.model_validate(value)
-    if book_questions.read_along(context) and any(not isinstance(t, (Say, Read)) for t in script.turns):
-        raise ValueError('Extra reading books read printed reflection questions aloud without requiring answers or adding a quiz.')
+    if book_questions.read_along(context):
+        last_read = max((i for i, t in enumerate(script.turns) if isinstance(t, Read)), default=-1)
+        quiz = book_questions.end_quiz(context)
+        if any(isinstance(t, BookWork) or (isinstance(t, Ask) and (not quiz or i < last_read))
+               for i, t in enumerate(script.turns)):
+            raise ValueError('Extra reading books read the whole chapter, printed questions included, before any quiz; '
+                             'only a short choice quiz may follow the last reading.' if quiz else
+                             'Extra reading books read printed reflection questions aloud without requiring answers or adding a quiz.')
     pages = {(p['document_id'], p['page']): p for p in (context.get('visual_source') or {}).get('pages', [])}
     segments = [{'type': 'intro', 'text': script.welcome}]
     referenced = -1
@@ -210,7 +216,8 @@ def schema(passage, context, language):
                                      'required':list(names),'additionalProperties':False}
             if book_questions.read_along(context):
                 value['properties']['turns']['items'] = {'anyOf': [
-                    {'$ref': '#/$defs/Say'}, {'$ref': '#/$defs/Read'}]}
+                    {'$ref': '#/$defs/Say'}, {'$ref': '#/$defs/Read'},
+                    *([{'$ref': '#/$defs/Ask'}] if book_questions.end_quiz(context) else [])]}
             return value
         @model_validator(mode='after')
         def locators(self):

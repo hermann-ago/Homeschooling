@@ -225,7 +225,8 @@ def _run(ctx,row,*,human=False,retry=False):
     prompt+='CURRENT FEEDBACK POLICY:\n'+feedback_policy+'\n'
     from . import book_questions
     if book_questions.enabled(data):
-        prompt += (book_questions.REVIEW if book_questions.read_along(data) else book_questions.LEGACY_REVIEW) + '\n'
+        prompt += (book_questions.REVIEW_QUIZ if book_questions.end_quiz(data) else book_questions.REVIEW
+                   if book_questions.read_along(data) else book_questions.LEGACY_REVIEW) + '\n'
     from .page_script import VERSION as teaching_version
     focused=data.get('preparation_policy','').startswith(teaching_version.rsplit('-',1)[0]+'-')
     if focused:

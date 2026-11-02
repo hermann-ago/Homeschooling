@@ -121,7 +121,7 @@ def test_codex_export_bypasses_cached_guide_without_paid_generation_or_student_c
     assert made['guide_id']
     assert base64.b64decode(packet['source_pdf_base64']).startswith(b'%PDF')
     assert 'READ-ALONG BOOK' in packet['prompt']
-    assert packet['context']['book_question_policy'] == 'book-read-along-3'
+    assert packet['context']['book_question_policy'] == 'book-read-along-4'
     assert len(prompts) == 1
     assert {table: h.ctx.store.all(table) for table in before} == before
     assert h.call('POST', '/api/tutor/reader/guide', json={'learner': first['id'],
@@ -138,7 +138,7 @@ def test_canonical_reviewed_import_cannot_bypass_book_question_policy(family):
         'source_sha256': source['passage_sha256'], 'expected_skill_version': skills.packet(h.ctx.store, subject)['version'],
         'plan': {'mode': 'expand', 'segments': [{'type': 'intro', 'text': 'Let us read.'},
             {'type': 'read', 'from': 0, 'to': 999}, {'type': 'action', 'text': 'Write an explanation.', 'action_kind': 'answer'}]}})
-    assert result.status_code == 502 and 'without requiring answers' in result.text
+    assert result.status_code == 502 and 'true/false or single-choice' in result.text
     assert not h.ctx.store.all('guides')
 
 
@@ -152,7 +152,7 @@ def test_voice_guard_rejects_legacy_book_writing_before_any_provider_call(family
         'content': {'prompt': 'Write an answer.', 'answer_format': 'text', 'response_modes': ['text']}})
     monkeypatch.setattr(elevenlabs_audio, 'generate', lambda *a, **kw: pytest.fail('Do not purchase voice for an invalid book lesson'))
     topic = h.ctx.store.get('topics', readings[0]['topics'][0]['id'])
-    with pytest.raises(ValueError, match='without requiring answers'):
+    with pytest.raises(ValueError, match='true/false or single-choice'):
         narration.generate(h.ctx, topic, old, provider='elevenlabs')
 
 
