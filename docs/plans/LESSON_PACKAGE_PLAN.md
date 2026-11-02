@@ -235,24 +235,43 @@ lesson's own pages (extracted on demand, per lesson, from the PDF text layer)
 instead of re-typing it. Where the text layer is missing or unreliable, or the
 layout is unusual, the writer keeps transcribing from the page image (`text`),
 as today. Both forms are valid in one script.
-- [ ] Source layer: `tutoring/page_text.py` returning per-page paragraphs and
-      sentences with stable IDs (`p<page>.<para>.<sent>`), built from the PDF
-      text layer (`passages.extract`/`split_sentences` already exist).
-- [ ] For pages with no/poor text layer: one-time cached AI transcription per
-      page (category `books`), stored by document sha256 + page, parent-correctable;
-      reuse the existing spacing/hyphenation-only correction rules.
-- [ ] `Read` turn becomes `{type:'read', from:'<id>', to:'<id>'}`; compiler
-      inserts the exact text and source refs. Keep `text` accepted for old saved
-      scripts only.
-- [ ] Coverage validator: every assigned sentence ID inside boundaries is read
-      exactly once, in order (reuses the earlier coverage idea, without forcing
-      one turn per block).
-- [ ] Confirm the preparation model's real maximum output and raise
-      `MAX_PLAN_OUTPUT` accordingly (separate constant from other callers);
-      update the cost preview ceiling in `routers/tutor.py`.
-- [ ] Remove the "compact JSON / no whitespace" prompt workarounds if no longer needed.
-- Done when: the long History eval chapter prepares in one call with full
-  coverage and output tokens well under the limit.
+- [x] Source layer: the lesson package's own `sentences` (already extracted per
+      lesson from the PDF text layer within boundaries, with `paragraphIndex`)
+      are the reference IDs — no new extraction module or whole-book pass.
+- [x] PDF lessons with a text layer get a NUMBERED PAGE TEXT block and two read
+      forms: (a) `first/last` sentence references — preferred where the numbered
+      text matches the page; (b) transcribed `text` + pages for anything the text
+      layer lacks or garbles (other books, headers inside sentences, split words,
+      line-laid poems). Strict schema: all fields present, unused ones null.
+      Pages without a text layer keep transcription only.
+- [x] `page_script.compile_script` turns references into the exact text with
+      paragraph breaks, split at paragraphs into ≤11,000-character segments
+      (GuideSegment holds 12,000), keeps `from/to` source positions, and rejects
+      references that repeat or go backwards.
+- [x] No per-page AI transcription cache: transcription stays inside the writer
+      call (family decision), so nothing new is purchased.
+- [ ] Full coverage validator for mixed scripts: not possible deterministically
+      for transcribed stretches; the reviewer and `lesson_eval.py` cover it.
+- [x] `MAX_PLAN_OUTPUT` 16,384 → 32,768 (US$10/M output ⇒ +US$0.16 worst-case
+      reservation). The model's documented maximum was not checked online.
+- [x] "Compact JSON" stays (harmless); the whitespace-stall comment concerns
+      nested schemas, not size.
+- Done when: … ✅ for History (Codex-path authoring below); a 20-page chapter
+  has not been tried.
+
+**Step 2+3 eval — History 380, authored via the Codex workflow (2026-11-01):**
+the script was written by Claude following `prompt.txt` exactly (this measures
+the prompt/contract, not `gpt-6.1-sol`'s behaviour), validated, imported into
+production records as `guide-380-f0458a8b2e` (review: family_review approved).
+
+| Guide | Reading covered | Exercises | Leaks | Narration questions | Explanations | Explanation words |
+|---|---|---|---|---|---|---|
+| before (API, v2 prompt) | 100% | 7/7 | 0 | 0 | 3 (1 between) | 94 |
+| v3 + references | 100% | 7/7 | 0 | 0 | 9 (6 between) | 710 |
+
+All 1,022 reading words came from 7 sentence references — the writer re-typed
+none. The first draft had 3 rhetorical questions in narration; `lesson_eval`
+flagged them and they were rewritten before import.
 
 ### Step 4 — Exercises as items + teacher annex with keys (P4)
 - [ ] **Answer-key map (family idea, 2026-11-01):** when the chapter map is

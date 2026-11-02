@@ -41,7 +41,8 @@ DEFAULT_MODELS = ("gpt-6.1-sol",)
 TEACHER_TYPES = ("intro", "explain", "recap")
 MAX_TEACHER_CHARACTERS = 700
 MAX_INTRO_CHARACTERS = 1800
-MAX_PLAN_OUTPUT = 16384
+# Room for high reasoning plus a long lesson (readings may still be transcribed).
+MAX_PLAN_OUTPUT = 32768
 FORMAT_INSTRUCTIONS=("Return exactly one JSON object matching the supplied schema. "
                      "Do not include explanations, commentary, or another object before or after it.")
 

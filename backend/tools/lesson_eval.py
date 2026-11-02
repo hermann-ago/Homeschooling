@@ -94,8 +94,28 @@ def questions(text):
     return [q.strip() for q in re.findall(r'[^.!?\n]*\?', text or '') if len(words(q)) >= 3]
 
 
+TEACHER_KINDS = {'introduce': 'intro', 'close_lesson': 'recap', 'read_source': 'read'}
+
+
+def segments_of(guide):
+    """Saved guide files carry segments; API replies carry compiled activities."""
+    if guide.get('segments'):
+        return guide['segments']
+    segments = []
+    for a in guide.get('activities') or []:
+        kind = TEACHER_KINDS.get(a['kind'])
+        if kind is None and a['kind'] == 'explain_or_observe' and a.get('origin') != 'required_book':
+            kind = 'explain'
+        if kind:
+            segments.append({'type': kind, 'text': a['content'].get('text')})
+        else:
+            segments.append({'type': 'activity', 'activity_kind': a['kind'], 'origin': a.get('origin'),
+                             'content': a['content'], 'source_refs': a.get('source_refs') or []})
+    return segments
+
+
 def evaluate(guide, packet=None, expected=None, pdf_text=''):
-    segments = guide.get('segments') or []
+    segments = segments_of(guide)
     expected = expected or {}
     reading = '\n'.join(s.get('text') or '' for s in segments if s['type'] == 'read')
     passage = ((packet or {}).get('package') or {}).get('passage') or ''

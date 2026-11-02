@@ -121,7 +121,8 @@ def test_direct_writer_needs_no_task_inventory_and_preserves_controls():
     made=page_script.compile_script(value, {'sentences':[]}, context, 'en-US')
     assert made['segments'][1]['text']=='The original story, with natural typography.'
     assert made['segments'][1]['source_refs'][0]['page']==7
-    assert 'first' not in page_script.schema(passage,context,'en-US').provider_json_schema()['$defs']['Read']['properties']
+    # A PDF lesson with a text layer may reference numbered sentences or transcribe.
+    assert page_script.schema(passage,context,'en-US').provider_json_schema()['$defs']['Read']['properties']['first']['type']==['integer','null']
     context['visual_source']['pages'][0]['role'] = 'answer_key'
     with pytest.raises(ValueError, match='student page'):
         page_script.compile_script(value, passage, context, 'en-US')

@@ -66,12 +66,7 @@ closing. No markdown fences or text outside it. Paragraph breaks go inside
 strings as \\n. Text fields contain exactly the words the teacher says.
 Turns:
 - say: teaching; the child presses Continue.
-- read: assigned reading. text is the author's words from the attached pages,
-  with document_id, page_start and page_end. Keep the original paragraph
-  breaks (blank lines); a printed line wrap is not a paragraph. Keep headings
-  and attributions separate from body paragraphs. Read ordinary typography
-  naturally; leave out running headers, page numbers and line-break hyphens.
-  Use read only for real reading, not worksheet directions.
+- read: assigned reading only, never worksheet directions. READ_FORMS
 - ask: your own question, with purpose discussion, retelling or reasoning.
 - book_work: an original exercise, with document_id and its PDF page; one
   turn can group the parts of one exercise.
@@ -83,8 +78,26 @@ true_false uses empty choices (the app adds labels). Unused arrays are empty;
 allow_reuse is false unless matching options really repeat.
 Do not describe buttons, screens or app wiring.'''
 
-TEXT_ONLY = '''Only when no PDF is attached: read uses first/last inclusive sentence
-numbers from the TEXT-ONLY SOURCE below instead of text and pages.'''
+TRANSCRIBED = '''text is the author's words transcribed from the attached pages,
+  with document_id, page_start and page_end. Keep the original paragraph
+  breaks (blank lines); a printed line wrap is not a paragraph. Keep headings
+  and attributions separate from body paragraphs. Read ordinary typography
+  naturally; leave out running headers, page numbers and line-break hyphens.'''
+
+# How a read turn may be written: PDF pages only, PDF pages with a usable text
+# layer (page_script compiles sentence references to the exact text), or text only.
+READ_FORMS = {
+    'pdf': TRANSCRIBED,
+    'pdf+numbered': '''Two forms; set the unused form's fields to null.
+  (a) first/last: inclusive sentence numbers from NUMBERED PAGE TEXT. Prefer
+  this wherever those sentences match the page exactly: the app inserts the
+  author's exact words with their paragraphs, so you need not re-type them.
+  Numbered readings move forward and never repeat. If a numbered stretch
+  contains a running header, page number, watermark or split word, transcribe
+  that stretch with form (b) instead.
+  (b) ''' + TRANSCRIBED,
+    'text': 'first/last: inclusive sentence numbers from the TEXT-ONLY SOURCE.',
+}
 
 # Learning-memory fields that identify records rather than describe learning.
 RECORD_IDS = ('evidence_ids', 'review_ids', 'version', 'map_id')
@@ -118,7 +131,8 @@ def writer_prompt(passage, *, subject, learner, grade, language, skill='', learn
         'preferences': context.get('preferences'),
         'learning_memory': _without_record_ids(context.get('learning_memory')),
     }.items() if v}
-    text_only = '' if visual else '\n'.join(f"[{i}] {s['text']}" for i, s in enumerate(passage['sentences']))
+    numbered = '\n'.join(f"[{i}] {s['text']}" for i, s in enumerate(passage.get('sentences') or []))
+    form = ('pdf+numbered' if numbered else 'pdf') if visual else 'text'
     # Legacy book-choice policies also received the read-along authoring rules.
     read_along = book_questions.enabled(context)
     parts = [
@@ -137,7 +151,8 @@ Preparation policy: {policy}.''',
         _block('SOURCE NOTES (checked, edition-specific clarifications)', context.get('source_annotations')),
         _block('REVISION FEEDBACK (resolve these findings without reintroducing earlier corrections)',
                context.get('review_feedback')),
-        OUTPUT_FORMAT,
-        '' if visual else TEXT_ONLY + '\n' + _block('TEXT-ONLY SOURCE', text_only),
+        OUTPUT_FORMAT.replace('READ_FORMS', READ_FORMS[form]),
+        _block('NUMBERED PAGE TEXT (the PDF text layer of the assigned reading; check it against the pages)'
+               if visual else 'TEXT-ONLY SOURCE', numbered),
     ]
     return '\n\n'.join(p.strip() for p in parts if p and p.strip())

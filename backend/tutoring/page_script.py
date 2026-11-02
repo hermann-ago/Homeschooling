@@ -7,8 +7,29 @@ from .activities import Content
 from .teaching_script import Say, Ask, Response, _response
 from . import book_questions
 
-# 3: one composed prompt (lesson_prompt.py); 2: stacked policy blocks.
+# 3: one composed prompt (lesson_prompt.py) and sentence references in PDF
+# lessons; 2: stacked policy blocks, transcribed readings only.
 VERSION = 'original-pages-3'
+# A compiled reading segment holds at most 12,000 characters (guide.GuideSegment).
+READING_CHUNK = 11000
+
+
+def referenced_reading(sentences, first, last):
+    """Exact text of sentences first..last with their paragraph breaks, in
+    chunks short enough for one reading segment each."""
+    chunks, text, start, paragraph = [], '', first, None
+    for i in range(first, last + 1):
+        sentence = sentences[i]
+        new_paragraph = sentence.get('paragraphIndex', 0) != paragraph
+        if text and new_paragraph and len(text) + len(sentence['text']) > READING_CHUNK:
+            chunks.append((start, i - 1, text))
+            text, start = '', i
+        text += ('\n\n' if new_paragraph else ' ') + sentence['text'] if text else sentence['text']
+        paragraph = sentence.get('paragraphIndex', 0)
+    chunks.append((start, last, text))
+    return chunks
+
+
 BOOK_TEACHING_POLICY = 'book-explanations-2'
 
 
@@ -18,7 +39,8 @@ class Read(Content):
     document_id: int | None = Field(None, ge=1)
     page_start: int | None = Field(None, ge=1)
     page_end: int | None = Field(None, ge=1)
-    # Saved v1 scripts/text-only callers remain readable; new PDF writers use text.
+    # Or a reference to numbered sentences of the PDF text layer (inclusive),
+    # so clean prose is not re-typed by the writer.
     first: int | None = Field(None, ge=0)
     last: int | None = Field(None, ge=0)
 
@@ -56,6 +78,7 @@ def compile_script(value, passage, context, language):
         raise ValueError('Extra reading books read printed reflection questions aloud without requiring answers or adding a quiz.')
     pages = {(p['document_id'], p['page']): p for p in (context.get('visual_source') or {}).get('pages', [])}
     segments = [{'type': 'intro', 'text': script.welcome}]
+    referenced = -1
     for turn in script.turns:
         if isinstance(turn, Say):
             segments.append({'type': 'explain', 'text': turn.text})
@@ -69,10 +92,15 @@ def compile_script(value, passage, context, language):
                 segments.append({'type': 'read', 'text': turn.text,
                     'source_refs': [{'document_id': turn.document_id, 'page': p} for p in range(turn.page_start,turn.page_end+1)]})
             else:
-                if turn.first is None or turn.last is None or not 0 <= turn.first <= turn.last < len(passage['sentences']):
+                if turn.first is None or turn.last is None:
+                    raise ValueError('A reading needs either its text with pages, or first and last numbered sentences.')
+                if not 0 <= turn.first <= turn.last < len(passage['sentences']):
                     raise ValueError('The reading range is outside the assigned original text.')
-                segments.append({'type': 'read', 'from': turn.first, 'to': turn.last,
-                                 'text': ' '.join(s['text'] for s in passage['sentences'][turn.first:turn.last+1])})
+                if turn.first <= referenced:
+                    raise ValueError('Numbered readings must move forward without repeating sentences.')
+                referenced = turn.last
+                for first, last, text in referenced_reading(passage['sentences'], turn.first, turn.last):
+                    segments.append({'type': 'read', 'from': first, 'to': last, 'text': text})
         elif isinstance(turn, Ask):
             if book_questions.enabled(context):
                 book_questions.validate_ask(turn)
@@ -140,13 +168,18 @@ def schema(passage, context, language):
                 ask['purpose'] = {'type': 'string', 'enum': ['discussion']}
                 ask['response'] = {'$ref': '#/$defs/BookChoiceResponse'}
                 value['$defs']['BookWork']['properties']['response'] = {'$ref': '#/$defs/BookChoiceResponse'}
-            names = ('type','text','document_id','page_start','page_end') if context.get('visual_source') else ('type','first','last')
+            visual, numbered = bool(context.get('visual_source')), bool(passage.get('sentences'))
+            names = (('type','text','document_id','page_start','page_end') + (('first','last') if numbered else ())
+                     if visual else ('type','first','last'))
+            # With both shapes on offer, unused fields are null (strict schemas require every field).
+            either = visual and numbered
+            kind = lambda t: [t, 'null'] if either else t
             props = value['$defs']['Read']['properties']
-            props['text'] = {'type':'string','minLength':1,'maxLength':60000}
+            props['text'] = {'type':kind('string'),'minLength':1,'maxLength':60000}
             for name in ('document_id','page_start','page_end'):
-                props[name] = {'type':'integer','minimum':1}
+                props[name] = {'type':kind('integer'),'minimum':1}
             for name in ('first','last'):
-                props[name] = {'type':'integer','minimum':0}
+                props[name] = {'type':kind('integer'),'minimum':0}
             value['$defs']['Read'] = {'type':'object','properties':{k:props[k] for k in names},
                                      'required':list(names),'additionalProperties':False}
             if book_questions.read_along(context):
