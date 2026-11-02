@@ -1,6 +1,6 @@
 # Lesson package plan
 
-Status: **planned** — no step started. Created 2026-11-01.
+Status: **Steps 0–7 done (2026-11-02)**; open items listed under "Remaining". Created 2026-11-01.
 
 This is the working reference for restructuring lesson preparation so the app
 works with any new workbook or subject and uses a strong reasoning model fully.
@@ -407,6 +407,21 @@ built), `docs/ARCHITECTURE.md`, root `AGENTS.md` (+ `CLAUDE.md` importing it),
   API boundary in every step that touches payloads.
 - Measure with the eval set before and after Steps 2–5; record numbers below.
 
+## Remaining (2026-11-02)
+
+- **Mila's Math is blocked by a missing file, not code:** document 17
+  (*Good and Beautiful Math 1_compressed.pdf*) was marked `missing` at migration
+  and is not in the Drive folder. Add the PDF to that subject's books. Also
+  missing: documents 12–14 (duplicate Português workbook records) and 16/18
+  (*Sparks And Stars Parent Guide*).
+- **API-writer eval:** prepare the sample lessons with `gpt-6.1-sol` once
+  OpenAI API credit is restored, and compare with the Codex-authored ones.
+- **Answer keys as separate PDFs:** first real use will be *Math 4 Course Book* +
+  *Math 4 Answer Key* in Incoming Books; give the key the `answer_key` role.
+- **Retired modules** (see Step 6) — deferred.
+- Frontend: `ActivityLesson.test.jsx › keeps the latest feedback visible…` is a
+  timing flake under the full parallel run (passes alone, also at baseline).
+
 ## Progress log
 
 | Date | Step | Result / numbers | Commit |
@@ -415,3 +430,8 @@ built), `docs/ARCHITECTURE.md`, root `AGENTS.md` (+ `CLAUDE.md` importing it),
 | 2026-11-01 | 0 | Baseline committed; 4 eval packets exported (Math blocked by book-version mismatch); tests 727 pass / 78 fail / 18 error, list saved | `37f7166` |
 | 2026-11-01 | 1 | `lesson_eval.py` + rubric + ground truth for 4 lessons; baseline table above. Fidelity strong, teaching thin (History 94 explanation words / 1029 read) | `f365b1e` |
 | 2026-11-01 | 2 | Composed writer prompt, book's-point-of-view rule, cleaned guides/templates; family-approved skill versions saved. Tests: 737 pass, same 96 baseline failures, no new ones. Eval blocked by OpenAI quota | `efff777` + (this commit) |
+| 2026-11-02 | 3 | Sentence references + 32k output; History 380 authored via Codex path: 710 explanation words vs 94 | `2325fa4` |
+| 2026-11-02 | 4 | Local answer-key detection, teacher-only answers in scripts, grading lookup, family view; The Plague prepared | `98395f4` |
+| 2026-11-02 | 5 | Language from topics; writer-declared evidence; slim subject template | `e00c54e` |
+| 2026-11-02 | 6 | 96 stale failures triaged; suite green (753 pass); dead endpoint code removed; reviewer gets writer rules | `ffac55b` |
+| 2026-11-02 | 7 | LESSON_PIPELINE, ARCHITECTURE, AGENTS.md; 15 docs archived | `214fec7` |
