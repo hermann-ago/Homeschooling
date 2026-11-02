@@ -248,6 +248,9 @@
   .lesson-preparation-bar { gap: .5rem; padding: .5rem .75rem; }
   .lesson-preparation-bar > .app-button { min-width: 0; max-width: 55%; white-space: normal; height: auto; min-height: 2.75rem; }
   .tutor-thread-content { padding: .75rem; }
+  /* During a lesson the parent preparation tools give the reading area their room. */
+  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar { display: none; }
+  .lesson-workspace-switch { padding-top: .3rem; padding-bottom: .3rem; }
   .tutor-chat-header { padding: .35rem .75rem; }
   .tutor-composer { margin: 0 .4rem .4rem; max-height: 80%; }
   .tutor-composer[data-expanded="true"] { height: 94%; max-height: 94%; }

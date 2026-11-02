@@ -139,7 +139,7 @@ export function GuidePanel({ guide, learner, topic, session, pinned, slotId, clo
       <p className="text-sm text-muted leading-relaxed">Prepare a teacher’s walk-through of the assigned pages, with the original reading, useful explanations and activities. The guide and recorded voice are saved for every device.</p>
     </div>
   </div>;
-  return <div className="guide-chat-panel">
+  return <div className="guide-chat-panel" data-in-session={Boolean(session)}>
     {preparation}
     {!guide.current && !pinned && <p className="px-4 py-2 text-sm bg-attention-soft">Update available · the teaching instructions or book pages have changed.</p>}
     <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson}

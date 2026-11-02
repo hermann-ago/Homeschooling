@@ -51,7 +51,9 @@ const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = n
   const [viewportWidth, setViewportWidth] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [pageRatio, setPageRatio] = useState(null);
-  const [fit, setFit] = useState('page');
+  // Phones read a page at its full width; a whole page there is too small to read.
+const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 640 ? 'width' : 'page');
+  const [fit, setFit] = useState(initialFit);
   const [textItems, setTextItems] = useState([]);
   const viewportRef = useRef(null);
   const pageSurfaceRef = useRef(null);
