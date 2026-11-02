@@ -48,7 +48,7 @@ export default function BookNavigation({subject}) {
       <div className="flex-1 min-w-40"><p className="font-semibold text-sm">{book.name}</p><p className="text-xs text-muted">{bookRoles.find(([id])=>id===book.role)?.[1]} · {book.page_count} PDF pages · {book.navigation?.data.chapters.length||0} chapters</p></div>
       {!book.navigation&&<Button size="sm" disabled={busy!==null} onClick={()=>extract(book)}>{busy===book.document_id?'Reading contents…':'Read table of contents'}</Button>}
       <Button size="sm" onClick={()=>setEditing(book)}>Edit chapter map</Button>
-      {book.navigation&&!book.navigation.data.chapters.length&&<p className="text-xs text-muted w-full">No reliable contents found. Enter chapter ranges from the original PDF, or choose pages directly for a lesson.</p>}
+      {book.navigation&&!book.navigation.data.chapters.length&&<p className="text-xs text-muted w-full">{book.role==='answer_key'?'Each lesson’s answer pages are found automatically when the lesson is prepared.':book.role==='reference'?'Add pages from this book to a lesson when you prepare it.':'No reliable contents found. Enter chapter ranges from the original PDF, or choose pages directly for a lesson.'}</p>}
     </article>)}
     {(problem||error)&&<p role="alert" className="text-problem text-sm">{problem||error.message}</p>}
     {editing&&<ChapterEditor key={editing.document_id} subject={subject} book={editing} onClose={()=>setEditing(null)}/>}
