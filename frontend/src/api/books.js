@@ -17,35 +17,6 @@ export const booksApi = {
   resources: (subject) => fetchApi(`/subjects/${subject}/resources`),
   collection: (subject) => fetchApi(`/subjects/${subject}/book-collection`),
   saveCollection: (subject, data) => fetchApi(`/subjects/${subject}/book-collection`, { method: 'PUT', body: JSON.stringify(data) }),
-  analysisPreview: (subject) => fetchApi(`/subjects/${subject}/book-collection/preview`),
-  analyze: (subject, data) => fetchApi(`/subjects/${subject}/book-collection/analyze`, { method: 'POST', body: JSON.stringify(data) }),
-  analysisStatus: (subject) => fetchApi(`/subjects/${subject}/book-collection/analysis`),
-  importSourceMap: (subject,file) => {
-    if (!file.name.toLowerCase().endsWith('.json') || file.size>33554432) throw new Error('Choose a source-map JSON smaller than 32 MB.');
-    const form=new FormData();form.append('file',file);
-    return fetchApi(`/subjects/${subject}/book-collection/import-map`,{method:'POST',body:form});
-  },
-  refreshSources: (subject, data) => fetchApi(`/subjects/${subject}/book-collection/source-review`, {method:'POST',body:JSON.stringify(data)}),
-  continueAnalysis: (job, maximum_usd) => fetchApi(`/subject-analysis/${job}/continue`, { method: 'POST', body: JSON.stringify({ maximum_usd }) }),
-  pauseAnalysis: (job) => fetchApi(`/subject-analysis/${job}/pause`, { method: 'POST' }),
-  subjectMap: (id, subject) => fetchApi(`/subject-maps/${id}${subject ? `?subject_id=${subject}` : ''}`),
-  selectMap: (id, data) => fetchApi(`/subject-maps/${id}/select`, { method: 'POST', body: JSON.stringify(data) }),
-  reviewMap: (id, data, subject) => fetchApi(`/subject-maps/${id}/review${subject ? `?subject_id=${subject}` : ''}`, { method: 'PUT', body: JSON.stringify(data) }),
-  knowledgeLibrary: () => fetchApi('/subject-knowledge'),
-  saveKnowledge: (subject) => fetchApi(`/subjects/${subject}/knowledge-file`, { method: 'POST' }),
-  companions: (subject) => fetchApi(`/subjects/${subject}/book-companions`),
-  createCompanion: (subject, document) => fetchApi(`/subjects/${subject}/book-companions/${document}`, { method: 'POST' }),
-  companionPage: (subject, document, page) => fetchApi(`/subjects/${subject}/book-companions/${document}/pages/${page}`),
-  importCompanion: (subject, document, file, revision, review) => {
-    if (!file.name.toLowerCase().endsWith('.json') || file.size > 33554432) throw new Error('Choose a book JSON smaller than 32 MB.');
-    const form = new FormData();
-    form.append('file', file);
-    form.append('expected_revision', String(revision));
-    if (review) { form.append('source_review','true'); form.append('note',review.note); }
-    return fetchApi(`/subjects/${subject}/book-companions/${document}/import`, { method: 'POST', body: form });
-  },
-  reuseKnowledge: (subject, data) => fetchApi(`/subjects/${subject}/reuse-knowledge`, { method: 'POST', body: JSON.stringify(data) }),
-  mapReading: (id, unit) => fetchApi(`/subject-maps/${id}/reading/${unit}`),
   import: (subject, books) => fetchApi(`/subjects/${subject}/book-imports`, { method: 'POST', body: JSON.stringify({ books }) }),
   stage: (file) => {
     if (!file.name.toLowerCase().endsWith('.pdf') || file.size > 262144000) throw new Error('Choose a PDF smaller than 250 MB.');
@@ -54,10 +25,7 @@ export const booksApi = {
     return fetchApi('/books/stage', { method: 'POST', body: form });
   },
   prepare: (book, role, companion_id, answer_for_id) => fetchApi(`/subject-books/${book}/prepare`, { method: 'POST', body: JSON.stringify({ role, companion_id, answer_for_id }) }),
-  rematch: (book, topic_id) => fetchApi(`/subject-books/${book}/rematch`, { method: 'POST', body: JSON.stringify({ topic_id }) }),
   retry: (job) => fetchApi(`/book-imports/${job}/retry`, { method: 'POST' }),
-  edit: (exercise, data) => fetchApi(`/exercises/${exercise}`, { method: 'PUT', body: JSON.stringify(data) }),
-  history: (exercise) => fetchApi(`/exercises/${exercise}/history`),
   practice: (exercise) => fetchApi(`/exercises/${exercise}/practice`, { method: 'POST' }),
   progress: (child) => fetchApi(`/workbook-progress/${child}`),
 };

@@ -72,7 +72,7 @@ export default function BookImportDialog({ subject, onClose, onAdded }) {
     finally { setBusy(false); }
   };
   return <Dialog open onClose={busy ? undefined : onClose} title={`Add books to ${subject.name}`} width={720}
-    description="Assemble the books for this subject before asking AI to review them. Link each answer key to its matching workbook and edition. Saving books uses no AI allowance."
+    description="Add this subject's books and link each answer key to the book it answers. Saving reads each new book's contents to build its lessons, on this computer, with no AI."
     footer={<><Button onClick={onClose} disabled={busy}>Cancel</Button><Button variant="primary" disabled={busy || (mode !== 'printed' && (!selected.length || !collection))} onClick={prepare}>{busy ? 'Saving…' : mode === 'printed' ? 'Add chapters' : 'Save books to collection'}</Button></>}>
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-2">

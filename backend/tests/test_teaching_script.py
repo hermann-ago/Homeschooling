@@ -125,50 +125,6 @@ def test_authoring_schema_excludes_engine_ids_evidence_jobs_and_private_answers(
     with pytest.raises(ValidationError):writer.TeachingScript.model_validate(script)
 
 
-@pytest.mark.parametrize('style_advice',[False,True])
-def test_application_prepares_with_new_writer_schema_and_keeps_source_script_private(harness,monkeypatch,style_advice):
-    from tests.test_lesson_quality import fixture
-    from tutoring.script_review import Review
-    h=harness;child,_,topic,package,manifest,_=fixture(h)
-    script={'welcome':'Vamos ouvir uma história e olhar uma letra.',
-        'turns':[{'type':'read','first':manifest['readings'][0]['from'],'last':manifest['readings'][0]['to']},
-            {'type':'book_work','document_id':topic['document_id'],'page':package['pdf_pages']['start'],
-                'prompt':'Aponte a letra R no livro.','response':{'format':'observe'}}],
-        'closing':'Podemos voltar a essas palavras depois.'}
-    calls=[]
-    def generate(prompt,**kwargs):
-        calls.append(kwargs)
-        schema=kwargs['schema']
-        assert kwargs.get('pdf') and not h.ctx.store._lock._is_owned()
-        if issubclass(schema,Review):
-            assert 'FOCUSED SCRIPT CHECK' in prompt
-            assert 'Reserve source_conflict for a genuine disagreement' in prompt
-            assert 'Never classify a missing printed example alone as a source dispute' in prompt
-            return {'findings':[{'category':'tone','severity':'blocking','activity_ids':[],
-                'detail':'I would prefer a shorter welcome.','suggestion':'Shorten it.'}] if style_advice else []}
-        from tutoring.page_script import Script
-        assert issubclass(schema,Script)
-        assert 'OUTPUT FORMAT' in prompt and 'activity_kind' not in prompt
-        return schema.model_validate(script).model_dump()
-    monkeypatch.setattr(h.ctx.ai,'generate',generate)
-    before={t:copy.deepcopy(h.ctx.store.all(t)) for t in ('attempts','tutor_sessions','lesson_playback','activity_responses')}
-    response=h.call('POST','/api/tutor/reader/guide',json={'learner':child['id'],'topic':topic['id'],'prepare_voice':False})
-    assert response.status_code==200,response.text
-    saved=response.json();assert saved['script_review']['status']=='approved'
-    assert saved['source_coverage']['readings_preserved']==0  # No pre-extracted coverage inventory.
-    assert [a['kind'] for a in saved['activities']]==['introduce','read_source','explain_or_observe','close_lesson']
-    frozen=h.ctx.store.get('guides',saved['guide_id'])['context_snapshot']
-    assert frozen['preparation_policy']=='original-pages-3' and frozen['teaching_script']['script']['welcome']==script['welcome']
-    if style_advice:
-        from tutoring.script_review import latest
-        assert saved['script_review']['advice_count']==1
-        reviewed=latest(h.ctx,saved['guide_id'])['data']
-        assert reviewed['findings'][0]['severity']=='advice' and reviewed['style_proposals'][0]['severity']=='blocking'
-    assert 'teaching_script' not in response.text and 'task_id' not in response.text
-    count=len(calls)
-    assert h.call('POST','/api/tutor/reader/guide',json={'learner':child['id'],'topic':topic['id'],'prepare_voice':False}).json()['guide_id']==saved['guide_id']
-    assert len(calls)==count==2
-    assert before=={t:h.ctx.store.all(t) for t in before}
 
 
 def test_real_provider_adapter_uses_high_reasoning_and_reuses_authored_reply(harness,monkeypatch):

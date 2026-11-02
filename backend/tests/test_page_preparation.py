@@ -83,7 +83,6 @@ def test_chapter_map_is_local_shared_and_does_not_scan(harness, monkeypatch):
     output = io.BytesIO(); writer.write(output)
     upload(h, data=output.getvalue())
     monkeypatch.setattr(h.ctx.ai, 'generate', lambda *a, **k: pytest.fail('No AI scan for navigation'))
-    monkeypatch.setattr(books, 'scan_unit', lambda *a, **k: pytest.fail('Retired scanner'))
     readings = []
     for kid in (one, two):
         enroll(h, kid['id']); readings.append(index(h, kid['id']))
@@ -147,9 +146,6 @@ def test_selected_pages_are_edition_bound_and_keys_are_private(harness, monkeypa
     assert len(PdfReader(io.BytesIO(private)).pages)==3
     assert not any(p['role']=='answer_key' for p in public['pages'])
     assert review['pages'][-1]['role']=='answer_key'
-    # No source inventory may run before the script writer.
-    from tutoring import lesson_source_index
-    monkeypatch.setattr(lesson_source_index,'ensure',lambda *a,**k:pytest.fail('No preflight extraction'))
     seen=[]
     def write(text,*args,**kwargs):
         seen.append((text,kwargs['pdf']))
@@ -198,10 +194,3 @@ def test_voice_samples_are_read_only_and_selected_voice_does_not_replace_audio(h
     assert denied.status_code==400
 
 
-def test_retired_whole_book_authoring_endpoints_cannot_purchase_generation(harness, monkeypatch):
-    h=harness
-    monkeypatch.setattr(h.ctx.ai,'generate',lambda *a,**k:pytest.fail('Retired endpoint must not generate'))
-    r=h.call('POST','/api/subjects/1/book-collection/analyze',json={'fingerprint':'old','maximum_usd':1})
-    assert r.status_code==410,r.text
-    r=h.call('POST','/api/subjects/1/book-companions/1')
-    assert r.status_code==410,r.text

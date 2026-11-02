@@ -57,8 +57,6 @@ def test_eligibility_uses_subsections_and_optional_status(harness, monkeypatch):
     assert [e["id"] for e in harness.ctx.books.eligible(seeded["genghis"])] == ["exercise-test-0"]
     response = harness.call("GET", f"/api/subjects/{seeded['history']['id']}/resources")
     assert response.status_code == 200 and "PRIVATE ANSWERS" not in response.text
-    preview = harness.call("GET", "/api/exercises/exercise-test-0/preview")
-    assert preview.status_code == 200 and b"PRIVATE ANSWERS" not in preview.content
     with harness.ctx.store.transaction() as tx:
         d = dict(tx.get("exercise_versions", "version-test-1")["data"])
         d.update(optional=True, requirements=[{"topic_id": seeded["genghis"]["id"], "evidence": "They lived in felt tents."}])
@@ -78,30 +76,6 @@ def test_eligible_numbered_exercises_keep_source_order_past_nine(harness,monkeyp
     assert [e['reference'] for e in harness.ctx.books.eligible(seeded['genghis'])]==['9','10','11','12']
 
 
-@pytest.mark.parametrize("invalid_kind", ["unknown", "duplicate"])
-def test_inconsistent_matches_wait_for_review_and_reuse_saved_response(harness, monkeypatch, invalid_kind):
-    seeded, _ = prepare(harness, monkeypatch)
-    book = add_catalog(harness, seeded, 1)
-    doc = harness.ctx.store.get("documents", book["document_id"])
-    catalog = [{"exercise_id": "original-exercise", "reference": "1", "chapter": None,
-        "section": "", "pages": [1], "prompt": "Where did they live?"}]
-    monkeypatch.setattr(harness.ctx.books, "_raw_exercises", lambda *args: catalog)
-    monkeypatch.setattr(harness.ctx.books, "_check_catalog", lambda *args: None)
-    calls = []
-    def propose(*args):
-        calls.append(True)
-        item = {"exercise_id": "foreign-exercise" if invalid_kind == "unknown" else "original-exercise",
-            "requirements": [{"topic_id": seeded["genghis"]["id"], "evidence": "They lived in felt tents."}],
-            "clear": True, "reason": "A proposed link"}
-        return {"matches": [item] if invalid_kind == "unknown" else [item, dict(item)]}
-    monkeypatch.setattr(books, "ask", propose)
-    companion = next(b for b in harness.ctx.store.all("subject_books") if b["role"] == "textbook")
-    matches = harness.ctx.books._matches(book, doc, companion, {})
-    assert set(matches) == {"original-exercise"}
-    assert matches["original-exercise"]["status"] == "needs_review"
-    assert matches["original-exercise"]["requirements"] == []
-    assert harness.ctx.books._matches(book, doc, companion, {}) == matches
-    assert len(calls) == 1
 
 
 def workbook_guide(harness, monkeypatch):
@@ -141,42 +115,6 @@ def test_practice_after_final_topic_does_not_change_reading_completion(harness, 
     assert harness.ctx.store.all("assignment_items")[0]["status"] == "skipped"
 
 
-@pytest.mark.parametrize("qualified_reference", [False, True])
-def test_reviewed_maps_keys_and_old_answers_are_preserved(harness, monkeypatch, qualified_reference):
-    seeded, _ = prepare(harness, monkeypatch)
-    book = add_catalog(harness, seeded, 1)
-    doc = harness.ctx.store.get("documents", book["document_id"])
-    raw = [{"reference": f"Chapter 21, {q}" if qualified_reference and q == 1 else str(q), "section": "Mongols", "chapter": 21, "pages": [1], "printed_page": "79",
-        "prompt": f"Original question {q}", "kind": "handwritten", "optional": False} for q in (1, 2, 4)]
-    with harness.ctx.store.transaction() as tx:
-        tx.update("chapters", f"{seeded['history']['id']}:21", {"test_document_id": doc["id"], "test_pdf_start": 1, "test_pdf_end": 1})
-        tx.update("teacher_keys", f"{seeded['history']['id']}:21:1", {"exception": "Reviewed key exception"})
-        tx.insert("book_units", {"id": "reviewed-source", "sha256": doc["sha256"], "role": "test", "version": books.SCAN_VERSION,
-            "first_page": 1, "last_page": 2, "data": {"pages": [{"page": 1, "text": "Student exercises", "student_safe": True}, {"page": 2, "text": "PRIVATE ANSWERS", "student_safe": False}], "exercises": raw}})
-        old = tx.insert("attempts", {"id": "old-Q1", "session_id": "2026-09-24-genghis", "child_id": seeded["lucas"]["id"],
-            "topic_id": seeded["genghis"]["id"], "chapter": 21, "question_ref": "Q1 / book 79 (PDF 82)", "first_answer": "Original answer",
-            "first_result": "Correct", "independence": "independent"})
-    original = harness.ctx.store.get("attempts", old["id"])
-    maps = harness.ctx.store.all("question_maps")
-    catalog = harness.ctx.books._raw_exercises(book, doc)
-    monkeypatch.setattr(books, "ask", lambda *args: {"matches": [{"exercise_id": e["exercise_id"], "requirements": [], "clear": False, "reason": "uncertain"} for e in catalog]})
-    companion = next(b for b in harness.ctx.store.all("subject_books") if b["role"] == "textbook")
-    matches = harness.ctx.books._matches(book, doc, companion, {})
-    first = next(e for e in catalog if books.question_number(e["reference"]) == 1)
-    assert matches[first["exercise_id"]]["answer"] == "SECRET-KEY-ANSWER"
-    assert matches[first["exercise_id"]]["exception"] == "Reviewed key exception"
-    assert next(m for e,m in matches.items() if e == first["exercise_id"])["requirements"][0]["topic_id"] == seeded["genghis"]["id"]
-    harness.ctx.books._publish(book, doc, {"index_id": "reviewed-index"}, matches, "ready")
-    assert harness.ctx.store.all("question_maps") == maps
-    assert harness.ctx.store.get("attempts", old["id"]) == original
-    assert len(harness.ctx.store.all("exercise_attempt_links")) == 1
-    assert [e["reference"] for e in harness.ctx.books.eligible(seeded["genghis"])] == ["2"]
-    public = harness.call("GET", f"/api/subjects/{seeded['history']['id']}/resources")
-    assert "Original answer" in public.text and "SECRET-KEY" not in public.text
-    with harness.ctx.store.transaction() as tx:
-        tx.update("topics", seeded["genghis"]["id"], {"stop_before": None})
-    changed = harness.ctx.books._matches(book, doc, companion, {})
-    assert changed[first["exercise_id"]]["status"] == "needs_review"
 
 
 def test_new_sessions_cannot_start_guides_missing_new_core_exercises(harness, monkeypatch):

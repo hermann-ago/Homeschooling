@@ -12,17 +12,13 @@ import json
 import logging
 import re
 import threading
-import unicodedata
 import uuid
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
-from pypdf import PdfReader, PdfWriter
+from pydantic import BaseModel
+from pypdf import PdfReader
 
 from storage import layout
 from . import passages
-from .activities import AnswerFormat, Choice, QuestionContent
 
 log = logging.getLogger(__name__)
 ROLES = ("textbook", "combined", "workbook", "test", "answer_key", "reference")
@@ -46,43 +42,6 @@ def norm(value):
     return passages._norm(value or "").casefold()
 
 
-def original_quote(text, proposed):
-    """Locate formatting-equivalent text, then return the original source span.
-
-    PDF drop caps and ligatures often split a word. Ignore whitespace and
-    typographic quote/dash variants only; never change letters or drop signs.
-    """
-    punctuation = str.maketrans({'“': '"', '”': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '−': '-'})
-    def indexed(value, join_wrapped_words=False):
-        chars, positions = [], []
-        for i, char in enumerate(value):
-            if join_wrapped_words and char in ('-', '\u00ad') and i and value[i - 1].isalpha():
-                # Optional end-of-line word hyphens; a minus sign in an equation
-                # or an ordinary hyphenated expression remains in the source.
-                before = re.search(r"[^\W\d_]{2,}$", value[:i], re.UNICODE)
-                after = re.match(r"[ \t]*\r?\n[ \t]*[^\W\d_](?:[ \t]*[^\W\d_])", value[i + 1:], re.UNICODE)
-                if before and after:
-                    continue
-            for normalized in unicodedata.normalize('NFKC', char).casefold().translate(punctuation):
-                if not normalized.isspace():
-                    chars.append(normalized)
-                    positions.append(i)
-        return ''.join(chars), positions
-    targets = [proposed]
-    # A generator sometimes adds a terminal sentence period. Return the exact
-    # original span, rather than changing the source or relaxing numeric signs.
-    if len(proposed.strip()) >= 15 and proposed.rstrip().endswith('.') and not proposed.rstrip().endswith('..'):
-        targets.append(proposed.rstrip()[:-1])
-    for candidate in targets:
-        target, _ = indexed(candidate)
-        for join in (False, True):
-            source, positions = indexed(text, join)
-            start = source.find(target) if target else -1
-            if start >= 0:
-                return text[positions[start]:positions[start + len(target) - 1] + 1]
-    return None
-
-
 def book_name(filename):
     return re.sub(r"^[0-9a-f]{32}_", "", filename, flags=re.I)
 
@@ -95,237 +54,9 @@ def question_number(reference):
     return int(value[1]) if value else None
 
 
-def numbered_source(ctx, sha, native, first, last):
-    """Inventory the original numbering of an already identified test booklet."""
-    documents = {d["id"] for d in ctx.store.find("documents", sha256=sha)}
-    chapters = [c for c in ctx.store.all("chapters") if c["test_document_id"] in documents and c["test_pdf_start"] and c["test_pdf_end"]]
-    return sorted({(c["chapter"], page, int(number)) for c in chapters for page in range(max(first, c["test_pdf_start"]), min(last, c["test_pdf_end"]) + 1)
-        for number in re.findall(r"(?m)^\s*(\d+)[.)]\s", native.get(page, ""))})
-
-
-class ScannedExercise(BaseModel):
-    reference: str
-    section: str = ""
-    chapter: int | None = None
-    pages: list[int]
-    printed_page: str = ""
-    prompt: str
-    kind: str = "handwritten"
-    optional: bool = False
-    unnumbered: bool = False
-    answer: str | None = None
-    issue: str | None = None
-    answer_format: AnswerFormat = "text"
-    choices: list[Choice] = Field(default_factory=list, max_length=12)
-
-    @model_validator(mode="after")
-    def answer_controls(self):
-        controls = QuestionContent(prompt=self.prompt or "Source task", answer_format=self.answer_format,
-                                   choices=self.choices)
-        self.choices = controls.choices
-        return self
-
-
-class ScannedElement(BaseModel):
-    id: str = ""
-    kind: Literal["text", "illustration", "diagram", "table", "formula", "answer_space", "decoration"]
-    text: str = ""
-    description: str = ""
-    bbox: list[float] | None = None
-    rows: list[list[str]] = Field(default_factory=list)
-    expression: str | None = None
-    relates_to: list[str] = Field(default_factory=list)
-    issue: str | None = None
-
-
-class ReadingSpan(BaseModel):
-    first_line: int = Field(ge=1)
-    last_line: int = Field(ge=1)
-
-
-class ScannedPage(BaseModel):
-    page: int
-    text: str
-    student_safe: bool = False
-    issue: str | None = None
-    native_reliable: bool = True
-    teacher_material: bool = False
-    public_fragments_only: bool = False
-    # Only genuine lesson/subsection starts, with a verbatim heading from this page.
-    headings: list[str] = Field(default_factory=list)
-    reading_blocks: list[str] = Field(default_factory=list)
-    reading_spans: list[ReadingSpan] = Field(default_factory=list, max_length=300)
-    review_notes: list[str] = Field(default_factory=list, max_length=30)
-    printed_page: str | None = None
-    elements: list[ScannedElement] = Field(default_factory=list)
-    review_method: Literal["native_checked", "visual"] = "visual"
-
-
-class KeyQuote(BaseModel):
-    page: int = Field(ge=1)
-    quote: str = Field(min_length=1, max_length=12000)
-
-
-class ScannedKeyAnswer(BaseModel):
-    reference: str
-    chapter: int | None = None
-    section: str = ""
-    pages: list[int]
-    answer: str
-    evidence: str
-    evidence_element_ids: list[str] = Field(default_factory=list)
-    evidence_quotes: list[KeyQuote] = Field(default_factory=list, max_length=30)
-    issue: str | None = None
-
-
-class ScanResult(BaseModel):
-    pages: list[ScannedPage]
-    exercises: list[ScannedExercise] = Field(default_factory=list)
-    answers: list[ScannedKeyAnswer] = Field(default_factory=list)
-
-
-def key_evidence_supported(entry, pages):
-    selected = [p for p in pages if p["page"] in entry["pages"]]
-    if not selected or {p["page"] for p in selected} != set(entry["pages"]) or any(not p.get("teacher_material") for p in selected):
-        return False
-    if entry.get('evidence_quotes'):
-        indexed={p['page']:p for p in selected}
-        if any(q['page'] not in indexed or not norm(q['quote']) or norm(q['quote']) not in norm(indexed[q['page']]['text']) for q in entry['evidence_quotes']):
-            return False
-        quote=norm('\n'.join(q['quote'] for q in entry['evidence_quotes']))
-        return bool(norm(entry['answer'])) and norm(entry['answer']) in quote and bool(norm(entry['evidence'])) and norm(entry['evidence']) in quote
-    quote = norm(entry["evidence"])
-    if not norm(entry["answer"]) or norm(entry["answer"]) not in quote:
-        return False
-    if not entry.get("evidence_element_ids"):
-        return bool(quote) and quote in norm("\n".join(p["text"] for p in selected))
-    elements = {e["id"]: e for p in selected for e in p.get("elements", []) if e.get("id") and not e.get("issue")}
-    if any(eid not in elements for eid in entry["evidence_element_ids"]):
-        return False
-    evidence = []
-    for eid in entry["evidence_element_ids"]:
-        element = elements[eid]
-        evidence.extend([element.get("text", ""), element.get("description", "")])
-        evidence.extend(" ".join(row) for row in element.get("rows", []))
-    return bool(quote) and any(quote in norm(part) for part in evidence)
-
-
 class Requirement(BaseModel):
     topic_id: int
     evidence: str
-
-
-class ExerciseMatch(BaseModel):
-    exercise_id: str
-    requirements: list[Requirement] = Field(default_factory=list)
-    clear: bool = False
-    reason: str = ""
-    needed_topic_ids: list[int] = Field(default_factory=list)
-
-
-class MatchResult(BaseModel):
-    matches: list[ExerciseMatch]
-
-
-def ask(ctx, text, schema, pdf=None, max_output=16384):
-    return ctx.ai.generate(text, schema=schema, pdf=pdf, category="books", max_output=max_output)
-
-
-def proposal_id(sha, role, first, last):
-    return "scan-proposal-" + ident(sha, role, first, last, "proposal-1")
-
-
-def resolve_scan(db, unit, *, source_review_id=...):
-    """Revalidate a saved proposal without changing the immutable source checkpoint."""
-    reviews = db.find("book_source_reviews", sha256=unit["sha256"], role=unit["role"]) if source_review_id is not None else []
-    if source_review_id is not ...:
-        reviews=[r for r in reviews if r['id']==source_review_id]
-    if reviews:
-        from .book_companion import unit_data
-        review = max(reviews, key=lambda r: r["version"])
-        data = unit_data(review["data"], unit["first_page"], unit["last_page"])
-        return {**unit, "data": data, "source_review_id": review["id"]}
-    proposal = db.get("book_units", proposal_id(unit["sha256"], unit["role"], unit["first_page"], unit["last_page"]))
-    if not proposal:
-        return unit
-    frozen = proposal["data"]
-    data = normalize_scan(copy.deepcopy(frozen["result"]), unit["role"], unit["first_page"], unit["last_page"],
-                          frozen["end"], {int(n): text for n, text in frozen["native"].items()}, frozen["inventory"])
-    return {**unit, "data": data}
-
-
-def scan_unit(ctx, pdf, role, first, last):
-    raise ValueError('Whole-book source scanning is retired. Select original pages for a lesson instead.')
-
-
-def normalize_scan(result, role, first, last, end, native, inventory, *, allow_mixed_readings=False):
-    numbers = [p["page"] for p in result["pages"]]
-    if sorted(numbers) != list(range(first, last + 1)):
-        raise ValueError("The scan omitted or duplicated a page; retry this unit")
-    for page in result["pages"]:
-        page["review_method"] = {"native": "native_checked", "native text checked against page image": "native_checked",
-                                 "vision": "visual"}.get(page.get("review_method"), page.get("review_method") or "visual")
-        if page.get("native_reliable", True) and len(norm(native[page["page"]])) >= passages.MIN_PAGE_CHARACTERS:
-            page["text"] = native[page["page"]]
-        elif not page["text"] and norm(native[page["page"]]):
-            page["issue"] = page.get("issue") or "The page transcription needs checking"
-        if page.get("reading_spans"):
-            lines = page["text"].splitlines()
-            spans = page["reading_spans"]
-            if any(not (1 <= s["first_line"] <= s["last_line"] <= len(lines)) for s in spans):
-                page["issue"] = "Reading line boundaries are outside this original page"
-                page["reading_blocks"] = []
-            else:
-                page["reading_blocks"] = ['\n'.join(lines[s["first_line"]-1:s["last_line"]]) for s in spans]
-        page["reading_blocks"] = [original_quote(page["text"], b) or b for b in page.get("reading_blocks", [])]
-        page["headings"] = [original_quote(page["text"], h) or h for h in page.get("headings", [])]
-        page["headings"] = [h for h in page["headings"] if norm(h) and norm(h) in norm(page["text"])]
-        if role == "answer_key" or re.search(r"answer\s+key|answers\s+to|teacher.?s?\s+notes", page["text"], re.I):
-            page["student_safe"] = False
-            page["teacher_material"] = True
-        if page.get("teacher_material"):
-            page["student_safe"] = False
-    if role == "combined":
-        for page in result["pages"]:
-            blocks = page.get("reading_blocks", [])
-            mixed = allow_mixed_readings and page.get('teacher_material') and page.get('public_fragments_only') and blocks
-            if (page.get("teacher_material") or not page.get("student_safe")) and not mixed:
-                page["reading_blocks"] = []
-                page["headings"] = []
-            elif any(not norm(block) or norm(block) not in norm(page["text"]) for block in blocks):
-                page["reading_blocks"] = []
-                page["headings"] = []
-                page["issue"] = "Combined-book reading must quote the original student text"
-            page["headings"] = [h for h in page["headings"] if any(norm(h) in norm(b) for b in page.get("reading_blocks", []))]
-    for item in result.get("answers", []):
-        if role not in ("answer_key", "combined"):
-            raise ValueError("Unexpected teacher answer entries for this resource")
-        if not item["pages"] or min(item["pages"]) < first or min(item["pages"]) > last or max(item["pages"]) > end:
-            # Keys often refer to the STUDENT book's printed pages. Relocate
-            # only by unique observed key evidence, never by those numbers.
-            anchors = [p["page"] for p in result["pages"] if key_evidence_supported({**item, "pages": [p["page"]]}, [p])]
-            item["pages"] = anchors if len(anchors) == 1 else list(range(first, last + 1))
-            if len(anchors) != 1:
-                item["issue"] = "Answer location needs review; pages indicate the inspected range, not a verified citation"
-        if not key_evidence_supported(item, result["pages"]):
-            item["issue"] = item.get("issue") or "The key answer needs checking against its original page"
-    for item in result["exercises"]:
-        # Grading answers come from verified key entries, never a scan's inference.
-        item["answer"] = None
-        if not item["pages"] or min(item["pages"]) < first or min(item["pages"]) > last or max(item["pages"]) > end:
-            raise ValueError("An exercise references pages outside its scan")
-        if not item["prompt"].strip() or (not item["reference"].strip() and not item.get('unnumbered')):
-            item["issue"] = "Exercise instructions or identity need checking"
-        if item["kind"] not in ("answer", "handwritten", "activity"):
-            item["kind"] = "handwritten"
-    missing = [(chapter, page, number) for chapter, page, number in inventory if not any(question_number(e["reference"]) == number and page in e["pages"]
-        and e.get("chapter") in (None, chapter) for e in result["exercises"])]
-    if missing:
-        raise ValueError(f"The scan omitted original test questions {missing[:8]}; retry these pages")
-    if any(sum(question_number(e["reference"]) == number and page in e["pages"] and e.get("chapter") in (None, chapter)
-        for e in result["exercises"]) > 1 for chapter, page, number in inventory):
-        raise ValueError("The scan duplicated an original test question; retry these pages")
-    return result
 
 
 class BookService:
@@ -394,46 +125,34 @@ class BookService:
             "done": 0, "total": len(reader.pages), "source_path": document["file_path"], "source_sha256": sha,
             "index_id": f"index-{uuid.uuid4().hex}"})
 
+    def prepare_collection(self, tx, subject_id):
+        """Set up each collection book not yet prepared, as the book import does:
+        readers first, then companions and references, then answer keys."""
+        from .collections import view
+        members = view(tx, subject_id)["books"]
+        ids = {b["key"]: f"book-{subject_id}-{b['document_id']}" for b in members}
+        # Books already taught from (they have lessons) keep their records and files as they are.
+        new = [b for b in members if b["prepared_status"] == "not_prepared"
+               and not tx.find("topics", subject_id=subject_id, document_id=b["document_id"])]
+        order = {"textbook": 0, "combined": 0, "workbook": 1, "test": 1, "reference": 1, "answer_key": 2}
+        jobs = []
+        for b in sorted(new, key=lambda b: (order[b["role"]], b["position"])):
+            try:  # begin() validates before writing; an unlinked key waits for its family link.
+                jobs.append(self.begin(tx, subject_id, b["path"], b["role"],
+                                       ids.get(b["companion_key"]) if b["role"] in ("workbook", "test") else None,
+                                       ids.get(b["answer_for_key"]) if b["role"] == "answer_key" else None))
+            except ValueError as exc:
+                log.info("Collection book %s not set up: %s", b["document_id"], exc)
+        return jobs
+
     def retry(self, tx, job_id):
         job = tx.get("book_imports", job_id)
         if not job or job["status"] not in ("failed", "waiting"):
             raise ValueError("Choose an unfinished preparation to retry")
-        book = tx.get("subject_books", job["book_id"])
-        completed = sum(u["last_page"] - u["first_page"] + 1 for u in
-            tx.find("book_units", sha256=job["source_sha256"], role=book["role"], version=scan_version(book["role"]))
-            if u["first_page"] and u["last_page"])
-        tx.update("subject_books", job["book_id"], {"status": "ready" if job.get("mode") == "rematch" and book["active_index"] else "queued"})
-        return tx.update("book_imports", job_id, {"status": "queued", "error": None, "done": completed,
-            "stage": "Reading pages" if completed < job["total"] else "Linking to lessons"})
+        tx.update("subject_books", job["book_id"], {"status": "queued"})
+        return tx.update("book_imports", job_id, {"status": "queued", "error": None, "done": 0,
+            "stage": "Reading table of contents"})
 
-    def rematch(self, tx, book_id, topic_id=None):
-        book = tx.get("subject_books", book_id)
-        if not book or book["role"] not in PRACTICE_ROLES or not book["active_index"] or book["status"] != "ready":
-            raise ValueError("Prepare this workbook before improving its reading links")
-        if topic_id:
-            topic = tx.get("topics", topic_id)
-            if not topic or topic["subject_id"] != book["subject_id"] or topic["archived"]:
-                raise ValueError("Choose a reading section in this subject")
-        active = next((j for j in tx.find("book_imports", book_id=book_id) if j["status"] in ("queued", "running")), None)
-        if active:
-            return active
-        doc = tx.get("documents", book["document_id"])
-        return tx.insert("book_imports", {"id": "import-" + uuid.uuid4().hex, "book_id": book_id,
-            "mode": "rematch", "target_topic_id": topic_id, "status": "queued", "stage": "Improving remaining reading links",
-            "done": doc["page_count"], "total": doc["page_count"], "source_path": doc["file_path"], "source_sha256": doc["sha256"],
-            "index_id": "index-" + uuid.uuid4().hex})
-
-    def _index_answers(self, book, doc):
-        from .book_sources import index_answers
-        index_answers(self, book, doc)
-
-    def page_index(self, doc, role):
-        pages = {}
-        for unit in self.db.find("book_units", sha256=doc["sha256"], role=role, version=scan_version(role)):
-            unit = resolve_scan(self.db, unit)
-            for page in unit["data"]["pages"]:
-                pages[page["page"]] = page
-        return pages
 
     def topic_text(self, topic):
         doc = self.db.get("documents", topic["document_id"])
@@ -451,155 +170,35 @@ class BookService:
                 self._process(job)
             except Exception as exc:
                 log.warning("Book import %s paused: %s", job_id, type(exc).__name__)
-                detail = str(exc)[:800]
-                if "prepayment credits are depleted" in detail.lower():
-                    detail = "Gemini's prepaid credits are exhausted. Your scanned pages are saved. Add credits in AI Studio, then retry remaining work."
                 with self.db.transaction(kind="books.failed") as tx:
-                    tx.update("book_imports", job_id, {"status": "failed", "error": detail})
-                    tx.update("subject_books", job["book_id"], {"status": "ready" if job.get("mode") == "rematch" else "failed"})
+                    tx.update("book_imports", job_id, {"status": "failed", "error": str(exc)[:800]})
+                    tx.update("subject_books", job["book_id"], {"status": "failed"})
 
     def _process(self, job):
         book = self.db.get("subject_books", job["book_id"])
         with self.db.transaction(kind="books.running") as tx:
-            if job.get("mode") != "rematch":
-                tx.update("subject_books", book["id"], {"status": "running"})
+            tx.update("subject_books", book["id"], {"status": "running"})
         doc = self.db.get("documents", book["document_id"])
         pdf = self.ctx.file_bytes(doc["file_path"], job["source_sha256"])
         from . import navigation
         nav = navigation.extract(self.ctx, doc)
         if book['role'] in (*READING_ROLES, 'workbook', 'test'):
             navigation.publish_topics(self, book, doc, nav)
+        if book['role'] != 'reference':
+            # Reading a large book's text can take minutes; do it now, not while a lesson is prepared.
+            from .answer_keys import fingerprint
+            fingerprint(self.ctx, doc)
         with self.db.transaction(kind='books.navigation_ready') as tx:
             tx.update('subject_books', book['id'], {'status': 'ready', 'active_index': nav['id']})
             tx.update('book_imports', job['id'], {'status': 'ready', 'stage': 'Chapter map ready' if nav['data']['chapters'] else 'Choose chapter pages',
                 'done': len(nav['data']['toc_pages']), 'total': len(nav['data']['toc_pages']), 'error': None, 'pending_ranges': []})
         self._move(job, book, doc, pdf)
 
-    def _stage(self, job_id, stage):
-        with self.db.transaction(kind="books.stage") as tx:
-            tx.update("book_imports", job_id, {"stage": stage})
 
     def _topics(self, book, doc, *, allow_partial=False):
         from . import navigation
         return navigation.publish_topics(self, book, doc, navigation.extract(self.ctx, doc))
 
-    def _raw_exercises(self, book, doc):
-        items = []
-        occurrences = {}
-        pages = self.page_index(doc, book["role"])
-        for unit in sorted(self.db.find("book_units", sha256=doc["sha256"], role=book["role"], version=scan_version(book["role"])), key=lambda u: u["first_page"]):
-            unit = resolve_scan(self.db, unit)
-            for raw in unit["data"]["exercises"]:
-                raw = dict(raw)
-                if any(pages.get(p, {}).get("teacher_material") for p in raw["pages"]):
-                    continue
-                if not all(pages.get(p, {}).get("student_safe") for p in raw["pages"]):
-                    raw["issue"] = raw.get("issue") or "The source page includes private or unchecked material"
-                if book["role"] == "test":
-                    known = next((c for c in self.db.find("chapters", subject_id=book["subject_id"]) if c["test_document_id"] == doc["id"]
-                        and c["test_pdf_start"] and c["test_pdf_end"] and c["test_pdf_start"] <= min(raw["pages"]) <= c["test_pdf_end"]), None)
-                    if known and raw.get("chapter") is None:
-                        raw["chapter"] = known["chapter"]
-                    elif known and raw["chapter"] != known["chapter"]:
-                        raw["issue"] = "The chapter label conflicts with the reviewed source range"
-                number = question_number(raw["reference"])
-                start_page = next((p for p in sorted(raw["pages"]) if number is not None and number in
-                    {int(q) for q in re.findall(r"(?m)^\s*(\d+)[.)]\s", pages.get(p, {}).get("text", ""))}), min(raw["pages"]))
-                source_identity = (start_page, number if number is not None else "activity")
-                occurrences[source_identity] = occurrences.get(source_identity, 0) + 1
-                exercise_id = "exercise-" + ident(book["id"], *source_identity, occurrences[source_identity])
-                items.append({**raw, "exercise_id": exercise_id})
-        return items
-
-    def _check_catalog(self, book, doc, catalog):
-        if book["role"] != "test":
-            return
-        pages = self.page_index(doc, book["role"])
-        original = numbered_source(self.ctx, doc["sha256"], {n: p["text"] for n,p in pages.items()}, 1, doc["page_count"])
-        missing_pages = {page for chapter,page,number in original if sum(e.get("chapter") == chapter and question_number(e["reference"]) == number
-            and page in e["pages"] for e in catalog) != 1}
-        chapters = {c["chapter"]: c for c in self.db.find("chapters", subject_id=book["subject_id"]) if c["test_document_id"] == doc["id"]}
-        for mapping in self.db.find("question_maps", subject_id=book["subject_id"]):
-            chapter = chapters.get(mapping["chapter"])
-            if chapter and not any(e.get("chapter") == mapping["chapter"] and question_number(e["reference"]) == mapping["question"] for e in catalog):
-                missing_pages.update(range(chapter["test_pdf_start"], chapter["test_pdf_end"] + 1))
-        if missing_pages:
-            # These units did not finish their exercise inventory. Leave all valid units cached.
-            with self.db.transaction(kind="books.incomplete_inventory") as tx:
-                for page in missing_pages:
-                    first = ((page - 1) // UNIT_PAGES) * UNIT_PAGES + 1
-                    unit_id = ident(doc["sha256"], book["role"], SCAN_VERSION, first)
-                    if tx.get("book_units", unit_id):
-                        tx.delete("book_units", unit_id)
-            raise ValueError(f"Some original questions on PDF pages {sorted(missing_pages)[:12]} need another scan. Retry remaining work")
-
-    def _matches(self, book, doc, companion, job):
-        topics = [t for t in self.db.find("topics", subject_id=book["subject_id"], document_id=companion["document_id"]) if not t.get("archived")]
-        texts = {t["id"]: self.topic_text(t) for t in topics}
-        catalog = self._raw_exercises(book, doc)
-        self._check_catalog(book, doc, catalog)
-        from .book_sources import match_remaining
-        results = match_remaining(self, book, doc, topics, texts, catalog, job)
-        # Reviewed History maps and known exceptions override guesses without being re-derived.
-        test_chapters = {c["chapter"] for c in self.db.find("chapters", subject_id=book["subject_id"]) if c["test_document_id"] == doc["id"]}
-        for item in catalog:
-            if book["role"] != "test" or item.get("chapter") not in test_chapters:
-                continue
-            number = question_number(item["reference"])
-            if number is None:
-                continue
-            existing = next((m for m in self.db.find("question_maps", subject_id=book["subject_id"])
-                             if m["chapter"] == item.get("chapter") and m["question"] == number), None)
-            if existing and existing["topic_id"] in texts:
-                boundaries = {k: self.db.get("topics", existing["topic_id"]).get(k) for k in ("document_id", "page_start", "page_end", "pdf_page_offset", "start_at", "stop_before")}
-                exercise = self.db.get("exercises", item["exercise_id"])
-                previous = self.snapshot(exercise) if exercise else None
-                if previous and previous["data"].get("mapping_boundaries") and previous["data"]["mapping_boundaries"] != boundaries:
-                    results[item["exercise_id"]] = {"requirements": [], "status": "needs_review", "mapping_note": "Reading boundaries changed; confirm the reviewed mapping"}
-                    continue
-                results[item["exercise_id"]] = {"requirements": [{"topic_id": existing["topic_id"], "evidence": existing["evidence"]}],
-                    "status": "matched", "mapping_note": "Preserved reviewed History mapping", "mapping_source": "reviewed_import", "mapping_boundaries": boundaries}
-                key = next((k for k in self.db.find("teacher_keys", subject_id=book["subject_id"])
-                    if k["chapter"] == item["chapter"] and k["question_start"] <= number <= k["question_end"]), None)
-                if key:
-                    results[item["exercise_id"]].update(answer=key["answer"], exception=key["exception"])
-        return results
-
-    def _publish(self, book, doc, job, matches, status):
-        from .book_sources import key_for, identity_counts
-        pages = self.page_index(doc, book["role"])
-        catalog = self._raw_exercises(book, doc)
-        counts = identity_counts(catalog)
-        active_ids = {item["exercise_id"] for item in catalog}
-        with self.db.transaction(kind="books.publish") as tx:
-            for item in catalog:
-                ex_id = item.pop("exercise_id")
-                data = {**item, **matches.get(ex_id, {"requirements": [], "status": "waiting" if status == "waiting" else "needs_review"}),
-                    "source_sha256": doc["sha256"], "book_name": book_name(doc["original_filename"]),
-                    "student_safe": all(p in pages and pages[p]["student_safe"] and not pages[p].get("issue") for p in item["pages"])}
-                if item.get("issue"):
-                    data["status"] = "needs_review"
-                exercise = tx.get("exercises", ex_id)
-                previous = tx.get("exercise_versions", exercise["active_version"]) if exercise and exercise["active_version"] else None
-                if previous and previous["parent_edited"]:
-                    data = dict(previous["data"])
-                    if not all(tx.get("topics", r["topic_id"]) and norm(r["evidence"]) in norm(self.topic_text(tx.get("topics", r["topic_id"]))) for r in data.get("requirements", [])):
-                        data.update(status="needs_review", mapping_note="The reading changed; check your saved mapping")
-                data.update(key_for(self, book, data, counts))
-                if not exercise:
-                    tx.insert("exercises", {"id": ex_id, "book_id": book["id"]})
-                ver_id = "version-" + ident(ex_id, data)
-                if not tx.get("exercise_versions", ver_id):
-                    tx.insert("exercise_versions", {"id": ver_id, "exercise_id": ex_id, "index_id": job["index_id"], "data": data,
-                        "parent_edited": bool(previous and previous["parent_edited"])})
-                tx.update("exercises", ex_id, {"active_version": ver_id, "archived": False})
-                self._link_legacy(tx, book, ex_id, data)
-            for previous in tx.find("exercises", book_id=book["id"]):
-                if previous["id"] not in active_ids:
-                    tx.update("exercises", previous["id"], {"archived": True})
-            tx.update("subject_books", book["id"], {"active_index": job["index_id"], "status": status})
-            if status == "waiting":
-                tx.update("book_imports", job["id"], {"status": "waiting", "stage": "Waiting for textbook"})
 
     def _move(self, job, book, doc, pdf):
         if not job["source_path"].startswith(layout.INCOMING_BOOKS + "/"):

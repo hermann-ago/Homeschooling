@@ -13,7 +13,6 @@ from zoneinfo import ZoneInfo
 
 from storage.store import RevisionConflict, sha256_text
 from .books import norm
-from .map_review import effective_map
 
 VERSION = "learning-memory-3"
 UNCLEAR = {"Unreadable", "Source disputed"}
@@ -52,23 +51,6 @@ def evidence_state(attempt):
     if result in ("Correct", "Partly correct", "Not yet", "With help") or attempt.get("help_given"):
         return "needs_help"
     return "not_checked"
-
-
-def latest_map(ctx, db, subject_id):
-    binding = db.find("subject_collections", subject_id=subject_id)
-    jobs = db.find("collection_analysis_jobs", collection_id=binding[0]["collection_id"]) if binding else db.find("collection_analysis_jobs", subject_id=subject_id)
-    collection = db.get("book_collections", binding[0]["collection_id"]) if binding else None
-    rows = [db.get("subject_maps", j["map_id"]) for j in jobs if j["map_id"]]
-    rows = [m for m in rows if m]
-    current = [m for m in rows if collection and m["version_id"] == collection["active_version"]]
-    rows = sorted(current or rows, key=lambda m: (m["created_at"], m["id"]))
-    if not rows:
-        selections = db.find("subject_map_selections", subject_id=subject_id)
-        saved = max(selections, key=lambda r: r["selection_number"], default=None)
-        if saved:
-            return {**saved["data"], "id": saved["map_id"], "review_revision": saved["review_number"]}
-        return None
-    return effective_map(ctx, rows[-1])
 
 
 def summarize(attempts, reviews):
@@ -114,7 +96,7 @@ class LearningMemory:
         replaced = {a["amends_attempt_id"] for a in raw if a.get("amends_attempt_id")}
         by_id = {a["id"]: a for a in raw}
         actions = {(a["session_id"], a["action_id"]): a for a in db.find("lesson_actions", child_id=child_id, subject_id=subject_id)}
-        source_map = latest_map(self.ctx, db, subject_id)
+        source_map = None  # Concept maps came from the retired whole-book analysis; evidence stays per topic.
         concepts = {c["id"]: c for c in (source_map or {}).get("concepts", []) if c.get("parent_review", {}).get("status") != "rejected"}
         links = sorted(db.find("learner_concept_links", child_id=child_id, subject_id=subject_id), key=lambda r: r["link_number"])
         current_links = {(r["evidence_kind"], r["evidence_id"]): r for r in links}
@@ -236,14 +218,7 @@ class LearningMemory:
         if not evidence or evidence["child_id"] != child_id or not topic or topic["subject_id"] != subject_id:
             raise ValueError("Choose evidence from this child and subject")
         if payload.status == "linked":
-            row = tx.get("subject_maps", payload.map_id) if payload.map_id else None
-            job = tx.get("collection_analysis_jobs", row["job_id"]) if row else None
-            if not job or job["subject_id"] != subject_id:
-                raise ValueError("Choose this subject's saved source map")
-            source_map = effective_map(self.ctx, row)
-            concept = next((c for c in source_map["concepts"] if c["id"] == payload.concept_id), None)
-            if not concept or concept.get("parent_review", {}).get("status") == "rejected":
-                raise ValueError("Choose an available source-supported concept")
+            raise ValueError("Concept links needed a whole-book source map, which the app no longer creates")
         if not payload.note.strip():
             raise ValueError("Explain why this evidence does or does not assess the selected concept")
         tx.insert("learner_concept_links", {"id": "learning-link-" + uuid.uuid4().hex, "child_id": child_id, "subject_id": subject_id,

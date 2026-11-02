@@ -101,15 +101,12 @@ class AppContext:
         self.books.backfill()
         from tutoring.navigation import migrate_page_links
         migrate_page_links(self)
-        from tutoring.subject_analysis import AnalysisService, AnalysisWorker
-        self.subject_analysis = AnalysisService(self)
         from tutoring.learning_memory import LearningMemory
         self.learning_memory = LearningMemory(self)
         from tutoring.activity_engine import ActivityEngine
         self.activity_engine = ActivityEngine(self)
         from tutoring.curriculum_preparation import recover as recover_preparation
         recover_preparation(self)
-        self.analysis_worker = None  # Whole-book analysis is retired; historical reports remain readable.
         if not live:
             from services.test_mode import TestModes
             self.test_modes = TestModes(self)
@@ -121,8 +118,6 @@ class AppContext:
             skills.ensure(self)
             from tutoring.material_skills import ensure as ensure_material_skills
             ensure_material_skills(self)
-            from tutoring.subject_knowledge import ensure
-            ensure(self)
 
     def _assign_subject_folders(self):
         """Record the Kid/Grade/Subject folder of subjects created before folders were recorded, and the grade
@@ -224,8 +219,6 @@ class AppContext:
             self.test_modes.shutdown()
         if self.import_worker:
             self.import_worker.stop()
-        if self.analysis_worker:
-            self.analysis_worker.stop()
         if self.worker:
             self.worker.stop()
         try:

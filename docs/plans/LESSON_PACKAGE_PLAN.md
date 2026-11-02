@@ -379,11 +379,21 @@ Original sketch, kept for reference:
 - [x] Reviewer now receives the writer's NON_NEGOTIABLES and, for scripts with
       recorded answers, the `answer_key` to spot-check (older guides' review
       identities unchanged).
-- [ ] Deleting retired modules (`subject_analysis`, `book_companion`,
-      `map_review`, `collections`, `lesson_source_index`, the legacy `guide`
-      prompt): still imported by read paths for saved maps, historical guides
-      and legacy grading. Removing them needs a call-graph audit and a backup
-      restore + historical playback test; deferred as low value / non-zero risk.
+- [x] **Whole-book code deleted (2026-11-02, family decision):**
+      `subject_analysis`, `map_review`, `subject_knowledge`, `offline_materials`,
+      `material_review`, `book_companion`, `lesson_source_index`, `book_sources`,
+      the companion tools, the scanning models/methods in `books.py`, 29 routes,
+      4 unmounted UI components and their API calls. Learning memory is now
+      per topic (concept maps came from the analysis); saved-map tables stay in
+      the database untouched. `collections` stays — it is the subject's book list.
+      Kept for existing records: exercise-catalog reads (workbook progress,
+      practice of old assignments) and map-pinned key grading for old sessions.
+- [x] Found while setting up Math 4 through the UI and fixed: saving a book
+      collection never set up new books (no lessons could be created for a new
+      subject); merged-file bookmarks were taken as chapters; wrapped contents
+      lines were misread; undecodable images crashed text reading; filled-in
+      answer keys (no labels) were not found; reading a large book's text took
+      minutes during preparation (now fingerprinted once at setup).
 
 ### Step 7 — Docs consolidation (P6)
 

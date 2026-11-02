@@ -82,8 +82,6 @@ def normalize_planned_readings(plan,manifest):
 
 def requirements(ctx,topic,passage):
     from .answer_controls import book_controls,binary_subitems
-    from .book_companion import row_id
-    from .books import READING_ROLES
     document=ctx.store.get('documents',topic.get('document_id'))
     result={'readings':[],'tasks':[],'checked_pages':[]}
     if not document:return result
@@ -94,23 +92,8 @@ def requirements(ctx,topic,passage):
     for sentence in sentences:
         pos+=len(normalized(sentence['text']));ends.append(pos);pos+=1
     pages=[];tasks=[]
-    for role in READING_ROLES:
-        row=ctx.store.get('book_companions',row_id(document['sha256'],role))
-        if not row:continue
-        pages=[p for p in row['data']['pages'] if first<=p['page']<=last and p['status']=='checked'
-               and p['student_safe'] and not p['teacher_material'] and not p['issues']]
-        checked={p['page'] for p in pages}
-        result['checked_pages']=sorted(checked)
-        tasks=[t for t in row['data']['exercises'] if not t.get('issue') and set(t['pages']).issubset(checked)]
-        break
-    from .lesson_source_index import saved
-    index=saved(ctx,topic)
-    if index:
-        checked=set(result['checked_pages'])
-        extra=[p for p in index['data']['pages'] if p['page'] not in checked]
-        pages+=extra
-        result['indexed_pages']=sorted(p['page'] for p in extra)
-        tasks += [t for t in index['data']['exercises'] if not set(t['pages']) & checked]
+    # Checked page inventories came from retired whole-book companions and
+    # lesson source indexes; scripts now read the original pages directly.
     for page in sorted(pages,key=lambda p:p['page']):
         for number,text in enumerate(page['reading_blocks']):
             quote=normalized(text);at=joined.find(quote)

@@ -65,7 +65,8 @@ def test_assembly_reuses_existing_work_persists_links_and_restores(history, tmp_
     h, s = history
     url = endpoint(h, s["history"]["id"])
     before = {t: copy.deepcopy(h.ctx.store.all(t)) for t in TABLES if t not in
-              ("book_collections", "subject_collections", "collection_books", "collection_versions", "documents", "operation_receipts")}
+              ("book_collections", "subject_collections", "collection_books", "collection_versions", "documents", "operation_receipts",
+               "subject_books", "book_imports")}  # New books are set up (chapter map, lessons) when the collection is saved.
     suggested = h.call("GET", url).json()
     assert suggested["revision"] == 0 and not h.ctx.store.all("book_collections")
     target = h.add_file(make_pdf([["Workbook questions"]]), "Incoming Books/Practice.pdf")
@@ -76,7 +77,7 @@ def test_assembly_reuses_existing_work_persists_links_and_restores(history, tmp_
     saved = h.call("PUT", url, key="assemble", json=body)
     assert saved.status_code == 200, saved.text
     view = saved.json()
-    assert view["version"] == 1 and view["analysis_available"]
+    assert view["version"] == 1
     key_book = next(b for b in view["books"] if b["role"] == "answer_key")
     workbook = next(b for b in view["books"] if b["key"] == key_book["answer_for_key"])
     assert workbook["edition"] == "Volume 2, 2020"
@@ -86,6 +87,8 @@ def test_assembly_reuses_existing_work_persists_links_and_restores(history, tmp_
     assert h.call("PUT", url, json=payload(view)).json() == view  # no-op creates no new version
     assert len(h.ctx.store.all("collection_versions")) == 1
     assert before == {t: h.ctx.store.all(t) for t in before}
+    queued = {h.ctx.store.get("subject_books", j["book_id"])["role"] for j in h.ctx.store.all("book_imports")}
+    assert queued == {"workbook", "answer_key"}  # only the two new books; the prepared textbook is untouched
     h.restart()
     assert h.call("GET", url).json() == view
     backup = create_backup(h.ctx.store, tmp_path / "backups")

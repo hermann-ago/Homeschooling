@@ -15,32 +15,51 @@ BOOKLET = [
 ]
 
 
-def texts(pages):
-    return answer_keys._texts(make_pdf(pages))
+def prints(pages):
+    return answer_keys.fingerprint_of(answer_keys._read(make_pdf(pages)))
 
 
 def test_key_section_and_chapter_label_select_pages_locally():
-    t = texts(BOOKLET)
-    start = answer_keys.key_start(t)
+    f = prints(BOOKLET)
+    start = answer_keys.key_start(f)
     assert start == 2
-    labels = answer_keys.lesson_labels({'title': 'The Capture of Constantinople'}, [t[1]])
+    labels = answer_keys.lesson_labels({'title': 'The Capture of Constantinople'}, [f['labels'][1]])
     assert labels == [('chapter', 24)]
     # Answers continue onto the next page until the next label.
-    assert answer_keys.key_pages(t, start, ('chapter', 24)) == [4, 5]
-    assert answer_keys.key_pages(t, start, ('chapter', 23)) == [3]
-    assert answer_keys.key_pages(t, start, ('chapter', 99)) == []
+    assert answer_keys.key_pages(f, start, ('chapter', 24)) == [4, 5]
+    assert answer_keys.key_pages(f, start, ('chapter', 23)) == [3]
+    assert answer_keys.key_pages(f, start, ('chapter', 99)) == []
 
 
 def test_portuguese_headings_and_labels_are_recognised():
-    t = texts([['Lição 3', 'Exercícios'], ['Gabarito'], ['Lição 3', '1. b 2. a'], ['Lição 4', '1. c']])
-    assert answer_keys.key_start(t) == 1
+    # From text: the tiny fixture PDF's base font cannot carry 'ã' faithfully.
+    f = answer_keys.fingerprint_of(['Lição 3\nExercícios', 'Gabarito', 'Lição 3\n1. b 2. a', 'Lição 4\n1. c'])
+    assert answer_keys.key_start(f) == 1
     assert answer_keys.lesson_labels({'title': 'Lição 3 – O leão e o ratinho'}, []) == [('lesson', 3)]
-    assert answer_keys.key_pages(t, 1, ('lesson', 3)) == [3]
+    assert answer_keys.key_pages(f, 1, ('lesson', 3)) == [3]
 
 
 def test_books_without_a_key_heading_have_no_key():
-    assert answer_keys.key_start(texts([['Chapter 1'], ['Answers are in your heart.']])) is None
-    assert answer_keys.key_start(texts([['Chapter 1']]), whole_document=True) == 0
+    assert answer_keys.key_start(prints([['Chapter 1'], ['Answers are in your heart.']])) is None
+    assert answer_keys.key_start(prints([['Chapter 1']]), whole_document=True) == 0
+
+
+def test_whole_key_pdfs_count_only_labels_that_head_a_page():
+    f = prints([['Warm-up: review what you learned in Lesson 11 before starting.'], ['Lesson 11', '1. 24 2. 36']])
+    assert answer_keys.key_pages(f, 0, ('lesson', 11), opening_only=True) == [2]
+
+
+PRACTICE = ['Complete the problems below and show your work carefully on the lines',
+            'Round each number to the nearest ten and then add the rounded numbers together',
+            'How many apples did the farmer pick if he filled six baskets with eight apples each']
+
+
+def test_filled_in_copies_are_matched_to_the_lesson_pages_they_repeat():
+    course = prints([['Lesson 1: Numbers in Nature', 'Read the story about the bees.'], PRACTICE, ['Lesson 2: Addition']])
+    key = prints([['Contents of this answer key'], ['Lesson 2 answers', '1. 10 2. 20'], PRACTICE + ['48 apples', '1. 30']])
+    # Lesson 1's practice page (2) is repeated, with answers, on key page 3; the story page has no copy.
+    assert answer_keys.matching_pages([course['phrases'][0], course['phrases'][1]], key['phrases']) == [3]
+    assert answer_keys.ranges([3, 4, 7]) == [[3, 4], [7, 7]]
 
 
 PASSAGE = {'title': 'T', 'sentences': [{'text': 'Mehmed took the city.', 'paragraphIndex': 0}]}

@@ -6,7 +6,7 @@ import { Button, Dialog } from '../ui';
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 /** The checked, single-page endpoint has no annotations or learner mutations. */
-export default function OriginalSourcePage({ map, session, companionSubject, document, page, onClose }) {
+export default function OriginalSourcePage({ session, document, page, onClose }) {
   const [file, setFile] = useState(null);
   const [url, setUrl] = useState('');
   const [problem, setProblem] = useState('');
@@ -19,9 +19,7 @@ export default function OriginalSourcePage({ map, session, companionSubject, doc
   }, []);
   useEffect(() => {
     let active = true; let blobUrl;
-    const endpoint = companionSubject ? `/subjects/${companionSubject}/book-companions/${document}/source-pdf/${page}`
-      : session ? `/tutor/sessions/${encodeURIComponent(session)}/activity-source/${document}/${page}`
-      : `/subject-maps/${map.id}/source-pdf/${document}/${page}`;
+    const endpoint = `/tutor/sessions/${encodeURIComponent(session)}/activity-source/${document}/${page}`;
     request(endpoint).then(async (response) => {
       if (!response.ok) throw new Error('This original page is unavailable. Use the saved excerpt and check the source edition.');
       const blob = await response.blob();
@@ -29,8 +27,8 @@ export default function OriginalSourcePage({ map, session, companionSubject, doc
       if (active) { blobUrl = URL.createObjectURL(blob); setUrl(blobUrl); setFile({ data }); }
     }).catch((e) => { if (active) setProblem(e.message); });
     return () => { active = false; if (blobUrl) URL.revokeObjectURL(blobUrl); };
-  }, [map?.id, session, companionSubject, document, page]);
-  return <Dialog open title={`Original PDF page ${page}`} width={950} onClose={onClose} footer={<Button onClick={onClose}>{companionSubject ? 'Back to book JSON' : 'Back to reading'}</Button>}>
+  }, [session, document, page]);
+  return <Dialog open title={`Original PDF page ${page}`} width={950} onClose={onClose} footer={<Button onClick={onClose}>Back to reading</Button>}>
     <div ref={box} className="w-full min-w-0">
       {problem && <p role="alert">{problem}</p>}
       {!file && !problem && <p role="status">Loading original page…</p>}

@@ -139,10 +139,8 @@ def compatible_topic(test, topic_id):
     if test.store.get("children", child_id) != test.live.store.get("children", child_id):
         return False
     from tutoring.skills import packet
-    from tutoring.lesson_context import status
     from tutoring.family_skill import packet as family_packet
     return (packet(test.store, subject)["sha256"] == packet(test.live.store, real_subject)["sha256"]
-            and status(test, subject["id"]) == status(test.live, subject["id"])
             and family_packet(test.store, child_id)['sha256'] == family_packet(test.live.store, child_id)['sha256'])
 
 
@@ -210,16 +208,6 @@ class TestModes:
                 source.backup(copy)
                 copy.execute("UPDATE book_imports SET status='failed', error='Paused in test mode; resume explicitly if needed' WHERE status IN ('queued','running')")
                 copy.execute("UPDATE lesson_preparation_jobs SET status='paused', error='Copied into test mode. Prepare explicitly in this mode if needed.' WHERE status IN ('queued','running')")
-                # Shared ledger scopes must never let a rehearsal pause/resume a
-                # real in-flight job. Saved checkpoints remain reusable.
-                partial_jobs = copy.execute("SELECT id FROM collection_analysis_jobs WHERE status NOT IN ('ready','needs_review')").fetchall()
-                for (source_id,) in partial_jobs:
-                    # A separate, read-only identity exposes saved partial maps for
-                    # rehearsal without borrowing the real job's ledger controls.
-                    snapshot_id = "rehearsal-source-" + uuid.uuid4().hex
-                    copy.execute("UPDATE subject_maps SET job_id=? WHERE job_id=?", (snapshot_id, source_id))
-                    copy.execute("UPDATE collection_analysis_jobs SET id=?,status='snapshot',rehearsal_snapshot=1,source_job_id=?,error='Read-only test snapshot. Continue the original analysis in normal mode.' WHERE id=?",
-                                 (snapshot_id, source_id, source_id))
                 copy.commit()
                 if copy.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                     raise ValueError("The test working area failed its integrity check")
@@ -240,9 +228,6 @@ class TestModes:
                 from tutoring.books import ImportWorker
                 ctx.import_worker = ImportWorker(ctx.books)
                 ctx.import_worker.start()
-                from tutoring.subject_analysis import AnalysisWorker
-                ctx.analysis_worker = AnalysisWorker(ctx.subject_analysis)
-                ctx.analysis_worker.start()
                 self.contexts[token] = ctx
             ctx = self.contexts[token]
             sync_materials(ctx)
@@ -251,8 +236,6 @@ class TestModes:
     def end(self, token):
         ctx = self.get(token)
         ctx.import_worker.stop()
-        if ctx.analysis_worker:
-            ctx.analysis_worker.stop()
         (ctx.config.dir / "active").unlink()
         # Keep the private working area for recovery; never merge its learner records.
 

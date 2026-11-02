@@ -1,7 +1,8 @@
 """Saved source collections; assembling a collection never starts AI preparation.
 
-Collection roles/order are proposals for future subject analysis. Existing
-prepared books and started lessons keep their current roles and versions.
+A subject's books with their roles, order and editions. Saving a collection
+sets up any new book (chapter map and lessons); prepared books and started
+lessons keep their current roles and versions.
 """
 from __future__ import annotations
 
@@ -56,14 +57,9 @@ def view(db, subject_id):
                       "page_count": doc["page_count"], "sha256": doc["sha256"],
                       "prepared_status": old["status"] if old else "not_prepared"})
     version = db.get("collection_versions", collection["active_version"]) if collection and collection["active_version"] else None
-    jobs = db.find("collection_analysis_jobs", collection_id=collection["id"]) if collection else []
-    job = next(iter(sorted((j for j in jobs if version and j["version_id"] == version["id"]), key=lambda j: j["created_at"], reverse=True)), None)
-    knowledge_available = bool(collection and any(m["version_id"] == collection["active_version"] and m["data"]["coverage"]["complete"]
-        for m in db.find("subject_maps", collection_id=collection["id"])))
-    return {"id": collection["id"] if collection else None, "knowledge_available": knowledge_available, "shared": bool(collection and len(db.find("subject_collections", collection_id=collection["id"])) > 1), "name": collection["name"] if collection else f"{subject['name']} books",
+    return {"id": collection["id"] if collection else None, "shared": bool(collection and len(db.find("subject_collections", collection_id=collection["id"])) > 1), "name": collection["name"] if collection else f"{subject['name']} books",
             "revision": collection["revision"] if collection else 0, "version": version["number"] if version else 0,
-            "version_id": version["id"] if version else None, "books": books,
-            "analysis_available": bool(version), "analysis_status": job["status"] if job else "not_started"}
+            "version_id": version["id"] if version else None, "books": books}
 
 
 def inspect_sources(ctx, books):

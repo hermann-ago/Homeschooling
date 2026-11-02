@@ -91,7 +91,7 @@ export default function SubjectBookCollection({ subject, onAdd }) {
   const [editing, setEditing] = useState(false);
   return <section aria-label="Subject book collection" className="rounded-2xl border border-line bg-surface p-4 md:p-5 flex flex-col gap-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="font-bold">Books to understand together</h3><p className="text-sm text-muted mt-1">Choose related books and their editions. Prepare each lesson directly from its selected original pages.</p></div>
+      <div><h3 className="font-bold">Books for this subject</h3><p className="text-sm text-muted mt-1">Choose related books and their editions. Prepare each lesson directly from its selected original pages.</p></div>
       <div className="flex flex-wrap gap-2"><Button size="sm" onClick={onAdd}>Add books to collection</Button>
         <Button size="sm" disabled={!collection} onClick={() => setEditing(true)}>Organize books</Button></div>
     </div>

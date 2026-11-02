@@ -22,7 +22,6 @@ def family(harness, monkeypatch):
         return {"pages": [{"page": n, "text": reader.pages[n-1].extract_text(), "native_reliable": True,
             "student_safe": True, "teacher_material": False, "headings": ["The first idea"]} for n in range(start, end+1)],
             "exercises": [], "answers": []}
-    monkeypatch.setattr(books, "scan_unit", scan)
     readings = []
     for kid in (first, second):
         enroll(h, kid["id"])
@@ -328,6 +327,3 @@ def test_unavailable_shared_archive_does_not_trigger_another_paid_generation(fam
     assert len(prompts) == 1
 
 
-def test_retired_full_book_scanner_cannot_be_called(harness):
-    with pytest.raises(ValueError, match='retired'):
-        books.scan_unit(harness.ctx, b'', 'textbook', 1, 8)

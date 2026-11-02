@@ -59,10 +59,67 @@ def persist(tx, doc, chapters, method, toc_pages=None, expected_revision=None):
     return tx.insert('book_navigation', {'id': identity(doc), **values})
 
 
+FILE_BOOKMARK = re.compile(r'\.pdf\s*$|^\s*(front\s+|back\s+)?covers?\s*$', re.I)
+LESSON_ENTRY = re.compile(r'^\s*(lessons?|li[cç](?:[aã]o|ões)|aulas?)\s+\d+', re.I)
+
+
+def page_text(page):
+    """A page's text layer; a page whose images cannot be decoded reads as empty."""
+    try:
+        return page.extract_text() or ''
+    except Exception:  # pypdf limits on huge images, or a damaged page
+        return ''
+
+
+def toc_entries(text):
+    # Dot-leader contents: titles wrap across lines, even mid-word, before their
+    # leaders and page number, so read "title ..... page" pairs from the flattened text.
+    flat = re.sub(r'^[^.\n]*\b(table of contents|contents|sumário|sumario|índice|indice)\b[^.\n]*$', '', text, flags=re.I | re.M)
+    flat = re.sub(r'(?<=[a-zà-ÿ])[ \t]*\n[ \t]*(?=[a-zà-ÿ])', '', flat)
+    flat = re.sub(r'\s*\n\s*', ' ', flat)
+    dotted = [(re.sub(r'^\d+[.)]?\s+', '', title.strip(' .')), int(page))
+              for title, page in re.findall(r'([^.·…]{3,290}?)\s*[.·…]{3,}\s*(\d{1,4})(?!\d)', flat)
+              if not re.search(r'copyright|isbn', title, re.I)]
+    if len(dotted) >= 5:
+        return [(title, page) for title, page in dotted if title]
+    entries = []
+    for line in text.splitlines():
+        match = re.match(r'^\s*(?:\d+[.)]?\s+)?(.{3,290}?)\s*[.·…\s]+\s*(\d{1,4})\s*$', line)
+        if match and not re.search(r'copyright|isbn', match[1], re.I):
+            title = re.split(r'(?:\s*\.\s*){3,}', match[1])[-1].strip(' .')
+            title = re.sub(r'^\d+[.)]?\s+', '', title)
+            if title:
+                entries.append((title, int(match[2])))
+    return entries
+
+
+def printed_number(line):
+    """A page number at the start or end of an edge line; '1919' (text layers that
+    draw the number twice) reads as 19."""
+    match = re.match(r'^\s*(\d{1,4})(?=\s|Chapter|Capítulo|$)', line) or re.search(r'(\d{1,4})\s*$', line)
+    if not match:
+        return None
+    digits = match[1]
+    half = len(digits) // 2
+    if len(digits) % 2 == 0 and digits[:half] == digits[half:]:
+        digits = digits[:half]
+    return int(digits)
+
+
+def prefer_lessons(chapters):
+    """When contents list numbered lessons inside units, the lessons are the
+    teaching sequence. Unit headings still bound the lesson before them (their
+    overview pages are not part of it) but are not lessons themselves."""
+    lessons = [c for c in chapters if LESSON_ENTRY.match(c['title'])]
+    return lessons if len(lessons) >= 10 else chapters
+
+
 def extract(ctx, doc):
     """Read PDF bookmarks or local TOC text. Never send the book to a provider."""
     old = saved(ctx.store, doc)
-    if old:
+    # Re-read an automatic map built from merged-file bookmarks; family-checked maps stay.
+    if old and not (old['data'].get('method') == 'pdf_bookmarks'
+                    and any(FILE_BOOKMARK.search(c['title']) for c in old['data']['chapters'])):
         return old
     reader = PdfReader(io.BytesIO(ctx.file_bytes(doc['file_path'], doc['sha256'])))
     starts = []
@@ -77,38 +134,38 @@ def extract(ctx, doc):
                 starts.append((str(item.title).strip(), page))
         except (ValueError, KeyError, TypeError):
             continue
+    # Bookmarks left by merging files ("covers.pdf", "Course Book_HOME.pdf") are not chapters.
+    starts = [(title, page) for title, page in starts if not FILE_BOOKMARK.search(title)]
+    if len(starts) < 2:
+        starts = []
     toc_pages = []
     if not starts:
         entries = []
         for i, page in enumerate(reader.pages[:min(24, len(reader.pages))]):
-            text = unicodedata.normalize('NFKC', page.extract_text() or '')
-            if not re.search(r'\b(contents|sumário|sumario|índice|indice)\b|Chapter\s+Page', text, re.I):
+            text = unicodedata.normalize('NFKC', page_text(page))
+            found = toc_entries(text)
+            # A contents section can continue onto pages without the heading.
+            if not (re.search(r'\b(contents|sumário|sumario|índice|indice)\b|Chapter\s+Page', text, re.I)
+                    or (toc_pages and toc_pages[-1] == i and len(found) >= 5)):
                 continue
             toc_pages.append(i + 1)
-            for line in text.splitlines():
-                match = re.match(r'^\s*(?:\d+[.)]?\s+)?(.{3,290}?)\s*[.·…\s]+\s*(\d{1,4})\s*$', line)
-                if match and not re.search(r'copyright|isbn', match[1], re.I):
-                    title = re.split(r'(?:\s*\.\s*){3,}', match[1])[-1].strip(' .')
-                    title = re.sub(r'^\d+[.)]?\s+', '', title)
-                    if title:
-                        entries.append((title, int(match[2])))
+            entries += found
         # A constant page offset is established from actual printed page labels.
         # No model estimates ranges from the length of the book.
         offsets = []
         for i, page in enumerate(reader.pages[:min(40, len(reader.pages))]):
-            lines = (page.extract_text() or '').strip().splitlines()
-            for line in [*lines[:1], *lines[-1:]]:
-                match = re.match(r'^\s*(\d{1,4})(?=\s|Chapter|Capítulo|$)', line) or re.search(r'(\d{1,4})\s*$', line)
-                if match:
-                    n = int(match[1])
-                    if 1 <= n <= len(reader.pages):
-                        offsets.append(i + 1 - n)
+            lines = [line for line in page_text(page).strip().splitlines() if line.strip()]
+            # Page numbers sit near an edge, sometimes above a copyright footer. Stray
+            # numbers there are outvoted: the offset is the most common one.
+            for n in map(printed_number, lines[:2] + lines[-3:]):
+                if n and 1 <= n <= len(reader.pages):
+                    offsets.append(i + 1 - n)
         if offsets and entries:
             offset = max(set(offsets), key=offsets.count)
             if offsets.count(offset) >= 2:
                 starts = [(title, p + offset) for title, p in entries if 1 <= p + offset <= len(reader.pages)]
     if not starts and len(reader.pages) == 1:
-        lines = (reader.pages[0].extract_text() or '').strip().splitlines()
+        lines = page_text(reader.pages[0]).strip().splitlines()
         if lines:
             starts = [(lines[0].strip()[:300], 1)]
     # Repeated entries/page numbers are aliases, not separate zero-length lessons.
@@ -117,9 +174,9 @@ def extract(ctx, doc):
         if title and page not in distinct:
             distinct[page] = title
     starts = sorted(distinct.items())
-    chapters = [{'title': title, 'page_start': page,
+    chapters = prefer_lessons([{'title': title, 'page_start': page,
                  'page_end': starts[i+1][0]-1 if i+1 < len(starts) else len(reader.pages)}
-                for i, (page, title) in enumerate(starts)]
+                for i, (page, title) in enumerate(starts)])
     with ctx.store.transaction(kind='books.chapter_map') as tx:
         return persist(tx, doc, chapters, 'pdf_bookmarks' if not toc_pages else 'local_contents', toc_pages)
 

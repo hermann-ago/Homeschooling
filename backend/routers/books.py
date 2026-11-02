@@ -13,7 +13,6 @@ from dependencies import context, require_family, store
 from services.documents import MAX_PDF_BYTES
 from storage import layout
 from tutoring.books import Requirement, book_name, READING_ROLES, PRACTICE_ROLES
-from tutoring.map_review import ParentReview
 from tutoring.source_annotations import Annotation
 from utils import get_or_404
 
@@ -185,87 +184,6 @@ def save_material_skill(key: str, payload: MaterialSkillSave):
         raise HTTPException(400, str(exc)) from exc
 
 
-@router.get('/subjects/{subject_id}/book-companions/{document_id}/history')
-def companion_review_history(subject_id: int, document_id: int):
-    from tutoring.book_companion import source_for
-    try:
-        source, doc = source_for(context(), subject_id, document_id)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-    return {'reviews':[{k:r[k] for k in ('id','version','content_sha256','previous_sha256','file_path','note','created_at')}
-        for r in sorted(store().find('book_source_reviews', sha256=doc['sha256'], role=source['role']),key=lambda r:r['version'],reverse=True)]}
-
-
-@router.get("/book-companion-schema")
-def book_companion_schema():
-    from tutoring.book_companion import Envelope
-    return Envelope.model_json_schema()
-
-
-@router.get("/subjects/{subject_id}/book-companions")
-def book_companions(subject_id: int):
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    from tutoring.book_companion import inventory
-    return {"books": inventory(context(), subject_id)}
-
-
-@router.post("/subjects/{subject_id}/book-companions/{document_id}")
-def create_book_companion(subject_id: int, document_id: int):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-@router.get("/subjects/{subject_id}/book-companions/{document_id}/export")
-def export_book_companion(subject_id: int, document_id: int):
-    import json
-    from tutoring.book_companion import source_for, row_id
-    try:
-        source, doc = source_for(context(), subject_id, document_id)
-        row = store().get("book_companions", row_id(doc["sha256"], source["role"]))
-        if not row:
-            raise ValueError("Create this book's JSON first")
-        body = json.dumps({"content_sha256": row["content_sha256"], "contents": row["data"]}, ensure_ascii=False, indent=2)
-        return Response(body, media_type="application/json", headers={"Content-Disposition": f'attachment; filename="book-{document_id}.book.json"',
-                                                                     "Cache-Control": "private, no-store"})
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.get("/subjects/{subject_id}/book-companions/{document_id}/pages/{page}")
-def inspect_book_companion(subject_id: int, document_id: int, page: int):
-    from tutoring.book_companion import source_for, row_id
-    try:
-        source, doc = source_for(context(), subject_id, document_id)
-        row = store().get("book_companions", row_id(doc["sha256"], source["role"]))
-        if not row or page < 1 or page > doc["page_count"]:
-            raise ValueError("Choose an available page in this book's JSON")
-        return row["data"]["pages"][page - 1]
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.get("/subjects/{subject_id}/book-companions/{document_id}/source-pdf/{page}")
-def companion_source_page(subject_id: int, document_id: int, page: int):
-    from tutoring.book_companion import source_for
-    try:
-        _, doc = source_for(context(), subject_id, document_id)
-        if page < 1 or page > doc["page_count"]:
-            raise ValueError("Choose a page in this book")
-        reader = PdfReader(io.BytesIO(context().file_bytes(doc["file_path"], doc["sha256"])))
-        writer = PdfWriter()
-        writer.add_page(reader.pages[page - 1])
-        body = io.BytesIO()
-        writer.write(body)
-        return Response(body.getvalue(), media_type="application/pdf", headers={"Cache-Control": "private, no-store"})
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.post("/subjects/{subject_id}/book-companions/{document_id}/import")
-async def import_book_companion(subject_id: int, document_id: int, file: UploadFile = File(...), expected_revision: int = Form(...),
-                                source_review: bool = Form(False), note: str = Form('')):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
 class CollectionBook(BaseModel):
     key: str = Field(min_length=1, max_length=300)
     document_id: int | None = Field(default=None, ge=1)
@@ -314,6 +232,8 @@ def save_book_collection(subject_id: int, payload: SaveCollection):
         inspected = inspect_sources(context(), inputs)
         with write("books.collection", "Saved a subject book collection without AI generation") as tx:
             save(tx, subject_id, name, payload.expected_revision, inspected)
+            # New books get their chapter map and lessons in the background, locally.
+            context().books.prepare_collection(tx, subject_id)
         return view(store(), subject_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -321,200 +241,6 @@ def save_book_collection(subject_id: int, payload: SaveCollection):
         raise HTTPException(400, "This PDF is unavailable. Choose it again after checking the synced folder.") from exc
 
 
-class StartAnalysis(BaseModel):
-    fingerprint: str = Field(min_length=1, max_length=100)
-    maximum_usd: Decimal = Field(gt=0, le=10, decimal_places=6)
-
-
-@router.get('/source-map-schema')
-def offline_source_map_schema():
-    from tutoring.offline_materials import SourceMap
-    return SourceMap.model_json_schema()
-
-
-@router.post('/subjects/{subject_id}/book-collection/import-map')
-async def import_offline_source_map(subject_id:int,file:UploadFile=File(...)):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-class ContinueAnalysis(BaseModel):
-    maximum_usd: Decimal | None = Field(default=None, gt=0, le=10, decimal_places=6)
-
-
-@router.get("/subjects/{subject_id}/book-collection/preview")
-def preview_subject_analysis(subject_id: int):
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    try:
-        return context().subject_analysis.preview(subject_id)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.post("/subjects/{subject_id}/book-collection/analyze")
-def start_subject_analysis(subject_id: int, payload: StartAnalysis):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-@router.get("/subjects/{subject_id}/book-collection/analysis")
-def subject_analysis_status(subject_id: int):
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    return {"jobs": context().subject_analysis.jobs(subject_id)}
-
-
-from tutoring.material_review import MaterialReview
-
-
-@router.post('/subjects/{subject_id}/book-collection/source-review')
-def apply_material_source_review(subject_id: int, payload: MaterialReview):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-@router.post("/subject-analysis/{job_id}/continue")
-def continue_subject_analysis(job_id: str, payload: ContinueAnalysis):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-@router.post("/subject-analysis/{job_id}/pause")
-def pause_subject_analysis(job_id: str):
-    job = get_or_404(store(), "collection_analysis_jobs", job_id, "Subject review")
-    if job.get("rehearsal_snapshot"):
-        raise HTTPException(400, "This is a read-only test snapshot; the original analysis is protected")
-    with write("subject_analysis.pause", "Paused a subject review") as tx:
-        current = tx.get("collection_analysis_jobs", job_id)
-        if current["status"] in ("queued", "running"):
-            tx.update("collection_analysis_jobs", job_id, {"status": "paused", "error": "Paused by a parent. An in-flight request may finish and be saved."})
-            context().ai.ledger.enable_scope(job_id, False)
-    return context().subject_analysis.public_job(store().get("collection_analysis_jobs", job_id))
-
-
-@router.get("/subject-maps/{map_id}")
-def saved_subject_map(map_id: str, subject_id: int | None = None):
-    row = get_or_404(store(), "subject_maps", map_id, "Subject map")
-    from tutoring.map_review import effective_map
-    from tutoring.lesson_context import status
-    job = store().get("collection_analysis_jobs", row["job_id"])
-    selected_subject = subject_id if subject_id is not None else job["subject_id"]
-    from tutoring.collections import binding
-    linked = binding(store(), selected_subject)
-    if not linked or linked["collection_id"] != row["collection_id"]:
-        raise HTTPException(400, "This saved map is not assigned to that subject")
-    return {**effective_map(context(), row), "teaching_selection": status(context(), selected_subject)}
-
-
-class SelectTeachingMap(BaseModel):
-    subject_id: int | None = Field(default=None, ge=1)
-    expected_revision: int = Field(ge=0)
-    expected_review_revision: int = Field(ge=0)
-
-
-@router.post("/subject-maps/{map_id}/select")
-def select_teaching_map(map_id: str, payload: SelectTeachingMap):
-    from tutoring.lesson_context import publish
-    try:
-        with write("subject_map.select", "Parent selected checked source context for new lessons") as tx:
-            publish(context(), tx, map_id, payload.expected_revision, payload.expected_review_revision, payload.subject_id)
-        return saved_subject_map(map_id, payload.subject_id)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.put("/subject-maps/{map_id}/review")
-def review_subject_map(map_id: str, payload: ParentReview, subject_id: int | None = None):
-    from tutoring.map_review import save, effective_map
-    row = get_or_404(store(), "subject_maps", map_id, "Subject map")
-    saved_subject_map(map_id, subject_id)  # validate the requested subject binding
-    try:
-        with write("subject_map.review", "Saved a parent source-map review without AI generation") as tx:
-            save(context(), tx, row, payload)
-        from tutoring.subject_knowledge import ensure
-        ensure(context(), row["collection_id"])
-        return saved_subject_map(map_id, subject_id)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.get("/subject-maps/{map_id}/reading/{unit_id}")
-def map_reading_source(map_id: str, unit_id: str):
-    from tutoring.map_review import reading_source
-    row = get_or_404(store(), "subject_maps", map_id, "Subject map")
-    try:
-        return reading_source(context(), row, unit_id)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.get("/subject-maps/{map_id}/source-pdf/{document_id}/{page}")
-def map_source_pdf(map_id: str, document_id: int, page: int):
-    from tutoring.map_review import pdf_page
-    row = get_or_404(store(), "subject_maps", map_id, "Subject map")
-    try:
-        reader = PdfReader(io.BytesIO(pdf_page(context(), row, document_id, page)))
-        writer = PdfWriter()
-        writer.add_page(reader.pages[page - 1])
-        writer.add_metadata({"/Title": f"Original reading · PDF page {page}"})
-        body = io.BytesIO()
-        writer.write(body)
-        return Response(body.getvalue(), media_type="application/pdf", headers={"Cache-Control": "private, no-store"})
-    except ValueError as exc:
-        raise HTTPException(403, str(exc)) from exc
-
-
-@router.get("/subject-maps/{map_id}/export")
-def export_subject_map(map_id: str):
-    import json
-    from tutoring.map_review import effective_map
-    row = get_or_404(store(), "subject_maps", map_id, "Subject map")
-    return Response(json.dumps(effective_map(context(), row), ensure_ascii=False, indent=2, default=str),
-        media_type="application/json", headers={"Content-Disposition": 'attachment; filename="subject-source-map.json"',
-                                                "Cache-Control": "private, no-store"})
-
-
-@router.get("/subject-knowledge")
-def reusable_subject_knowledge():
-    from tutoring.subject_knowledge import available
-    return {"collections": available(context())}
-
-
-@router.post("/subjects/{subject_id}/knowledge-file")
-def save_knowledge_file(subject_id: int):
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    from tutoring.subject_knowledge import save
-    try:
-        return save(context(), subject_id)
-    except (ValueError, OSError) as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-class ReuseKnowledge(BaseModel):
-    source_subject_id: int = Field(ge=1)
-    expected_revision: int = Field(ge=0)
-    expected_version_id: str | None = None
-
-
-@router.post("/subjects/{subject_id}/reuse-knowledge")
-def reuse_subject_knowledge(subject_id: int, payload: ReuseKnowledge):
-    get_or_404(store(), "subjects", subject_id, "Subject")
-    get_or_404(store(), "subjects", payload.source_subject_id, "Source subject")
-    from tutoring.subject_knowledge import save, reuse
-    from tutoring.collections import view
-    try:
-        # Verify original bytes and save the archive before the short binding
-        # transaction. This is entirely local; no analysis is requested.
-        from tutoring.subject_knowledge import latest
-        row = latest(context(), payload.source_subject_id)
-        if not row:
-            raise ValueError("Choose a collection with completed source analysis")
-        for book in row["data"]["books"]:
-            doc = store().get("documents", book["document_id"])
-            context().file_bytes(doc["file_path"], book["sha256"])
-        source_file = save(context(), payload.source_subject_id)
-        context().files.read(source_file["path"], source_file["sha256"])
-        with write("subject_knowledge.reuse", "Assigned saved source knowledge without copying learner records or generating analysis") as tx:
-            reuse(context(), tx, subject_id, payload.source_subject_id, payload.expected_revision, payload.expected_version_id, row["version_id"])
-        target_file = save(context(), subject_id)
-        return {"collection": view(store(), subject_id), "knowledge_file": target_file}
-    except (ValueError, OSError) as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/books/incoming")
@@ -553,7 +279,6 @@ class ImportBooks(BaseModel):
 @router.post("/subjects/{subject_id}/book-imports")
 def import_books(subject_id: int, payload: ImportBooks):
     get_or_404(store(), "subjects", subject_id, "Subject")
-    previous_targets = {b["answer_for_id"] for b in store().find("subject_books", subject_id=subject_id) if b.get("answer_for_id")}
     try:
         with write("books.import", "Prepared subject books") as tx:
             jobs = []
@@ -581,9 +306,6 @@ def import_books(subject_id: int, payload: ImportBooks):
                 if book.role in READING_ROLES:
                     companion = job["book_id"]
                     selected_textbooks[book.path] = companion
-        from tutoring.book_sources import refresh_keys
-        for target in previous_targets:
-            refresh_keys(context().books, target)
         return {"jobs": [store().get("book_imports", j["id"]) for j in jobs]}
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
@@ -621,69 +343,9 @@ def prepare(book_id: str, payload: PrepareBook):
     try:
         with write("books.prepare") as tx:
             job = context().books.begin(tx, book["subject_id"], doc["file_path"], payload.role, payload.companion_id, payload.answer_for_id)
-        if book.get("answer_for_id"):
-            from tutoring.book_sources import refresh_keys
-            refresh_keys(context().books, book["answer_for_id"])
         return store().get("book_imports", job["id"])
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-
-
-class RematchBook(BaseModel):
-    topic_id: int | None = None
-
-
-@router.post("/subject-books/{book_id}/rematch")
-def rematch(book_id: str, payload: RematchBook):
-    raise HTTPException(410, 'Whole-book scanning is retired. Use chapter maps and selected original lesson pages.')
-
-
-class ExerciseEdit(BaseModel):
-    expected_revision: int
-    requirements: list[Requirement]
-    optional: bool = False
-    prompt: str | None = Field(None, max_length=12000)
-    source_reviewed: bool = False
-
-
-@router.put("/exercises/{exercise_id}")
-def edit(exercise_id: str, payload: ExerciseEdit):
-    try:
-        with write("books.exercise_edit") as tx:
-            version_id = context().books.edit(tx, exercise_id, payload.expected_revision,
-                [r.model_dump() for r in payload.requirements], payload.optional, payload.prompt, payload.source_reviewed)
-        return {"version_id": version_id}
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
-
-
-@router.get("/exercises/{exercise_id}/history")
-def history(exercise_id: str):
-    get_or_404(store(), "exercises", exercise_id, "Exercise")
-    return [{"id": v["id"], "created_at": v["created_at"], "parent_edited": v["parent_edited"],
-        **context().books.public(v["data"])} for v in sorted(store().find("exercise_versions", exercise_id=exercise_id),
-                                                          key=lambda x: x["created_at"], reverse=True)]
-
-
-@router.get("/exercises/{exercise_id}/preview")
-def preview(exercise_id: str, version_id: str | None = None):
-    exercise = get_or_404(store(), "exercises", exercise_id, "Exercise")
-    version = get_or_404(store(), "exercise_versions", version_id or exercise["active_version"], "Exercise version")
-    if version["exercise_id"] != exercise_id or not version["data"].get("student_safe"):
-        raise HTTPException(403, "This page includes private or unchecked material. Use the exercise instructions instead")
-    book = store().get("subject_books", exercise["book_id"])
-    if book["role"] == "answer_key":
-        raise HTTPException(403, "Answer keys are private teacher material")
-    doc = store().get("documents", book["document_id"])
-    if version["data"]["source_sha256"] != doc["sha256"]:
-        raise HTTPException(409, "The original source edition is unavailable")
-    reader = PdfReader(io.BytesIO(context().file_bytes(doc["file_path"], doc["sha256"])))
-    writer = PdfWriter()
-    for number in version["data"]["pages"]:
-        writer.add_page(reader.pages[number - 1])
-    body = io.BytesIO()
-    writer.write(body)
-    return Response(body.getvalue(), media_type="application/pdf", headers={"Cache-Control": "private, no-store"})
 
 
 @router.get("/workbook-progress/{child_id}")

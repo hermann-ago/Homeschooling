@@ -17,13 +17,24 @@ checked with the eval set — not by adding another prohibition to the prompt.
   answer_key, reference. A **topic** is one lesson: a page range of the main
   book with optional `start_at` / `stop_before` headings, and a recorded
   `language` (which sets the lesson and narration language).
+- **Adding books** (Curriculum → Books & lessons → Add books / Organize books):
+  saving the collection sets up each new book in the background
+  (`BookService.prepare_collection` → import job): its chapter map from the
+  contents (bookmarks only when they are real chapters; contents pages that wrap
+  titles and leader dots are handled; numbered lessons are preferred over unit
+  headings), lessons from the main book, the PDF filed into the child's subject
+  folder, and the book's text fingerprint for answer keys. No AI is involved.
 - **Lesson pages** (`navigation.selections`) add exercise or reference pages from
   other books in the subject. Chapter maps make choosing them quick.
-- **Answer keys** (`answer_keys.py`) are found locally: a key section is a page
-  with an "Answer Key / Answers / Gabarito / Respostas" heading, or a whole PDF
-  with role `answer_key`; the lesson's label ("Chapter 24", "Lição 3", from its
-  title or exercise pages) picks the key pages. Pages the family selects with
-  role `answer_key` take precedence.
+- **Answer keys** (`answer_keys.py`) are found locally, from a per-book
+  fingerprint cached by checksum (headings, labels and phrase hashes per page):
+  - a *labelled key section* — a page headed "Answer Key / Answers / Gabarito /
+    Respostas" with answers under labels such as "Chapter 24 Test" or "Lição 3";
+    the lesson's own label picks the pages;
+  - a *filled-in copy* — a separate key PDF (role `answer_key`) that reproduces
+    the student pages with answers: each lesson page is matched to the key page
+    repeating its printed text (e.g. Math 4 Lesson 1 → key page 3).
+  Pages the family selects with role `answer_key` take precedence.
 - **Bundles** (`navigation.attach`): the *student* PDF (assigned + linked pages)
   and the *private* PDF (the same plus key pages). The child only ever sees the
   student bundle.

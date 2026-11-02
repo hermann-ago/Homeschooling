@@ -93,7 +93,8 @@ def test_prepared_lesson_can_open_with_a_selected_collection_reference(harness, 
     response = h.call('PUT', url, json=body)
     assert response.status_code == 200, response.text
     doc = next(b['document_id'] for b in response.json()['books'] if b['path'] == path)
-    assert not h.ctx.store.find('subject_books', subject_id=subject, document_id=doc)
+    # A new reference book is set up for page selection but never becomes lessons of its own.
+    assert not h.ctx.store.find('topics', subject_id=subject, document_id=doc)
     topic = s['conquest']
     selected = h.call('PUT', f"/api/topics/{topic['id']}/source-pages", json={
         'expected_revision': 0, 'sources': [{'document_id': doc, 'page_start': 1, 'page_end': 1}]})

@@ -109,7 +109,6 @@ def test_index_uses_existing_engine_reuses_scans_but_never_child_completion(harn
         return {"pages": [{"page": n, "text": reader.pages[n-1].extract_text(), "native_reliable": True,
                 "student_safe": True, "teacher_material": False,
                 "headings": ["An opening topic" if n == 1 else "A second topic"]} for n in range(start, end + 1)], "exercises": [], "answers": []}
-    monkeypatch.setattr(book_engine, "scan_unit", scan)
     ready = index(h, first["id"])
     assert ready["job"]["status"] == "ready", ready
     assert ready["total_topics"] == 2 and not scans, ready
