@@ -93,7 +93,10 @@ recorded as a family review. Narration can be bought only after approval.
 The running session pins its guide, sources and skill version. For book work the
 grader receives the pinned key answer (`page_script.answer_for`) as teacher-only
 context, plus the private bundle for disputes. Evidence type comes from the
-exercise's declared response format. The family sees every recorded answer in
+exercise's declared response format. Hands-on work judged by looking (lines,
+colouring, tracing) uses `parent_check`: the step waits until a grown-up taps
+**Looks good** (or **Let's try again**) and records no grade. A grown-up can
+also confirm any other unassigned book exercise from the lesson help. The family sees every recorded answer in
 Curriculum → Prepare lesson → Script review → **Answer key (teacher only)**.
 
 ## Preparing with Codex or Claude instead of the API

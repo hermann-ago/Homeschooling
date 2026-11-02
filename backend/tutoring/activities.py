@@ -62,6 +62,8 @@ class TextContent(Content):
     text: str = Field(min_length=1, max_length=12000)
     title: str | None = Field(None, max_length=200)
     source_refs: list[SourceRef] = Field(default_factory=list, max_length=20)
+    # Hands-on book work (lines, colouring, tracing): a grown-up looks and confirms.
+    parent_check: bool = False
 
 
 class ReviewContent(Content):

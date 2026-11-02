@@ -85,6 +85,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const [question, setQuestion] = useState('');
   const [fullThread, setFullThread] = useState(true);
   const [expandedActivity, setExpandedActivity] = useState(null);
+  const [triedAgain, setTriedAgain] = useState(null); // interaction where the grown-up asked for another go
   const [minimizedActivity, setMinimizedActivity] = useState(null);
   const [singleItemExercise, setSingleItemExercise] = useState(null);
   const [following, setFollowing] = useState(true);
@@ -267,6 +268,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const expanded = expandedActivity && expandedActivity.id === sectionPlace ? expandedActivity.value : activity?.kind === 'read_source' || Boolean(workGroup);
   const activityPlace = `${activity?.id || 'summary'}.${activity?.interaction?.id || ''}.${Boolean(state.on_break)}`;
   const minimized = minimizedActivity === activityPlace;
+  // Hands-on book work: a grown-up looks at the book and confirms, instead of Continue.
+  const parentCheck = activity?.kind === 'explain_or_observe' && activity.content?.parent_check && activity.status === 'pending';
   const canContinue = activity && (activity.can_continue_discussion || activity.status !== 'pending' || status === 'ready_to_continue' && !needsResponse(activity) && workedReady) && (activity.kind !== 'read_source' || activity.status !== 'pending');
   const unfinished = state.activities?.filter((item) => item.status === 'skipped').length || 0;
   const history = visibleActivities(state);
@@ -367,6 +370,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help">
           {(needsResponse(activity) || activity.kind === 'read_source') && <div aria-label="Help choices" className="flex flex-col gap-2"><div className="flex gap-2 flex-wrap">{[['explain', 'Explain that differently'], ['example', 'Show an example'], ['hint', 'Give me a hint']].map(([kind, label]) => <Button key={kind} size="sm" disabled={busy || Boolean(pending) || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)} onClick={() => event('request_hint', { kind })}>{label}</Button>)}</div></div>}
           {needsResponse(activity) && <Button size="sm" variant="quiet" disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Leave this to revisit</Button>}
+          {activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id && <Button size="sm" variant="quiet" disabled={busy || Boolean(pending)} onClick={() => event('parent_check', { result: 'checked' })}>A grown-up checked this in the book</Button>}
           <details><summary className="text-sm font-semibold text-action cursor-pointer">Ask for help or a follow-up</summary><div className="mt-2 flex flex-col gap-2"><label className="text-sm">Your question<textarea rows={2} value={question} maxLength={2000} className={`${inputClasses} h-auto py-2 mt-1`} disabled={busy} onChange={(event) => setQuestion(event.target.value)} /></label><Button size="sm" disabled={busy || Boolean(pending) || !question.trim()} onClick={async () => { const next = await event('request_followup', { prompt: question }); if (next) setQuestion(''); }}>Ask the teacher</Button></div></details>
         </div>}
       </>}</>}
@@ -377,6 +381,13 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           <Button variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event(state.on_break ? 'resume' : sourceIssue ? 'acknowledge_source_issue' : activity.kind === 'read_source' && activity.status === 'pending' ? 'reading_done' : activity.kind === 'close_lesson' ? 'finish' : 'continue', sourceIssue ? { response_id: response.id } : {})}>
           {state.on_break ? 'Return to lesson' : state.page_work?.status === 'completed' ? 'Continue lesson' : activity.kind === 'read_source' && activity.status === 'pending' ? 'I have finished this reading' : activity.kind === 'close_lesson' ? 'Finish lesson' : activity.practice_section?.item < activity.practice_section?.total ? activity.practice_section.kind==='spelling' ? 'Next word' : 'Next item' : 'Continue lesson'}
         </Button>
+      </div>}
+      {parentCheck && !state.on_break && <div hidden={minimized} className="tutor-step-actions parent-check" aria-label="Grown-up check">
+        <p role="status" className="text-sm font-semibold">{triedAgain === activity.interaction?.id ? 'Have another go, then show your book again.' : 'When you are done, show your book to a grown-up.'}</p>
+        <div className="flex gap-2">
+          <Button variant="primary" className="flex-1" disabled={busy || Boolean(pending)} onClick={() => event('parent_check', { result: 'checked' })}>✓ Looks good</Button>
+          <Button className="flex-1" disabled={busy || Boolean(pending)} onClick={async () => { if (await event('parent_check', { result: 'try_again' })) setTriedAgain(activity.interaction?.id); }}>Let&apos;s try again</Button>
+        </div>
       </div>}
       {renderNarration && <div hidden={minimized || state.on_break} className="tutor-narration">{renderNarration({ activity, state, busy: busy || Boolean(pending) })}</div>}
     </section>

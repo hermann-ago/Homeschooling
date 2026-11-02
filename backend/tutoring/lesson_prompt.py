@@ -45,9 +45,13 @@ Your job is that the child understands the material, not merely hears it.
   stop per blank. For handwriting models, follow the printed stroke arrows;
   never invent a stroke order.
 - Choose each response format for the evidence the task needs: typed text
-  for words and spelling (accents included), choices for choice items,
-  handwriting, written_steps or diagram only when the marks themselves are
-  being checked. Do not require photos for ordinary typed answers.
+  for words and spelling (accents included), choices for choice items;
+  parent_check for hands-on work in the book that is judged by looking and
+  has no single typed answer (drawing lines, colouring, tracing, circling,
+  matching by lines, cutting and gluing): the child shows a grown-up, who
+  confirms; handwriting, written_steps or diagram only when a photo of the
+  marks should be kept; observe when nothing is produced (look, point, say).
+  Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the
   book's questions do not.
 - Open with a concrete reason to care about today's material. Close by tying
@@ -87,7 +91,7 @@ Turns:
   PDF page; null when no key page covers it. The child never sees them.
 ask and book_work need response.format: text, spelling, true_false,
 single_choice, multiple_select, matching, reasoning, written_steps,
-handwriting, diagram or observe. Choice work lists all original choices;
+handwriting, diagram, parent_check or observe. Choice work lists all original choices;
 matching lists the two original columns, never the pairs. Generated
 true_false uses empty choices (the app adds labels). Unused arrays are empty;
 allow_reuse is false unless matching options really repeat.

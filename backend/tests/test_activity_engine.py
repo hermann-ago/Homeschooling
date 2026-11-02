@@ -489,3 +489,23 @@ def test_unobserved_feedback_result_and_foreign_sources_are_rejected(harness, mo
         invoke(engine, state, "give_feedback", {"text": "Correct", "result": "Correct", "assessment_status": "assessed"})
     with pytest.raises(TutorError):
         invoke(engine, state, "visual_demonstration", {"text": "Look here", "visual": {"type": "book_illustration", "document_id": 99999, "page": 1}})
+
+
+def test_hands_on_book_work_waits_for_a_grown_up_and_records_no_grade(harness, monkeypatch):
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    state = invoke(engine, state, kind='explain_or_observe', content={'text': 'Colour the big letter T.', 'parent_check': True})
+    active = state['active_activity']
+    row = next(a for a in harness.ctx.store.find('lesson_actions', session_id=state['session_id']) if a['action_id'] == active['id'])
+    with harness.ctx.store.transaction() as tx:
+        tx.update('lesson_actions', row['id'], {'origin': 'required_book'})
+    state = engine.state(state['session_id'])
+    assert state['active_activity']['interaction']['status'] == 'awaiting_work'
+    with pytest.raises(Exception):  # Continue alone cannot skip the grown-up's look.
+        event(engine, state, 'continue')
+    state = event(engine, engine.state(state['session_id']), 'parent_check', {'result': 'try_again'})
+    assert state['active_activity']['id'] == active['id']
+    state = event(engine, state, 'parent_check', {'result': 'checked'})
+    assert harness.ctx.store.get('lesson_actions', row['id'])['status'] == 'answered'
+    checks = [e['payload']['result'] for e in harness.ctx.store.find('activity_events', session_id=state['session_id'])
+              if e['event_type'] == 'parent_check']
+    assert checks == ['try_again', 'checked'] and not harness.ctx.store.all('attempts')

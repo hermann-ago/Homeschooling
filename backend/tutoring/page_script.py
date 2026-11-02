@@ -130,8 +130,9 @@ def compile_script(value, passage, context, language):
             page = pages.get((turn.document_id, turn.page))
             if not page or page.get('role') == 'answer_key':
                 raise ValueError('Book work must refer to an attached student page.')
-            observation = turn.response.format == 'observe'
-            content = {'text': turn.prompt} if observation else {'prompt': turn.prompt, **_response(turn.response, language)}
+            observation = turn.response.format in ('observe', 'parent_check')
+            content = ({'text': turn.prompt, **({'parent_check': True} if turn.response.format == 'parent_check' else {})}
+                       if observation else {'prompt': turn.prompt, **_response(turn.response, language)})
             if book_questions.enabled(context):
                 content['response_modes'] = ['choice']
             if not observation:

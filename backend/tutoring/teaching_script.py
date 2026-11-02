@@ -19,7 +19,8 @@ VERSION = 'teaching-script-1'
 
 class Response(Content):
     format: Literal['text', 'spelling', 'true_false', 'single_choice', 'multiple_select',
-                    'matching', 'reasoning', 'written_steps', 'handwriting', 'diagram', 'observe'] = 'text'
+                    'matching', 'reasoning', 'written_steps', 'handwriting', 'diagram', 'observe',
+                    'parent_check'] = 'text'
     choices: list[str] = Field(default_factory=list, max_length=12)
     matching_items: list[str] = Field(default_factory=list, max_length=12)
     matching_options: list[str] = Field(default_factory=list, max_length=12)

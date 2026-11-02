@@ -93,6 +93,8 @@ class ActivityEngine:
             status = "awaiting_work" if kind == "request_book_work" else "awaiting_input" if kind in RESPONSE_KINDS else "ready_to_continue"
             if kind == 'request_book_work' and direct_text_capture(content):
                 status,stage='awaiting_input','capture'
+            if content.get("parent_check"):
+                status = "awaiting_work"  # Continue waits for a grown-up's check.
             if kind == "hint_or_follow_up" and content.get("follow_up_prompt"):
                 status, prompt = "awaiting_input", content["follow_up_prompt"]
             if kind == "worked_example":
@@ -786,6 +788,8 @@ class ActivityEngine:
                     self._focus_unfinished(tx, session)
                 elif event_type == "continue":
                     self._continue(tx, session, action, interaction)
+                elif event_type == "parent_check":
+                    self._parent_check(tx, session, action, interaction, payload)
                 elif event_type == "finish":
                     if action["activity_kind"] != "close_lesson":
                         raise TutorError("Finish from the lesson's closing activity")
@@ -1087,6 +1091,22 @@ class ActivityEngine:
             raise TutorError("Invalid narration offset")
         cursor = {"sentence_index": index, "track_id": payload.get("track_id"), "part_index": payload.get("part_index"), "offset_seconds": offset}
         tx.update("lesson_playback", session_id, {"sentence_index": index, "narration_cursor": cursor})
+
+    def _parent_check(self, tx, session, action, interaction, payload):
+        """A grown-up looked at work done in the book. The event log keeps the
+        result; it records completion, never an assessed answer."""
+        if (action["activity_kind"] not in ("explain_or_observe", "request_book_work")
+                or action.get("origin") != "required_book" or action.get("assignment_item_id")):
+            raise TutorError("A grown-up can check book work from this lesson only")
+        if action["status"] != "pending":
+            raise TutorConflict("This work is already done")
+        result = payload.get("result")
+        if result == "try_again":
+            return  # The work stays open; the request is saved in the event log.
+        if result != "checked":
+            raise TutorError("Choose Looks good or Let's try again")
+        interaction = tx.update("activity_interactions", interaction["id"], {"status": "ready_to_continue"})
+        self._continue(tx, session, action, interaction)
 
     def _continue(self, tx, session, action, interaction):
         optional_discussion = can_continue_discussion(tx, action, interaction)

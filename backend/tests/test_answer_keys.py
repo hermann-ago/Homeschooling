@@ -116,3 +116,11 @@ def test_family_review_lists_each_exercise_with_its_key_answer():
     assert page_script.answer_key(snapshot) == [{'prompt': work()['prompt'], 'answer': 'Mehmed the Conqueror',
                                                  'answer_page': 174}]
     assert page_script.answer_key({}) == []
+
+
+def test_hands_on_book_work_waits_for_a_grown_up():
+    plan = compile_({'type': 'book_work', 'document_id': 5, 'page': 94, 'prompt': 'Colour the letter T.',
+                     'response': {'format': 'parent_check'}, 'answer': None, 'answer_page': None})
+    work = [s for s in plan['segments'] if s['type'] == 'activity']
+    assert work[0]['activity_kind'] == 'explain_or_observe' and work[0]['content']['parent_check'] is True
+    assert work[0]['origin'] == 'required_book'
