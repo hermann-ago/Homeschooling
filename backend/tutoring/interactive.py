@@ -176,7 +176,8 @@ class InteractiveTutor:
             book_questions.validate_activities(activities, guide_row['context_snapshot'])
             if not any(a['kind'] == 'read_source' for a in activities):
                 raise TutorError('A read-along lesson needs its assigned source reading')
-        if not guide["actions"] and not read_along:
+        grown_up_checks = any((a.get('content') or {}).get('parent_check') for a in guide_mod.guide_activities(guide))
+        if not guide["actions"] and not read_along and not grown_up_checks:
             raise TutorError("Update this guided lesson to add student actions before starting it")
         source = passages.load(self.ctx, topic)
         if guide_row["source_sha256"] != source["passage_sha256"]:
