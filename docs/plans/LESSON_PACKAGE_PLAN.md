@@ -133,14 +133,41 @@ in Codex rather than by the app's API writer — the in-app writer should become
 good enough that this is unnecessary.
 
 ### Step 1 — Eval set and rubric (do early; used by every later step)
-- [ ] `backend/tools/lesson_eval.py`: given an eval folder, report deterministic
-      metrics (reading coverage %, items found vs. expected, answerable items
-      not waiting, key leaks, explanation count/words, output tokens, cost).
-- [ ] `docs/plans/lesson-eval-rubric.md`: short human rubric (faithful? teaches
-      the central idea? explanations useful? pacing natural? exercises complete?).
-- [ ] Expected-item lists per eval lesson written by hand once (ground truth).
+- [x] `backend/tools/lesson_eval.py`: given an eval folder, report deterministic
+      metrics (reading coverage %, items found vs. expected, duplicates, answer
+      leaks next to questions, questions spoken in narration, explanation
+      count/words/placement, activities, prompt size; `usage.json` if present).
+      Tests: `tests/test_lesson_eval.py`.
+- [x] `docs/plans/lesson-eval-rubric.md`: 8-row human rubric + how to run an eval.
+- [x] Expected-item lists written by hand from the PDFs: `docs/plans/eval/<name>.json`
+      (committed; exported packets stay in gitignored `tmp/eval/`).
+- [ ] Math expectations once `math-1125` can be exported.
 - Done when: running the tool on the "before" guides produces a baseline table
-  recorded in the progress log.
+  recorded in the progress log. ✅
+
+**Baseline (before guides, 2026-11-01):**
+
+| Eval | Reading covered | Exercises found | Answer leaks | Narration questions | Explanations | Explanation words | Reading words | Activities | Prompt chars |
+|---|---|---|---|---|---|---|---|---|---|
+| history-380 | 100% | 7/7 | 0 | 0 | 3 (1 between) | 94 | 1029 | 8 | 27574 |
+| language-arts-1251 | 100% | 19/19 | 0 | 0 | 2 (0 between) | 75 | 1558 | 15 | 20724 |
+| portugues-979 | 100% | 13/13 | 0 | 0 | 9 (5 between) | 332 | 84 | 15 | 31651 |
+| read-along-1689 | 98% | — | 0 | 0 | 2 (2 between) | 170 | 1620 | 0 | 19574 |
+
+Read-along's missing 2% are commentary sub-headings (Brainstorming, Background…).
+
+Qualitative notes from reading the guides:
+- **history-380 (API writer):** faithful and complete, but barely teaches — a
+  534-word reading with no teaching inside; of 3 explanations, 2 are transitions
+  ("Now let's turn to Constantinople"); the only real teaching is defining
+  *siege*. The recap and one explanation add viewpoint caveats ("a difficult
+  part of history…", "their belief… not proof") despite the family policy being
+  repeated several times in the prompt. Rubric rows 2–3: 1.
+- **read-along-1689 (Codex):** explanations are genuinely good (incentives,
+  garden comparison, shared resource), but the final 748-word commentary has
+  no teaching. Rows 2: 3, 3: 2.
+- Fidelity (rows 1, 4) is already strong everywhere; the gap is **teaching
+  depth and placement**. That is what Steps 2–3 should move.
 
 ### Step 2 — One prompt builder, no duplicates (P1, part of P2)
 - [ ] New `tutoring/lesson_prompt.py` that composes the six blocks above; the
@@ -158,6 +185,16 @@ good enough that this is unnecessary.
   characters), tests pass, eval set is no worse.
 
 ### Step 3 — Book text by reference, bigger budget (P3)
+
+**Design constraint (family decision, Oct 2026):** whole-book conversion to JSON
+was tried and abandoned — images and unusual lesson layouts made it unreliable.
+The model keeps receiving the **original lesson PDF pages** and reasoning over
+them directly. This step must not reintroduce whole-book extraction or an
+exercise catalog. It only lets the writer *point at* plain reading text on the
+lesson's own pages (extracted on demand, per lesson, from the PDF text layer)
+instead of re-typing it. Where the text layer is missing or unreliable, or the
+layout is unusual, the writer keeps transcribing from the page image (`text`),
+as today. Both forms are valid in one script.
 - [ ] Source layer: `tutoring/page_text.py` returning per-page paragraphs and
       sentences with stable IDs (`p<page>.<para>.<sent>`), built from the PDF
       text layer (`passages.extract`/`split_sentences` already exist).
@@ -235,4 +272,5 @@ good enough that this is unnecessary.
 | Date | Step | Result / numbers | Commit |
 |---|---|---|---|
 | 2026-11-01 | — | Plan written after code review of the preparation pipeline | `f264483` |
-| 2026-11-01 | 0 | Baseline committed; 4 eval packets exported (Math blocked by book-version mismatch); tests 727 pass / 78 fail / 18 error, list saved | (this commit) |
+| 2026-11-01 | 0 | Baseline committed; 4 eval packets exported (Math blocked by book-version mismatch); tests 727 pass / 78 fail / 18 error, list saved | `37f7166` |
+| 2026-11-01 | 1 | `lesson_eval.py` + rubric + ground truth for 4 lessons; baseline table above. Fidelity strong, teaching thin (History 94 explanation words / 1029 read) | (this commit) |

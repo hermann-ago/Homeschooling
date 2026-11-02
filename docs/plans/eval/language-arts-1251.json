@@ -1,0 +1,90 @@
+{
+  "notes": "Good and Beautiful Level 4 Course Book, Lesson 21 (assessment lesson), printed pp. 86-91, plus Leo and the Lighthouse ch. 18 (reference pages). Checklist: read Chapter 18. Only purple-header grammar sections are required; each has an orange 'Additional Practice' twin with the same instructions, so grammar items are section-level and either twin matches. Answers not recorded (no key attached).",
+  "reading": [
+    {
+      "starts": "Guilty? Leo's heart sank to the floor",
+      "ends": "It's time to go"
+    }
+  ],
+  "exercises": [
+    {
+      "id": "warm-up",
+      "snippet": "What do you love most about the fall"
+    },
+    {
+      "id": "RC1",
+      "snippet": "would likely be found on the unnamed island"
+    },
+    {
+      "id": "RC2",
+      "snippet": "tone toward the king"
+    },
+    {
+      "id": "RC3",
+      "snippet": "show their love for one another after the trial"
+    },
+    {
+      "id": "RC4",
+      "snippet": "What evidence shows that the king is just and merciful"
+    },
+    {
+      "id": "V1",
+      "snippet": "Which of the following can veer"
+    },
+    {
+      "id": "V2",
+      "snippet": "if they have an appetite"
+    },
+    {
+      "id": "V3",
+      "snippet": "Which items could be matted"
+    },
+    {
+      "id": "V4",
+      "snippet": "Which of the following could be offensive"
+    },
+    {
+      "id": "word-bank",
+      "snippet": "obscured"
+    },
+    {
+      "id": "synonyms",
+      "snippet": "circle the synonym"
+    },
+    {
+      "id": "nouns-verbs",
+      "snippet": "Circle each noun"
+    },
+    {
+      "id": "adverb-adjective",
+      "snippet": "adverb or adjective"
+    },
+    {
+      "id": "diagramming",
+      "snippet": "diagram"
+    },
+    {
+      "id": "possessives",
+      "snippet": "plural noun or possessive noun"
+    },
+    {
+      "id": "abbreviations",
+      "snippet": "Write the correct abbreviation"
+    },
+    {
+      "id": "independent-clauses",
+      "snippet": "independent clause"
+    },
+    {
+      "id": "run-on",
+      "snippet": "run-on sentence"
+    },
+    {
+      "id": "compound",
+      "snippet": "simple or compound"
+    }
+  ],
+  "ignore_patterns": [
+    "leoandthelighthouse[0-9]*"
+  ]
+}

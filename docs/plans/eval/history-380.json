@@ -1,0 +1,15 @@
+{
+  "notes": "Story of the World V.2, ch. 24 section 'The Capture of Constantinople', printed pp. 218-223, stop before 'Suleiman the Lawgiver'. Chapter 24 test (printed pp. 91-93) covers the whole chapter; items 3, 4, 9, 10, 15, 16, 19 belong to this section. Answers from the reading.",
+  "reading": [
+    {"starts": "After years of fighting and conquering, the Turkish armies", "ends": "the conquest of Constantinople is called the End of the Middle Ages"}
+  ],
+  "exercises": [
+    {"id": "A3", "snippet": "the Conqueror finally captured Constantinople", "answer": "Mehmed"},
+    {"id": "A4", "snippet": "Constantinople was renamed", "answer": "Istanbul"},
+    {"id": "B9", "snippet": "What new weapon did the Ottoman Turks use to attack Constantinople", "answer": "gunpowder"},
+    {"id": "B10", "snippet": "What is a mercenary", "answer": "a paid soldier from another country"},
+    {"id": "C15", "snippet": "As the Ottoman Empire grew, the Byzantine Empire shrank", "answer": null},
+    {"id": "C16", "snippet": "A lunar eclipse convinced the Byzantines", "answer": null},
+    {"id": "D19", "snippet": "Why is the conquest of Constantinople sometimes called the End of the Middle Ages", "answer": null}
+  ]
+}

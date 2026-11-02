@@ -1,0 +1,13 @@
+{
+  "notes": "The Adventures of Jonathan Gullible, ch. 3 'A Commons Tragedy', PDF pp. 23-28: story, author's commentary, references, the printed '?' question and the closing quotation. Read-along book: everything is read, nothing is assessed. The PDF text layer splits ligatures ('fi sh') and drop caps.",
+  "reading": [
+    {
+      "starts": "trail widened a bit as it cut through the dense jungle",
+      "ends": "No man ever ruled other men for their own good"
+    }
+  ],
+  "exercises": [],
+  "ignore_patterns": [
+    "chapter3acommonstragedy\\d*"
+  ]
+}

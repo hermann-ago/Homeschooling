@@ -1,0 +1,22 @@
+{
+  "notes": "No mundo das consoantes vol. 1, Letra T, pp. 61-74 (PDF page = printed page). Page 61 is a cover page. Two texts must be read aloud in full: the poem 'Tanta Tinta' (Cecília Meireles, p. 62) and the parlenda 'O Tempo' (p. 70). 13 numbered exercises, mostly marking, colouring, tracing and matching on paper (no answer key).",
+  "reading": [
+    {"starts": "AH! MENINA TONTA", "ends": "NÃO VIU A TINTA DA PONTE"},
+    {"starts": "O TEMPO PERGUNTOU AO TEMPO", "ends": "QUANTO O TEMPO TEM"}
+  ],
+  "exercises": [
+    {"id": "1", "snippet": "encontre e assinale as letras T", "page": 62, "number": 1},
+    {"id": "2", "snippet": "colorir a letra T", "page": 63, "number": 2},
+    {"id": "3", "snippet": "Marque as que começam com o fone T", "page": 64, "number": 3},
+    {"id": "4", "snippet": "Ligue as imagens que correspondam ao fone", "page": 65, "number": 4},
+    {"id": "5", "snippet": "assinale a letra T nas palavras", "page": 66, "number": 5},
+    {"id": "6", "snippet": "labirinto", "page": 67, "number": 6},
+    {"id": "7", "snippet": "treinar o traçado da letra T", "page": 68, "number": 7},
+    {"id": "8", "snippet": "ligar os pares", "page": 69, "number": 8},
+    {"id": "9", "snippet": "O TEMPO", "page": 70, "number": 9},
+    {"id": "10", "snippet": "figura que inicie com", "page": 71, "number": 10},
+    {"id": "11", "snippet": "escrever a letra T", "page": 72, "number": 11},
+    {"id": "12", "snippet": "Ligue", "page": 73, "number": 12},
+    {"id": "13", "snippet": "Ligue cada figura à letra correspondente", "page": 74, "number": 13}
+  ]
+}
