@@ -196,8 +196,16 @@ Qualitative notes from reading the guides:
       `tmp/skill-proposals/` (family v4→v5, History v3→v4, Português v5→v6,
       8 untouched template v1→v2). Save via the normal skill API only after
       the family approves; older versions stay restorable.
+- [x] Saved skill versions approved by the family (2026-11-01): family v5,
+      History v4 (also "follow the book's own framing"), Português v6, and
+      template skills v2 for Math ×2, Science ×2, Language Arts ×2, Portuguese.
 - [ ] Eval: prepare the 4 sample lessons with the new writer in Test mode
-      (paid, ~US$0.15–0.40 each) and compare with the baseline table.
+      and compare with the baseline table. Server restarted on `efff777`;
+      dry-run ceilings US$0.69–0.89 each (past actuals US$0.15–0.40).
+      **Blocked 2026-11-01:** OpenAI returned `provider_quota` (no API credit);
+      nothing charged. Re-run with `python ../tmp/eval/run_prep.py history-380 1 380 v3`
+      (from `backend/`, Test-mode token in `tmp/eval/test-mode-token.txt`)
+      once credit is restored; check History's actual cost before the rest.
 
 Prompt size (characters, before PDF pages) — app-owned instructions went from
 ~6.5 k with repetition to ~4.1 k without; totals are dominated by the family's
@@ -314,4 +322,5 @@ as today. Both forms are valid in one script.
 |---|---|---|---|
 | 2026-11-01 | — | Plan written after code review of the preparation pipeline | `f264483` |
 | 2026-11-01 | 0 | Baseline committed; 4 eval packets exported (Math blocked by book-version mismatch); tests 727 pass / 78 fail / 18 error, list saved | `37f7166` |
-| 2026-11-01 | 1 | `lesson_eval.py` + rubric + ground truth for 4 lessons; baseline table above. Fidelity strong, teaching thin (History 94 explanation words / 1029 read) | (this commit) |
+| 2026-11-01 | 1 | `lesson_eval.py` + rubric + ground truth for 4 lessons; baseline table above. Fidelity strong, teaching thin (History 94 explanation words / 1029 read) | `f365b1e` |
+| 2026-11-01 | 2 | Composed writer prompt, book's-point-of-view rule, cleaned guides/templates; family-approved skill versions saved. Tests: 737 pass, same 96 baseline failures, no new ones. Eval blocked by OpenAI quota | `efff777` + (this commit) |
