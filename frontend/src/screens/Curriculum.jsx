@@ -101,7 +101,7 @@ function AddSubjectDialog({ child, onClose, onAdded }) {
 function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   const [form, setForm] = useState({
     name: subject.name, weight: subject.weight ?? 1, slot_type: subject.slot_type || 'A', end_date: subject.end_date || '',
-    grade: subject.grade || 'N/A', weekdays: subject.weekdays ?? null,
+    grade: subject.grade || 'N/A', weekdays: subject.weekdays ?? null, extra_questions: subject.extra_questions || 'open',
   });
   const toast = useToast();
   const change = useChange(subject.id, child.id);
@@ -168,6 +168,14 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
             options={(PACES.some((p) => p.value === form.weight) ? PACES : [...PACES, { value: form.weight, label: `${form.weight}×` }])
               .map((p) => ({ value: p.value, label: p.label }))} />
           <span className="text-[13px] text-subtle">A faster pace gives this subject more pages in each lesson.</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-semibold text-muted">Tutor's extra questions</span>
+          <SegmentedControl label="Tutor's extra questions" size="sm" value={form.extra_questions} onChange={(extra_questions) => set({ extra_questions })}
+            options={[{ value: 'open', label: 'Open answers' }, { value: 'choice', label: 'Choices only' }]} />
+          <span className="text-[13px] text-subtle">{form.extra_questions === 'choice'
+            ? 'Questions the tutor adds, and its follow-ups, are true/false or pick one. Book exercises stay as printed. Applies to lessons prepared from now on.'
+            : 'The tutor may add typed questions and follow-ups, such as explaining a method.'}</span>
         </div>
         <Field label="Finish by (optional)" type="date" value={form.end_date} onChange={(e) => set({ end_date: e.target.value })}
           hint="Leave empty to finish with the school year." />

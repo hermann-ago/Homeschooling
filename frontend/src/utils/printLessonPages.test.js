@@ -110,6 +110,13 @@ it('groups a sparse selection before splitting sides and does not add a blank si
   expect(() => arrangeLessonPrintSides({ ...options, parity: 'unknown' })).toThrow('Choose all sides');
 });
 
+it('prints book pages from a PDF that holds only the lesson pages', async () => {
+  loaded.numPages = 3;
+  await printLessonPages({ data: new Uint8Array([1]), first: 59, last: 61, base: 59 });
+  expect(loaded.getPage.mock.calls.map(([number]) => number)).toEqual([1, 2, 3]);
+  expect(preview.document.querySelector('img').alt).toBe('Book page 59');
+});
+
 it('does not open a print dialog for an invalid range or a failed partial render', async () => {
   await expect(printLessonPages({ data: new Uint8Array([1]), first: 19, last: 21 })).rejects.toThrow('outside this book');
   expect(loaded.getPage).not.toHaveBeenCalled();

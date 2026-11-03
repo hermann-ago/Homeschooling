@@ -1,8 +1,10 @@
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional
+from typing import Literal, Optional
 
 # Monday = 0 … Sunday = 6. None: take turns by slot_type; []: paused, not planned.
 Weekdays = Optional[list[int]]
+# 'choice': the tutor's own added questions are true/false or single choice.
+ExtraQuestions = Literal['open', 'choice']
 
 
 def _weekdays(v):
@@ -18,6 +20,7 @@ class SubjectBase(BaseModel):
     end_date: Optional[date] = None
     grade: Optional[str] = Field(None, max_length=20)  # this subject's grade; empty: no grade level
     weekdays: Weekdays = None
+    extra_questions: Optional[ExtraQuestions] = None
 
     @field_validator('slot_type', mode='before')
     @classmethod
@@ -38,6 +41,7 @@ class SubjectUpdate(BaseModel):
     end_date: Optional[date] = None
     grade: Optional[str] = Field(None, max_length=20)
     weekdays: Weekdays = None
+    extra_questions: Optional[ExtraQuestions] = None
 
     _check_weekdays = field_validator('weekdays')(_weekdays)
 

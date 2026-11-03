@@ -1316,9 +1316,12 @@ class ActivityEngine:
                 "explain": "Explain the current idea differently using simpler words. Do not state the answer to the learner's question.",
                 "example": "Show a short worked analogy or similar example with different details or numbers. Label invented situations as imaginary. Do not solve the learner's actual task or introduce new historical claims."}[help_kind]
             prompt = instruction + " The learner explicitly requested this support.\nQuestion: " + interaction["prompt"] + "\nPrevious support: " + (action["help_given"] or "none") + "\nSource:\n" + source
-            from . import book_questions
-            if book_questions.enabled((playback.get('context_snapshot') or {}).get('prepared_guide')):
+            from . import book_questions, extra_questions
+            prepared = (playback.get('context_snapshot') or {}).get('prepared_guide')
+            if book_questions.enabled(prepared):
                 prompt += '\nKeep this support brief. Do not add a new question or request a typed explanation; return to the existing reading/choices.'
+            elif extra_questions.enabled(prepared):
+                prompt += extra_questions.HINT
             previous = self.db.get("activity_jobs", job_id)
             frozen = previous["input_snapshot"]
             if frozen.get("full_prompt"):

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const viewerMocks = vi.hoisted(() => ({
   getDocument: vi.fn(),
-  getDocumentData: vi.fn(),
+  getDocumentPages: vi.fn(),
   pageRender: vi.fn(),
   resize: null,
   print: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('react-pdf', () => ({
 
 vi.mock('../api/documents', () => ({
   getDocument: viewerMocks.getDocument,
-  getDocumentData: viewerMocks.getDocumentData,
+  getDocumentPages: viewerMocks.getDocumentPages,
 }));
 
 vi.mock('./pdfAnnotations/usePageAnnotations', () => ({
@@ -66,7 +66,7 @@ describe('PageViewer sizing', () => {
       size_bytes: 100,
       page_count: 300,
     });
-    viewerMocks.getDocumentData.mockReset().mockResolvedValue(new Uint8Array([1, 2, 3]));
+    viewerMocks.getDocumentPages.mockReset().mockResolvedValue(new Uint8Array([1, 2, 3]));
     viewerMocks.resize = null;
     viewerMocks.print.mockReset().mockResolvedValue(undefined);
     HTMLElement.prototype.scrollTo = vi.fn();
@@ -89,6 +89,15 @@ describe('PageViewer sizing', () => {
 
       disconnect() {}
     };
+  });
+
+  it('downloads only the assigned pages and shows them from the first one', async () => {
+    render(<FeedbackProvider><PageViewer childId={2}
+      slot={{ document_id: 9, page_from: 257, page_to: 259, pdf_page_offset: 21, topic_title: 'Spelling Practice' }}
+    /></FeedbackProvider>);
+    await waitFor(() => expect(screen.getByTestId('pdf-page')).toBeTruthy());
+    expect(viewerMocks.getDocumentPages).toHaveBeenCalledWith(9, 278, 280);
+    expect(viewerMocks.pageRender.mock.calls.at(-1)[0].pageNumber).toBe(1);
   });
 
   it('keeps a stable page width when resize notifications repeat', async () => {
@@ -145,7 +154,7 @@ describe('PageViewer sizing', () => {
   });
 
   it('keeps printing unavailable when the book could not be loaded', async () => {
-    viewerMocks.getDocumentData.mockRejectedValue(new Error('The PDF is unavailable'));
+    viewerMocks.getDocumentPages.mockRejectedValue(new Error('The PDF is unavailable'));
     render(<FeedbackProvider><PageViewer slot={{ document_id: 9, page_from: 1, page_to: 2 }} /></FeedbackProvider>);
     await screen.findByText('The PDF is unavailable');
     expect(screen.getByRole('button', { name: 'Print lesson pages' }).disabled).toBe(true);

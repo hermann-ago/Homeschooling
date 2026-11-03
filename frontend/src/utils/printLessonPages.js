@@ -5,7 +5,8 @@ const PRINT_DPI = 150;
 let printFrame = null;
 
 /** Print a selected, pre-arranged set of book pages without opening another tab. */
-export async function printLessonPages({ data, first, last, title = 'Lesson pages', offset = 0,
+// `base` is the book PDF page held as page 1 of `data` (1 for a whole book).
+export async function printLessonPages({ data, first, last, title = 'Lesson pages', offset = 0, base = 1,
   selection, parity, reverse, pagesPerSheet = 1, paper = 'A4', orientation = 'portrait', onProgress, onReady }) {
   const sides = arrangeLessonPrintSides({ first, last, offset, selection, parity, reverse, pagesPerSheet, paper, orientation });
   const total = sides.flatMap(side => side.pages).filter(number => number !== null).length;
@@ -14,7 +15,7 @@ export async function printLessonPages({ data, first, last, title = 'Lesson page
   try {
     loading = pdfjs.getDocument({ data: data.slice() });
     pdf = await loading.promise;
-    if (last > pdf.numPages) throw new Error('The lesson page range is outside this book.');
+    if (first < base || last - base + 1 > pdf.numPages) throw new Error('The lesson page range is outside this book.');
     printFrame?.remove();
     frame = document.createElement('iframe');
     frame.title = 'Lesson print document';
@@ -47,7 +48,7 @@ export async function printLessonPages({ data, first, last, title = 'Lesson page
       for (const number of side.pages) {
         const cell = doc.createElement('div'); cell.className = 'cell'; sheet.append(cell);
         if (number === null) continue;
-        const page = await pdf.getPage(number);
+        const page = await pdf.getPage(number - base + 1);
         const normal = page.getViewport({ scale: 1 });
         const scale = Math.min(PRINT_DPI / 72, Math.sqrt(8_000_000 / (normal.width * normal.height)));
         const viewport = page.getViewport({ scale });

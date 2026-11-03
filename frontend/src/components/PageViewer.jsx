@@ -3,7 +3,7 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { ChevronLeft, ChevronRight, Printer } from 'lucide-react';
-import { getDocument, getDocumentData } from '../api/documents';
+import { getDocument, getDocumentPages } from '../api/documents';
 import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
 import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
@@ -95,7 +95,8 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
     setTool('hand');
     getDocument(slot.document_id)
       .then(async (nextDocument) => {
-        const nextData = await getDocumentData(nextDocument.id, nextDocument.size_bytes);
+        const last = Math.min(physicalEnd, nextDocument.page_count || physicalEnd);
+        const nextData = await getDocumentPages(nextDocument.id, physicalStart, last);
         if (active) {
           setDocumentInfo(nextDocument);
           setPdfData(nextData);
@@ -105,7 +106,7 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
         if (active) setPdfError(nextError.message);
       });
     return () => { active = false; };
-  }, [physicalStart, slot?.document_id]);
+  }, [physicalStart, physicalEnd, slot?.document_id]);
 
   const annotation = usePageAnnotations({
     childId,
@@ -173,7 +174,7 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
     setPrinting(true); setPrintStatus('Preparing lesson pages for printing…');
     try {
       await printLessonPages({ data: pdfData, first: physicalStart, last: boundedEnd,
-        offset, ...options,
+        offset, base: physicalStart, ...options,
         title: `${slot.topic_title || documentInfo?.original_filename || 'Lesson'} · book pages ${start}–${boundedEnd - offset}`,
         onProgress: ({ done, total }) => setPrintStatus(`Preparing print page ${done} of ${total}…`),
         onReady: () => { setPrintOptionsOpen(false); setPrintStatus('Selected pages are ready. Choose your printer, copies and colour in the print dialog.'); } });
@@ -252,7 +253,8 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
             <div className="min-w-max flex justify-center">
               <div ref={pageSurfaceRef} className="relative inline-block shadow-lg bg-white leading-none">
                 <Page
-                  pageNumber={page}
+                  // The loaded PDF holds only the assigned pages, starting at physicalStart.
+                  pageNumber={page - physicalStart + 1}
                   width={renderWidth}
                   onLoadSuccess={(loadedPage) => {
                     const bounds = loadedPage.getViewport({ scale: 1 });

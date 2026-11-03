@@ -6,7 +6,7 @@ from typing import Literal, Union
 from pydantic import Field, model_validator
 from .activities import Content
 from .teaching_script import Say, Ask, Response, _response
-from . import book_questions
+from . import book_questions, extra_questions
 
 # 3: one composed prompt (lesson_prompt.py) and sentence references in PDF
 # lessons; 2: stacked policy blocks, transcribed readings only.
@@ -115,12 +115,14 @@ def compile_script(value, passage, context, language):
         elif isinstance(turn, Ask):
             if book_questions.enabled(context):
                 book_questions.validate_ask(turn)
+            elif extra_questions.enabled(context):
+                extra_questions.validate_ask(turn)
             kind = {'discussion': 'ask_question', 'retelling': 'tell_it_back', 'reasoning': 'explain_thinking'}[turn.purpose]
             if turn.response.format == 'observe':
                 kind, content = 'explain_or_observe', {'text': turn.prompt}
             else:
                 content = {'prompt': turn.prompt, **_response(turn.response, language)}
-                if book_questions.enabled(context):
+                if book_questions.enabled(context) or extra_questions.enabled(context):
                     content['response_modes'] = ['choice']
             segments.append({'type': 'activity', 'activity_kind': kind, 'content': content, 'origin': 'adaptive'})
         else:
@@ -189,8 +191,8 @@ def schema(passage, context, language):
         @classmethod
         def provider_json_schema(cls):
             value = super().provider_json_schema()
-            if book_questions.enabled(context):
-                # Printed discussion questions follow the same selection-only rule.
+            if book_questions.enabled(context) or extra_questions.enabled(context):
+                # The tutor's own questions are selections; for extra reading, printed ones too.
                 value['$defs']['BookChoiceResponse'] = {
                     'type': 'object', 'properties': {
                         'format': {'type': 'string', 'enum': ['true_false', 'single_choice']},
@@ -200,7 +202,8 @@ def schema(passage, context, language):
                 ask = value['$defs']['Ask']['properties']
                 ask['purpose'] = {'type': 'string', 'enum': ['discussion']}
                 ask['response'] = {'$ref': '#/$defs/BookChoiceResponse'}
-                value['$defs']['BookWork']['properties']['response'] = {'$ref': '#/$defs/BookChoiceResponse'}
+                if book_questions.enabled(context):
+                    value['$defs']['BookWork']['properties']['response'] = {'$ref': '#/$defs/BookChoiceResponse'}
             visual, numbered = bool(context.get('visual_source')), bool(passage.get('sentences'))
             names = (('type','text','document_id','page_start','page_end') + (('first','last') if numbered else ())
                      if visual else ('type','first','last'))

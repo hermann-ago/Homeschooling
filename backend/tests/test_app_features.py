@@ -49,7 +49,7 @@ def test_calendar_lists_only_completions_without_slot_history(harness):
     assert body[0]["topic_id"] == standalone["id"]
 
 
-def test_clearing_keeps_completed_history_but_removes_future_completed_topics(harness):
+def test_clearing_keeps_completed_history_and_today_but_removes_future_completed_topics(harness):
     child, subject, _ = seed(harness)
     today = date(2026, 8, 10)
     store = harness.ctx.store
@@ -69,15 +69,45 @@ def test_clearing_keeps_completed_history_but_removes_future_completed_topics(ha
             return slot["id"]
 
         historical = add(done, today - timedelta(days=1), True)
-        add(done, today, True)
+        finished_today = add(done, today, True)  # today's lesson was done: the day stays used
         add(done, today + timedelta(days=1), True)
         add(remaining, today - timedelta(days=1), False)
         add(remaining, today + timedelta(days=1), False)
         future_progress = add(remaining, today + timedelta(days=2), True)
     with store.transaction() as tx:
-        assert _clear_reschedulable_slots(child["id"], today, tx) == 4
-    assert {s["id"] for s in store.all("scheduled_slots")} == {historical, future_progress}
-    assert len(store.all("completions")) == 2  # completions of removed slots were cascaded
+        assert _clear_reschedulable_slots(child["id"], today, tx) == 3
+    assert {s["id"] for s in store.all("scheduled_slots")} == {historical, finished_today, future_progress}
+    assert len(store.all("completions")) == 3  # completions of removed slots were cascaded
+
+
+def test_replanning_after_a_lesson_finished_today_does_not_add_another_today(harness):
+    from services.scheduler_engine import recalculate_schedule
+    child, subject, _ = seed(harness)
+    today = date(2026, 11, 3)  # a Tuesday
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        tx.update("subjects", subject["id"], {"weekdays": [1, 3]})
+        tx.insert("time_windows", {"child_id": child["id"], "weekday": 1, "start_time": "09:00", "end_time": "10:00"})
+        tx.insert("time_windows", {"child_id": child["id"], "weekday": 3, "start_time": "09:00", "end_time": "10:00"})
+        plague = tx.insert("topics", {"subject_id": subject["id"], "title": "The Plague", "page_start": 1, "page_end": 1,
+                                      "chapter_order": 1, "completed": True})
+        nxt = tx.insert("topics", {"subject_id": subject["id"], "title": "A New Way of Living", "page_start": 2,
+                                   "page_end": 2, "chapter_order": 2})
+        slot = tx.insert("scheduled_slots", {"child_id": child["id"], "subject_id": subject["id"], "topic_id": plague["id"],
+                                             "date": today, "time_start": "09:00", "time_end": "10:00", "page_from": 1, "page_to": 1})
+        tx.insert("completions", {"slot_id": slot["id"]})
+    with store.transaction() as tx:
+        recalculate_schedule(child["id"], tx, today=today)
+    planned = {s["topic_id"]: s["date"] for s in store.all("scheduled_slots")}
+    assert planned == {plague["id"]: today, nxt["id"]: date(2026, 11, 5)}
+    # Even when today's slot is already gone, a lesson finished in the app today keeps the day used.
+    with store.transaction() as tx:
+        tx.delete("scheduled_slots", slot["id"])
+        tx.insert("tutor_sessions", {"id": "plague-session", "child_id": child["id"], "subject_id": subject["id"], "topic_id": plague["id"],
+            "date": today, "status": "completed", "finished_at": datetime(2026, 11, 3, 12, 0, tzinfo=timezone.utc)})
+    with store.transaction() as tx:
+        recalculate_schedule(child["id"], tx, today=today)
+    assert {s["topic_id"]: s["date"] for s in store.all("scheduled_slots")} == {nxt["id"]: date(2026, 11, 5)}
 
 
 def test_schedule_recalculation_is_one_atomic_operation(harness):
@@ -195,6 +225,25 @@ def test_pdf_is_served_from_the_drive_folder(harness):
     (harness.drive / document["file_path"]).unlink()
     missing = harness.call("GET", f"/api/documents/{document['id']}/content", role="learner")
     assert missing.status_code == 503 and "missing" in missing.json()["detail"]
+
+
+def test_lesson_pages_are_served_without_the_whole_book(harness):
+    import io
+    from pypdf import PdfReader
+    _, _, document = seed(harness)
+    path = f"/api/documents/{document['id']}/pages"
+    r = harness.call("GET", path, role="learner", params={"first": 5, "last": 7})
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    assert [p.extract_text().strip() for p in PdfReader(io.BytesIO(r.content)).pages] == ["Page 5", "Page 6", "Page 7"]
+    assert r.headers["etag"] == f'"{document["sha256"]}-5-7"'
+    again = harness.client.get(path, params={"first": 5, "last": 7}, headers={"If-None-Match": r.headers["etag"]})
+    assert again.status_code == 304
+    # A cut range is kept, so it is served again without the book being read.
+    (harness.drive / document["file_path"]).unlink()
+    cached = harness.call("GET", path, role="learner", params={"first": 5, "last": 7})
+    assert cached.status_code == 200 and cached.content == r.content
+    for first, last in ((7, 5), (12, 13), (1, 101)):
+        assert harness.call("GET", path, params={"first": first, "last": last}).status_code == 400
 
 
 def test_drive_folder_books_are_listed_and_linked_by_path(harness, monkeypatch):

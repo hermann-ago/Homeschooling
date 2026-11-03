@@ -105,6 +105,10 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None, now: date
     subject_completed_dates = {}
     for s in completed_slots:
         subject_completed_dates.setdefault(s["subject_id"], set()).add(s["date"])
+    # A lesson finished in the app today also uses up that subject's day, even without a slot.
+    for session in tx.find("tutor_sessions", child_id=child_id, status="completed"):
+        if session.get("finished_at") and _local_date(session["finished_at"]) == today:
+            subject_completed_dates.setdefault(session["subject_id"], set()).add(today)
 
     def get_subject_indices(subject_id: int, slot_type: str, total_needed: int, slot_a_start: int = 0):
         # Slot A: slot_a_start, slot_a_start+2... | Slot B: slot_a_start+1, slot_a_start+3... | Slot C: 0, 1, 2...
@@ -210,6 +214,13 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None, now: date
 
 # ── Helpers ────────────────────────────────────────────────────────
 
+def _local_date(moment) -> date:
+    """The home computer's calendar date of a stored (UTC) timestamp."""
+    if isinstance(moment, str):
+        moment = datetime.fromisoformat(moment.replace("Z", "+00:00"))
+    return moment.astimezone().date() if moment.tzinfo else moment.date()
+
+
 def _get_completed_pages(tx, topic_id, subject_id, completed_slot_ids):
     slots = [s for s in tx.find("scheduled_slots", topic_id=topic_id, subject_id=subject_id)
              if s["id"] in completed_slot_ids]
@@ -217,13 +228,16 @@ def _get_completed_pages(tx, topic_id, subject_id, completed_slot_ids):
 
 
 def _clear_reschedulable_slots(child_id: int, today: date, tx) -> int:
-    """Clear drafts and stale current/future slots for completed topics."""
+    """Clear drafts and stale future slots for completed topics.
+
+    A finished slot dated today stays: that subject has had today's lesson.
+    """
     completed_slot_ids = {c["slot_id"] for c in tx.all("completions")}
     topics = {t["id"]: t for t in tx.all("topics")}
     old_slots = [
         s for s in tx.find("scheduled_slots", child_id=child_id)
         if s["id"] not in completed_slot_ids
-        or (s["date"] >= today and s["topic_id"] in topics and topics[s["topic_id"]]["completed"])
+        or (s["date"] > today and s["topic_id"] in topics and topics[s["topic_id"]]["completed"])
     ]
     for slot in old_slots:
         tx.delete("scheduled_slots", slot["id"])

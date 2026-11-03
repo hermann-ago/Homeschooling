@@ -16,7 +16,7 @@ import OriginalSourcePage from '../components/OriginalSourcePage';
 import { pauseNarration } from '../utils/narration';
 import AIEnrichmentPanel from '../components/AIEnrichmentPanel';
 import InsertPicker from '../components/InsertPicker';
-import { getDocumentData } from '../api/documents';
+import { getDocument as getDocumentInfo, getDocumentPages } from '../api/documents';
 import { tutorApi } from '../api/tutor';
 import { modeHref } from '../api/mode';
 import { canvasApi } from '../api/canvas';
@@ -27,11 +27,14 @@ import { learnerTones } from '../utils/colors';
 import { locateSentences } from '../utils/readAlong';
 
 async function pageTexts(documentId, start, end) {
-  const data = await getDocumentData(documentId);
-  const pdf = await getDocument({ data }).promise;
+  // The same range as the page viewer's, so the two share one download.
+  const info = await getDocumentInfo(documentId);
+  const last = Math.min(end, info.page_count || end);
+  const data = await getDocumentPages(documentId, start, last);
+  const pdf = await getDocument({ data: data.slice() }).promise;
   const texts = [];
-  for (let page = start; page <= Math.min(end, pdf.numPages); page += 1) {
-    const content = await (await pdf.getPage(page)).getTextContent();
+  for (let page = start; page <= last; page += 1) {
+    const content = await (await pdf.getPage(page - start + 1)).getTextContent();
     texts.push({ page, text: content.items.map((item) => item.str || '').join(' ') });
   }
   return texts;

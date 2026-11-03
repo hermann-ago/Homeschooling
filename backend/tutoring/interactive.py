@@ -625,11 +625,15 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                 prompt_text, images, missing_questions = self._assessment_inputs(session, action, message)
                 source_pdf = None
                 prepared = (playback.get('context_snapshot') or {}).get('prepared_guide') or {}
-                from . import book_questions
+                from . import book_questions, extra_questions
                 reading_choices = book_questions.enabled(prepared)
-                assessment_schema = BookReadingAssessment if reading_choices else Assessment
+                # Either policy allows no typed follow-up: at most one choice question.
+                choices_only = reading_choices or extra_questions.enabled(prepared)
+                assessment_schema = BookReadingAssessment if choices_only else Assessment
                 if reading_choices:
                     prompt_text += '\n' + book_questions.FEEDBACK
+                elif choices_only:
+                    prompt_text += '\n' + extra_questions.FEEDBACK
                 if (prepared.get('teaching_script') or {}).get('version', '').startswith('original-pages-'):
                     from .visual_source import review_pdf
                     guide = self.db.get('guides', playback['guide_id'])
@@ -657,7 +661,7 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                         keyed = checked_ordering_assessment(source_key, capture['confirmed_text'])
                     response = keyed or ({"feedback": "Your work is saved. The assigned question pages are unavailable, so I cannot check this answer yet. Please ask for the question pages to be added, or skip for now.",
                                 "result": "Source disputed", "ready_to_continue": False} if missing_questions else gemini_turn(prompt_text, images, models,
-                                    **({'schema': assessment_schema} if reading_choices else {}),
+                                    **({'schema': assessment_schema} if choices_only else {}),
                                     **({"replace_invalid": True} if replace_invalid else {}),
                                     **({'pdf': source_pdf} if source_pdf is not None else {})))
                 assessment = assessment_schema.model_validate(response).model_dump()
