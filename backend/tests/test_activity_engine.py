@@ -240,6 +240,30 @@ def test_explicit_feedback_replacement_keeps_response_and_frozen_context(harness
     assert len(harness.ctx.store.all('attempts')) == 1
 
 
+def test_exhausted_provider_credit_is_named_and_answer_retries_later(harness, monkeypatch):
+    monkeypatch.setenv('OPENAI_API_KEY', 'test-openai-key-never-real')
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    state = invoke(engine, state)
+    credit = []
+    def respond(request):
+        if request.url.path.endswith('/input_tokens'):
+            return httpx.Response(200, json={'input_tokens': 100})
+        if not credit:
+            return httpx.Response(429, json={'error': {'code': 'credit_balance_exhausted', 'type': 'insufficient_quota'}})
+        text = json.dumps({'feedback': 'Synthetic feedback.', 'result': 'Correct', 'ready_to_continue': True})
+        return httpx.Response(200, json={'status': 'completed', 'usage': {'input_tokens': 100, 'output_tokens': 50},
+            'output': [{'type': 'message', 'content': [{'type': 'output_text', 'text': text}]}]})
+    harness.ctx.ai.http = httpx.Client(transport=httpx.MockTransport(respond))
+    state = event(engine, state, 'submit_response', {'response_id': 'no-credit', 'text': 'Original words', 'assess_after_save': True})
+    assert 'out of credits' in state['error']
+    response = state['active_activity']['responses'][0]
+    assert response['feedback_failure'] == 'provider_quota'
+    credit.append(True)
+    state = event(engine, state, 'assess', {'response_id': response['id']})
+    assert state['active_activity']['responses'][0]['status'] == 'assessed'
+    assert harness.ctx.store.get('activity_responses', 'no-credit')['original']['text'] == 'Original words'
+
+
 def test_one_click_cannot_bypass_transcript_confirmation(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     state = invoke(engine, state, content={"prompt": "What happened?", "response_modes": ["device_dictation"]})

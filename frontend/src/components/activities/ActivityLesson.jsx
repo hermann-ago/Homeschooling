@@ -359,6 +359,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {awaitingAssessment && response && <div className="flex flex-col gap-2">
           <p className="text-sm text-muted">{response.feedback_failure === 'invalid_reply'
             ? response.feedback_replacement_used ? 'The replacement reply could not be checked. Your answer stays saved. Leave this activity to revisit; it is not marked wrong.' : 'The AI reply could not be checked. Request one replacement with its provider cost tracked; your saved answer and any help stay unchanged.'
+            : response.feedback_failure === 'provider_quota' ? 'Your answer is saved. The AI account is out of credits, so a grown-up needs to add credits before this answer can be checked.'
             : 'Your answer is saved. Checking it will keep the original attempt and any help separate.'}</p>
           <Button variant="primary" disabled={busy || Boolean(pending) || response.feedback_failure === 'invalid_reply' && response.feedback_replacement_used} onClick={() => event('assess', { response_id: response.id, ...(response.feedback_failure === 'invalid_reply' && !response.feedback_replacement_used ? { replace_invalid_reply: true } : {}) })}>{response.feedback_failure === 'invalid_reply' ? response.feedback_replacement_used ? 'Replacement needs review' : 'Generate replacement feedback' : status === 'assessment_failed' || status === 'assessment_pending' ? 'Retry feedback for this answer' : 'Check my answer'}</Button>
         </div>}

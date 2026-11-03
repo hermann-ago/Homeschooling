@@ -673,12 +673,17 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                     if tx.get("lesson_dialogue", message_id)["status"] != "assessed":
                         tx.update("lesson_dialogue", message_id, {"status": "failed"})
                 invalid = isinstance(exc, InvalidStructuredResponseError)
+                no_credit = getattr(exc, "code", None) == "provider_quota"
                 error = ("The replacement feedback also needs review. Your answer is saved; leave this activity to revisit."
                          if invalid and replace_invalid else
                          "Your answer is saved. The AI returned an unreadable feedback reply. You can request replacement feedback using the teaching allowance."
-                         if invalid else "Your answer is saved, but feedback is pending. Please retry or skip for now.")
+                         if invalid else
+                         "Your answer is saved, but the AI account has run out of credits, so it cannot be checked yet. "
+                         "Ask a grown-up to add API credits, then retry. Retrying before that will not help."
+                         if no_credit else "Your answer is saved, but feedback is pending. Please retry or skip for now.")
                 return {**self.state(session_id), "error": error,
-                        "feedback_failure": "invalid_reply" if invalid else "unavailable", "retry_message_id": message_id}
+                        "feedback_failure": "invalid_reply" if invalid else "provider_quota" if no_credit else "unavailable",
+                        "retry_message_id": message_id}
 
     def _assess_workbook(self, session, action, message, prompt_text, images, models, revision, replace_invalid=False):
         item = self.db.get("assignment_items", action["assignment_item_id"])
