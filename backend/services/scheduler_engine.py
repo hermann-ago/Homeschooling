@@ -12,18 +12,23 @@ Behavior:
 All reads and writes go through one store transaction, so a recalculation is
 saved to the database as a single transaction.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from schemas import ScheduleResult, ScheduleWarning
 from utils import get_setting
 
 
-def recalculate_schedule(child_id: int, tx, today: date | None = None) -> ScheduleResult:
+def recalculate_schedule(child_id: int, tx, today: date | None = None, now: datetime | None = None) -> ScheduleResult:
     warnings: list[ScheduleWarning] = []
-    today = today or date.today()
+    now = now or datetime.now()
+    planning_from_now = today is None
+    today = today or now.date()
 
     # ── 1. Gather subjects and remaining topics ─────────────────────
-    subjects = sorted((s for s in tx.find("subjects", child_id=child_id) if s.get("purpose") not in ("library", "library_paused")), key=lambda s: s["id"])
+    # A subject with an empty weekday list is paused: it keeps its lessons but is not planned.
+    subjects = sorted((s for s in tx.find("subjects", child_id=child_id)
+                       if s.get("purpose") not in ("library", "library_paused") and s.get("weekdays") != []),
+                      key=lambda s: s["id"])
     if not subjects:
         return ScheduleResult(slots_created=0, warnings=[ScheduleWarning(message="No subjects found.")])
 
@@ -62,6 +67,12 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None) -> Schedu
     windows_by_day = {}
     for tw in time_windows:
         windows_by_day.setdefault(tw["weekday"], []).append(tw)
+
+    # Once today's study time is over, a re-plan starts tomorrow instead of filling hours already gone.
+    day_over = today.weekday() in windows_by_day and \
+        now.strftime("%H:%M") >= max(w["end_time"] for w in windows_by_day[today.weekday()])
+    if planning_from_now and day_over:
+        today += timedelta(days=1)
 
     # ── 3. Blocked days ─────────────────────────────────────────────
     school_year_end = date.fromisoformat(get_setting(tx.store, "SCHOOL_YEAR_END"))
@@ -121,9 +132,12 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None) -> Schedu
                 current_day_idx += stride
         return indices
 
-    subjects_a = [s for s in subjects if (s["slot_type"] or 'A') == 'A' and s["id"] in subject_topics]
-    subjects_b = [s for s in subjects if (s["slot_type"] or 'A') == 'B' and s["id"] in subject_topics]
-    subjects_c = [s for s in subjects if (s["slot_type"] or 'A') == 'C' and s["id"] in subject_topics]
+    # Subjects with chosen weekdays get one lesson on each of those days; the rest take turns (A/B) or run daily (C).
+    subjects_days = [s for s in subjects if s.get("weekdays") and s["id"] in subject_topics]
+    alternating = [s for s in subjects if not s.get("weekdays")]
+    subjects_a = [s for s in alternating if (s["slot_type"] or 'A') == 'A' and s["id"] in subject_topics]
+    subjects_b = [s for s in alternating if (s["slot_type"] or 'A') == 'B' and s["id"] in subject_topics]
+    subjects_c = [s for s in alternating if (s["slot_type"] or 'A') == 'C' and s["id"] in subject_topics]
 
     # ── Determine starting slot to avoid two consecutive Slot A / B days ──
     slot_a_ids = {s["id"] for s in subjects_a}
@@ -151,6 +165,17 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None) -> Schedu
             for i, topic_info in enumerate(topics):
                 subject_assignments.append({"day_index": indices[i], "subject_id": subject["id"],
                                             "topic_info": topic_info, "slot": label})
+    for subject in subjects_days:
+        topics = subject_topics[subject["id"]]
+        done = subject_completed_dates.get(subject["id"], set())
+        days = [i for i, day in enumerate(available_days)
+                if day["date"].weekday() in subject["weekdays"] and day["date"] not in done]
+        for index, topic_info in zip(days, topics):
+            subject_assignments.append({"day_index": index, "subject_id": subject["id"],
+                                        "topic_info": topic_info, "slot": "days"})
+        if len(topics) > len(days):
+            warnings.append(ScheduleWarning(
+                message=f"{subject['name']}: {len(topics) - len(days)} lessons do not fit on its days before the school year ends."))
 
     subject_assignments.sort(key=lambda x: x["day_index"])
     day_assignments = {}

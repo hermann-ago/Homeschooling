@@ -327,3 +327,42 @@ def test_moving_lessons_forward_waits_when_a_school_day_has_started(harness):
     harness.call("PUT", "/api/calendar/settings/auto-replan", json={"enabled": True})
     assert harness.ctx.move_unfinished_forward(datetime(2026, 9, 28, 9, 15)) == []
     assert len(harness.ctx.store.find("scheduled_slots", child_id=child["id"])) == 2  # untouched
+
+
+def test_subjects_with_chosen_weekdays_get_one_lesson_on_each_of_those_days(harness):
+    from services.scheduler_engine import recalculate_schedule
+    child, math, _ = seed(harness)
+    monday = date(2026, 11, 2)
+    with harness.ctx.store.transaction() as tx:
+        for weekday in range(5):
+            tx.insert("time_windows", {"child_id": child["id"], "weekday": weekday, "start_time": "08:00", "end_time": "11:00"})
+        history = tx.insert("subjects", {"child_id": child["id"], "name": "History"})
+        paused = tx.insert("subjects", {"child_id": child["id"], "name": "Old book"})
+        for subject in (math, history, paused):
+            for n in range(4):
+                tx.insert("topics", {"subject_id": subject["id"], "title": f"Lesson {n}", "page_start": n + 1,
+                                     "page_end": n + 1, "chapter_order": n, "is_core": True})
+    assert harness.call("PUT", f"/api/subjects/{math['id']}", json={"weekdays": [0, 1, 2, 3, 4]}).status_code == 200
+    assert harness.call("PUT", f"/api/subjects/{history['id']}", json={"weekdays": [3, 1]}).json()["weekdays"] == [1, 3]
+    assert harness.call("PUT", f"/api/subjects/{paused['id']}", json={"weekdays": []}).status_code == 200
+    assert harness.call("PUT", f"/api/subjects/{paused['id']}", json={"weekdays": [7]}).status_code == 422
+    with harness.ctx.store.transaction() as tx:
+        recalculate_schedule(child["id"], tx, monday)
+    slots = harness.ctx.store.find("scheduled_slots", child_id=child["id"])
+    days = lambda subject: sorted(s["date"] for s in slots if s["subject_id"] == subject["id"])
+    assert days(math) == [monday + timedelta(days=n) for n in range(4)]
+    assert days(history) == [monday + timedelta(days=n) for n in (1, 3, 8, 10)]
+    assert days(paused) == []
+
+
+def test_replanning_after_the_school_day_starts_tomorrow(harness):
+    from services.scheduler_engine import recalculate_schedule
+    child, subject, _ = seed(harness)
+    with harness.ctx.store.transaction() as tx:
+        tx.insert("time_windows", {"child_id": child["id"], "weekday": 0, "start_time": "08:00", "end_time": "11:00"})
+        tx.insert("time_windows", {"child_id": child["id"], "weekday": 1, "start_time": "14:00", "end_time": "16:30"})
+        tx.insert("topics", {"subject_id": subject["id"], "title": "Next", "page_start": 1, "page_end": 1, "is_core": True})
+    for clock, first in ((datetime(2026, 11, 2, 9, 0), date(2026, 11, 2)), (datetime(2026, 11, 2, 20, 0), date(2026, 11, 3))):
+        with harness.ctx.store.transaction() as tx:
+            recalculate_schedule(child["id"], tx, now=clock)
+        assert [s["date"] for s in harness.ctx.store.find("scheduled_slots", child_id=child["id"])] == [first]

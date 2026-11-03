@@ -33,6 +33,11 @@ const DAYS = {
   B: { label: 'Every other day · 2nd', short: '2nd days', hint: 'Planned on the 2nd, 4th, 6th… study day, taking turns with “1st” subjects.' },
   C: { label: 'Every study day', short: 'Every day', hint: 'Planned on every day with study time.' },
 };
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+// weekdays: a list plans one lesson on each chosen day; [] pauses the subject; null takes turns (DAYS).
+const scheduleMode = (weekdays) => weekdays == null ? 'turns' : weekdays.length ? 'days' : 'paused';
+const daysLabel = (subject) => subject.weekdays == null ? DAYS[subject.slot_type || 'A'].label
+  : subject.weekdays.length ? subject.weekdays.map((d) => WEEKDAYS[d]).join(' · ') : 'Paused · not planned';
 const PACES = [
   { value: 0.5, label: 'Slower' }, { value: 1, label: 'Normal' }, { value: 1.5, label: 'Faster' }, { value: 2, label: 'Twice as fast' },
 ];
@@ -96,7 +101,7 @@ function AddSubjectDialog({ child, onClose, onAdded }) {
 function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   const [form, setForm] = useState({
     name: subject.name, weight: subject.weight ?? 1, slot_type: subject.slot_type || 'A', end_date: subject.end_date || '',
-    grade: subject.grade || 'N/A',
+    grade: subject.grade || 'N/A', weekdays: subject.weekdays ?? null,
   });
   const toast = useToast();
   const change = useChange(subject.id, child.id);
@@ -104,6 +109,7 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   const replan = useReplanAction();
   const set = (changes) => setForm((current) => ({ ...current, ...changes }));
   const scheduleChanged = form.weight !== subject.weight || form.slot_type !== subject.slot_type
+    || JSON.stringify(form.weekdays) !== JSON.stringify(subject.weekdays ?? null)
     || (form.end_date || null) !== (subject.end_date || null);
 
   const save = async () => {
@@ -141,9 +147,20 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
             : `New books and files will go in ${folderLabel(child.name, form.grade, form.name.trim() || subject.name)} (created now). Files already saved stay where they are.`} />
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold text-muted">Days</span>
-          <SegmentedControl label="Days" size="sm" value={form.slot_type} onChange={(slot_type) => set({ slot_type })}
-            options={Object.entries(DAYS).map(([value, d]) => ({ value, label: d.short }))} />
-          <span className="text-[13px] text-subtle">{DAYS[form.slot_type].hint}</span>
+          <SegmentedControl label="Days" size="sm" value={scheduleMode(form.weekdays)}
+            onChange={(mode) => set({ weekdays: mode === 'turns' ? null : mode === 'paused' ? [] : subject.weekdays?.length ? subject.weekdays : [0, 2, 4] })}
+            options={[{ value: 'days', label: 'Chosen days' }, { value: 'turns', label: 'Take turns' }, { value: 'paused', label: 'Paused' }]} />
+          {scheduleMode(form.weekdays) === 'days' && <div role="group" aria-label="Weekdays" className="flex flex-wrap gap-1.5">
+            {WEEKDAYS.map((day, index) => {
+              const on = form.weekdays.includes(index);
+              return <Button key={day} size="sm" variant={on ? 'primary' : 'quiet'} aria-pressed={on}
+                onClick={() => set({ weekdays: on ? form.weekdays.filter((d) => d !== index) : [...form.weekdays, index].sort() })}>{day}</Button>;
+            })}
+          </div>}
+          {scheduleMode(form.weekdays) === 'turns' && <SegmentedControl label="Turns" size="sm" value={form.slot_type} onChange={(slot_type) => set({ slot_type })}
+            options={Object.entries(DAYS).map(([value, d]) => ({ value, label: d.short }))} />}
+          <span className="text-[13px] text-subtle">{scheduleMode(form.weekdays) === 'turns' ? DAYS[form.slot_type].hint
+            : form.weekdays.length ? 'One lesson on each chosen day that has study time.' : 'Its lessons are kept but not planned until you choose days again.'}</span>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] font-semibold text-muted">Pace</span>
@@ -274,7 +291,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
           <h1 className="font-display text-3xl md:text-4xl font-medium">{subject.name}</h1>
           <div className="flex flex-wrap gap-2">
             <Badge tone="action">{gradeLabel(subject.grade)}</Badge>
-            <Badge>{DAYS[subject.slot_type || 'A'].label}</Badge>
+            <Badge>{daysLabel(subject)}</Badge>
             <Badge>{paceLabel(subject.weight ?? 1)}</Badge>
             <Badge>{subject.end_date ? `Finish by ${format(parseISO(subject.end_date), 'd MMM yyyy')}` : 'Ends with the school year'}</Badge>
           </div>

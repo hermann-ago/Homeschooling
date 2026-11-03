@@ -1,5 +1,14 @@
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
+
+# Monday = 0 … Sunday = 6. None: take turns by slot_type; []: paused, not planned.
+Weekdays = Optional[list[int]]
+
+
+def _weekdays(v):
+    if v is not None and any(not isinstance(d, int) or not 0 <= d <= 6 for d in v):
+        raise ValueError('Weekdays are numbers from 0 (Monday) to 6 (Sunday)')
+    return sorted(set(v)) if v is not None else None
 from datetime import date, datetime
 
 class SubjectBase(BaseModel):
@@ -8,6 +17,7 @@ class SubjectBase(BaseModel):
     slot_type: str = Field(default="A", max_length=1)
     end_date: Optional[date] = None
     grade: Optional[str] = Field(None, max_length=20)  # this subject's grade; empty: no grade level
+    weekdays: Weekdays = None
 
     @field_validator('slot_type', mode='before')
     @classmethod
@@ -15,6 +25,8 @@ class SubjectBase(BaseModel):
         if v not in ['A', 'B', 'C']:
             return 'A'
         return v
+
+    _check_weekdays = field_validator('weekdays')(_weekdays)
 
 class SubjectCreate(SubjectBase):
     child_id: int
@@ -25,6 +37,9 @@ class SubjectUpdate(BaseModel):
     slot_type: Optional[str] = Field(None, max_length=1)
     end_date: Optional[date] = None
     grade: Optional[str] = Field(None, max_length=20)
+    weekdays: Weekdays = None
+
+    _check_weekdays = field_validator('weekdays')(_weekdays)
 
 class SubjectResponse(SubjectBase):
     id: int
