@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, create_model, model_validator
 from . import guide as guide_mod, passages, skills
 from .activities import ActivityProposal, definitions
 from .book_questions import ChoiceProposal
-from .keyed_assessment import checked_binary_assessment, checked_ordering_assessment
+from .keyed_assessment import checked_binary_assessment, checked_blanks_assessment, checked_ordering_assessment
 from .service import TutorConflict, TutorError
 from .content_responsibility import TEACHING_POLICY
 
@@ -634,21 +634,24 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                     prompt_text += '\n' + book_questions.FEEDBACK
                 elif choices_only:
                     prompt_text += '\n' + extra_questions.FEEDBACK
-                if (prepared.get('teaching_script') or {}).get('version', '').startswith('original-pages-'):
+                def with_original_pages(text):
+                    """The pinned pages for the AI grader; built only when the AI is asked."""
+                    if not (prepared.get('teaching_script') or {}).get('version', '').startswith('original-pages-'):
+                        return text, None
                     from .visual_source import review_pdf
-                    guide = self.db.get('guides', playback['guide_id'])
-                    source_pdf = review_pdf(self.ctx, guide)
                     manifest = (prepared.get('lesson_sources') or {}).get('reviewer') or {}
-                    prompt_text += ('\nAttached original lesson pages and private answer-key pages are assessment evidence. '
+                    return text + ('\nAttached original lesson pages and private answer-key pages are assessment evidence. '
                         'Use only the current question and its frozen assigned passage, respecting inclusive start_at and exclusive stop_before. '
                         'Neighboring content on a shared page is not assigned. Never disclose key answers before the learner attempts the work. '
-                        'Pinned original page map and boundaries:\n' + json.dumps({k:manifest.get(k) for k in ('pages','boundaries')},ensure_ascii=False))
+                        'Pinned original page map and boundaries:\n' + json.dumps({k:manifest.get(k) for k in ('pages','boundaries')},ensure_ascii=False)
+                        ), review_pdf(self.ctx, self.db.get('guides', playback['guide_id']))
                 ai = self.ctx.config.get("ai", {})
                 configured = ai.get("tutor_model") or ai.get("guide_model")
                 models = (configured, *guide_mod.DEFAULT_MODELS) if configured else guide_mod.DEFAULT_MODELS
                 scope_id = playback.get("generation_scope_id")
                 with (self.ctx.ai.scoped(scope_id) if scope_id else nullcontext()), self.ctx.ai.identified("tutor-turn:" + message_id):
                     if action.get("assignment_item_id"):
+                        prompt_text, _ = with_original_pages(prompt_text)
                         self._assess_workbook(session, action, message, prompt_text, images, models, based_revision, replace_invalid=replace_invalid)
                         return self.state(session_id)
                     from .source_key import for_message
@@ -659,12 +662,32 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                         source_key and not images and not capture.get('reasoning')) else None
                     if not keyed and source_key and capture.get('confirmed_text') and not capture.get('reasoning'):
                         keyed = checked_ordering_assessment(source_key, capture['confirmed_text'])
-                    response = keyed or ({"feedback": "Your work is saved. The assigned question pages are unavailable, so I cannot check this answer yet. Please ask for the question pages to be added, or skip for now.",
-                                "result": "Source disputed", "ready_to_continue": False} if missing_questions else gemini_turn(prompt_text, images, models,
-                                    **({'schema': assessment_schema} if choices_only else {}),
-                                    **({"replace_invalid": True} if replace_invalid else {}),
-                                    **({'pdf': source_pdf} if source_pdf is not None else {})))
+                    blanks = (capture.get('original') or {}).get('blanks')
+                    if not keyed and blanks and not images and not capture.get('reasoning'):
+                        # Short answers with a pinned key are checked here, instantly and exactly.
+                        from .page_script import answer_for
+                        key = answer_for(self.ctx, action) or {}
+                        topic = self.db.get('topics', action['topic_id']) if action.get('topic_id') else None
+                        keyed = checked_blanks_assessment((action.get('activity_content') or {}).get('blanks'),
+                            key.get('answer_items'), blanks, (topic or {}).get('language'))
+                    if keyed:
+                        response = keyed
+                    elif missing_questions:
+                        response = {"feedback": "Your work is saved. The assigned question pages are unavailable, so I cannot check this answer yet. Please ask for the question pages to be added, or skip for now.",
+                                    "result": "Source disputed", "ready_to_continue": False}
+                    else:
+                        prompt_text, source_pdf = with_original_pages(prompt_text)
+                        response = gemini_turn(prompt_text, images, models,
+                            **({'schema': assessment_schema} if choices_only else {}),
+                            **({"replace_invalid": True} if replace_invalid else {}),
+                            **({'pdf': source_pdf} if source_pdf is not None else {}))
+                blank_results = response.pop('blank_results', None) if isinstance(response, dict) else None
                 assessment = assessment_schema.model_validate(response).model_dump()
+                if blank_results is not None:
+                    assessment['blank_results'] = blank_results
+                if assessment['result'] == 'Correct' and assessment['ready_to_continue']:
+                    # A correct, finished answer moves on: no follow-up and no extra task.
+                    assessment.update(follow_up=None, activity_requests=[])
                 with self.db.transaction(operation_id=f"turn:{message_id}:assessment", kind="tutor.feedback") as tx:
                     self.tutor.guard(tx, session_id, based_revision)
                     self._apply(tx, session, action, message, assessment, based_revision)
@@ -741,6 +764,8 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
             self.tutor.guard(tx, session["id"], revision)
             for target in actions:
                 assessment = results[target["assignment_item_id"]]
+                if assessment["result"] == "Correct" and assessment["ready_to_continue"]:
+                    assessment.update(follow_up=None, activity_requests=[])
                 if assessment["follow_up"]:
                     if follow_up_used:
                         assessment["follow_up"] = None

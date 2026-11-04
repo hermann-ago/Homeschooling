@@ -126,6 +126,8 @@ class QuestionContent(Content):
     require_reasoning: bool = False
     source_refs: list[SourceRef] = Field(default_factory=list, max_length=20)
     matching:MatchingContent | None=None
+    # One typed answer box per printed problem (labels only; keys stay private).
+    blanks: list[Choice] | None = Field(None, min_length=1, max_length=30)
 
     @model_validator(mode="before")
     @classmethod
@@ -150,6 +152,11 @@ class QuestionContent(Content):
     def valid_choices(self):
         if self.matching and (self.answer_format!='text' or 'text' not in self.response_modes):
             raise ValueError('Matching uses structured typed answers and a text response mode')
+        if self.blanks is not None:
+            if self.matching or self.answer_format != 'text' or 'text' not in self.response_modes:
+                raise ValueError('Blanks use structured typed answers and a text response mode')
+            if len({b.id for b in self.blanks}) != len(self.blanks):
+                raise ValueError('Blank IDs must be unique')
         if len(set(self.response_modes)) != len(self.response_modes):
             raise ValueError("Response modes must be unique")
         if len({c.id for c in self.choices}) != len(self.choices):

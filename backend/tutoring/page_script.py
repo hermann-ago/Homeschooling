@@ -56,6 +56,16 @@ class BookWork(Content):
     # it came from. Frozen with the raw script; never compiled into child content.
     answer: str | None = Field(None, min_length=1, max_length=4000)
     answer_page: int | None = Field(None, ge=1)
+    # Teacher-only, for blanks: the key's answer for each box, in order, so the
+    # app can check simple answers itself.
+    answers: list[str] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode='after')
+    def answers_match_blanks(self):
+        if self.answers and (self.response.format != 'blanks' or len(self.answers) != len(self.response.blanks)
+                             or any(not a.strip() or len(a) > 200 for a in self.answers)):
+            raise ValueError('Answers give one short key answer per blank, in order.')
+        return self
 
 
 class Script(Content):
@@ -265,5 +275,6 @@ def answer_for(ctx, action):
     if not turn.get('answer'):
         return None
     return {'answer_key': turn['answer'], 'answer_key_page': turn.get('answer_page'),
+            **({'answer_items': turn['answers']} if turn.get('answers') else {}),
             'note': 'Copied from the answer key by the lesson writer. Judge against the question and the '
                     'assigned reading too; equivalent wording is correct unless exact wording is the task.'}

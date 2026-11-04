@@ -223,6 +223,7 @@ class ActivityEngine:
                 message = self.db.get('lesson_dialogue', response.get('message_id')) if response.get('message_id') else None
                 response['answer_only_recheck_available'] = answer_recheck_available(self.ctx,self.db,actions_by_id[view['id']],response)
                 response['source_disputed'] = (message.get('assessment') or {}).get('result') == 'Source disputed' if message else False
+                response['blank_results'] = (message.get('assessment') or {}).get('blank_results') if message else None
                 response['source_issue_acknowledged'] = response['id'] in acknowledged_sources
         pending_support = [{"operation_id": event["operation_id"], "activity_id": event["activity_id"],
             "interaction_id": event["interaction_id"], "type": "request_hint", "payload": event["payload"]}
@@ -582,6 +583,14 @@ class ActivityEngine:
                     or not matching.get('allow_reuse') and len(set(matches.values()))!=len(matches)):
                 raise TutorError('Choose an available match for each item')
             text='\n'.join(c['label']+' → '+options[matches[c['id']]] for c in items)
+        blanks = payload.get('blanks') or {}
+        if content.get('blanks') and method == 'typed':
+            boxes = content['blanks']
+            if (not isinstance(blanks, dict) or set(blanks) != {b['id'] for b in boxes}
+                    or any(not isinstance(v, str) or not v.strip() or len(v) > 100 for v in blanks.values())):
+                raise TutorError('Fill in every answer box')
+            blanks = {b['id']: _text(blanks[b['id']]).strip() for b in boxes}
+            text = '\n'.join(f"{b['label']} {blanks[b['id']]}" for b in boxes)
         if method == "choice":
             choices = payload.get("choice_ids") or []
             available = {c["id"]: c.get("label", c.get("text", c["id"])) for c in content.get("choices", [])}
@@ -611,7 +620,8 @@ class ActivityEngine:
             "activity_id": action["action_id"], "interaction_id": interaction["id"], "method": method,
             "original": {"text": text, "reasoning": reasoning, "choice_ids": choices if method == "choice" else [], "evidence_ids": evidence_ids,
                          **({'page_work_id': payload['page_work_id']} if shared_page else {}),
-                         **({'matches':matches} if method=='typed' and matches else {})},
+                         **({'matches':matches} if method=='typed' and matches else {}),
+                         **({'blanks': blanks} if method == 'typed' and content.get('blanks') else {})},
             "support_snapshot": {"this": action.get("help_given"),
                 "other": [{"question": a["prompt"], "help": a["help_given"], "kind": a["kind"]} for a in tx.find("lesson_actions", session_id=session_id)
                           if a["id"] != action["id"] and a["help_given"]],
@@ -628,13 +638,16 @@ class ActivityEngine:
         spelling_input=interaction['status']=='awaiting_work' and direct_text_capture(capture_content(self.ctx,action))
         if interaction["status"] not in ("awaiting_input", "awaiting_followup") and not spelling_input:
             raise TutorConflict("This prompt is no longer waiting for a draft")
-        draft = {key: payload[key] for key in ("method", "text", "reasoning", "choice_ids", "matches", "evidence_ids", "response_id") if key in payload}
+        draft = {key: payload[key] for key in ("method", "text", "reasoning", "choice_ids", "matches", "blanks", "evidence_ids", "response_id") if key in payload}
         for key in ("text", "reasoning"):
             if key in draft:
                 draft[key] = _text(draft[key])
         matches=draft.get('matches',{})
         if not isinstance(matches,dict) or len(matches)>12 or any(not isinstance(k,str) or not isinstance(v,str) or len(k)>100 or len(v)>100 for k,v in matches.items()):
             raise TutorError('The draft contains invalid matching references')
+        blanks = draft.get('blanks', {})
+        if not isinstance(blanks, dict) or len(blanks) > 30 or any(not isinstance(k, str) or not isinstance(v, str) or len(k) > 100 or len(v) > 100 for k, v in blanks.items()):
+            raise TutorError('The draft contains invalid answer boxes')
         for key in ("choice_ids", "evidence_ids"):
             values = draft.get(key, [])
             if not isinstance(values, list) or len(values) > (12 if key == "choice_ids" else 5) or any(not isinstance(value, str) or len(value) > 300 for value in values):

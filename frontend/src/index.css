@@ -198,14 +198,14 @@
 .response-composer > label:first-child { flex-direction: row; align-items: center; justify-content: space-between; font-size: .75rem; }
 .response-composer > label:first-child select { width: auto; max-width: 75%; min-height: 2rem; height: 2rem; font-size: .75rem; background: transparent; border: 0; }
 .response-composer textarea { max-height: 9rem; min-height: 3.5rem; resize: vertical; border: 0; background: transparent; padding: .4rem 0; box-shadow: none; }
-.response-composer > button { min-height: 2rem; height: auto; font-size: .75rem; padding: .4rem .6rem; }
-.response-composer > button:last-child { grid-column: 2; grid-row: auto; border-radius: 2rem; }
+.response-composer > button { grid-column: 1 / -1; min-height: 2.75rem; height: auto; font-size: .9375rem; padding: .5rem .9rem; }
+/* The main answer button: full width, the same size as Continue. */
+.response-composer > button:last-child { grid-row: auto; }
 .response-composer > p[role="status"]:last-of-type { grid-column: 1; align-self: center; font-size: .65rem; }
 .response-composer > p[id] { grid-column: 1; align-self: center; font-size: .65rem; }
-.lesson-help { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center; font-size: .75rem; }
-.lesson-help > details[open] { flex-basis: 100%; }
-.lesson-help > button { margin-left: auto; font-size: .7rem; min-height: 1.75rem; }
-.lesson-help summary { font-size: .75rem; }
+/* Help and Skip: two equal buttons across the card; Help's choices open below them. */
+.lesson-help { display: flex; flex-direction: column; align-items: stretch; gap: .5rem; }
+.lesson-help button { min-height: 2.75rem; }
 .tutor-latest { position: absolute; bottom: .75rem; left: 50%; transform: translateX(-50%); padding: .5rem .9rem; border-radius: 2rem; background: var(--color-surface); border: 1px solid var(--color-line); box-shadow: var(--shadow-soft); font-size: .75rem; white-space: nowrap; }
 .lesson-options { position: relative; }
 .lesson-options > summary { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .75rem; cursor: pointer; list-style: none; }

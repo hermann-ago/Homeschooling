@@ -46,7 +46,9 @@ Your job is that the child understands the material, not merely hears it.
   never invent a stroke order.
 - Choose each response format for the evidence the task needs: typed text
   for words and spelling (accents included), choices for choice items;
-  parent_check for hands-on work in the book that is judged by looking and
+  blanks when an exercise is a set of short separate answers (sums, number
+  facts, single words): one box per printed problem, so each is checked on
+  its own; parent_check for hands-on work in the book that is judged by looking and
   has no single typed answer (drawing lines, colouring, tracing, circling,
   matching by lines, cutting and gluing): the child shows a grown-up, who
   confirms; handwriting, written_steps or diagram only when a photo of the
@@ -89,10 +91,13 @@ Turns:
   teacher-only: copy this exercise's answers from the ANSWER KEY PAGES,
   numbered as printed (for example "3. Mehmed; 4. Istanbul"), with the key's
   PDF page; null when no key page covers it. The child never sees them.
+  For blanks, also copy each box's key answer into answers, in the same
+  order (for example ["31", "31", "47"]); empty when no key covers them.
 ask and book_work need response.format: text, spelling, true_false,
 single_choice, multiple_select, matching, reasoning, written_steps,
-handwriting, diagram, parent_check or observe. Choice work lists all original choices;
-matching lists the two original columns, never the pairs. Generated
+handwriting, diagram, parent_check, observe or blanks. Choice work lists all original choices;
+matching lists the two original columns, never the pairs. blanks lists each
+problem as printed, without its answer ("58 - 27 ="). Generated
 true_false uses empty choices (the app adds labels). Unused arrays are empty;
 allow_reuse is false unless matching options really repeat.
 Do not describe buttons, screens or app wiring.'''

@@ -20,16 +20,21 @@ VERSION = 'teaching-script-1'
 class Response(Content):
     format: Literal['text', 'spelling', 'true_false', 'single_choice', 'multiple_select',
                     'matching', 'reasoning', 'written_steps', 'handwriting', 'diagram', 'observe',
-                    'parent_check'] = 'text'
+                    'parent_check', 'blanks'] = 'text'
     choices: list[str] = Field(default_factory=list, max_length=12)
     matching_items: list[str] = Field(default_factory=list, max_length=12)
     matching_options: list[str] = Field(default_factory=list, max_length=12)
     allow_reuse: bool = False
+    # blanks: one short answer box per printed problem, labelled as printed ("58 - 27 =").
+    blanks: list[str] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode='after')
     def complete_controls(self):
-        if any(not value.strip() or len(value)>1000 for value in [*self.choices,*self.matching_items,*self.matching_options]):
+        if any(not value.strip() or len(value)>1000 for value in [*self.choices,*self.matching_items,*self.matching_options,*self.blanks]):
             raise ValueError('Answer labels must contain bounded plain text.')
+        if self.format=='blanks':
+            if not self.blanks:raise ValueError('Blanks list each printed problem that gets its own answer box.')
+        elif self.blanks:raise ValueError('Only blanks supply answer-box labels.')
         if self.format in ('single_choice','multiple_select'):
             if len(self.choices)<2:raise ValueError('A choice question needs its full options.')
         elif self.choices:raise ValueError('Only choice questions supply choices; true/false labels are supplied by the app.')
@@ -127,6 +132,9 @@ def _response(spec,language,task=None):
     if form in ('handwriting','diagram'):content['response_modes']=['photo','parent_review']
     elif form=='written_steps':content['response_modes']=['written_steps','photo','parent_review']
     elif form=='spelling':content['response_modes']=['text','photo']
+    elif form=='blanks':
+        content['response_modes']=['text','photo']
+        content['blanks']=[{'id':f'blank-{i+1}','label':v} for i,v in enumerate(spec.blanks)]
     elif form not in ('matching','observe'):content['response_modes']=['text','device_dictation','photo']
     if form in ('true_false','single_choice','multiple_select'):
         labels=(['Verdadeiro','Falso'] if language=='pt-BR' else ['True','False']) if form=='true_false' else spec.choices

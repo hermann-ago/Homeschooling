@@ -188,13 +188,16 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
       : preparing ? `Preparing the saved lesson voice…${preparationProgress}`
       : voiceError ? voiceError.includes('429') ? 'Google voice paused: quota or rate limit. Try preparing it later.' : 'Voice preparation paused. Your lesson is saved.'
       : available ? 'Device voice · Play to listen' : 'Text only · No saved narration for this step';
+    // A step without narration shows nothing; routine voice states need no words.
+    if (voiceLabel === 'Text only · No saved narration for this step') return null;
+    const routine = ['Reading aloud', 'Saved lesson voice · Autoplay on next step', 'Reading saved · Continue when you are ready', 'Device voice · Play to listen'].includes(voiceLabel);
     return <div className="tutor-narration-controls">
       {range && activity.kind !== 'read_source' && <ActivityReading key={`${state.session_id}.${narrationPlace(activity)}`} headless
         activity={{ ...activity, start_sentence: range.start, end_sentence: range.end }} state={state} guide={guide}
         activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language} complete={() => {}} onCursor={setCursor}
         selectedSource={selectedSource} selectedSpeed={selectedSpeed}
         onTransport={setTransport} autoPlayRequest={playRequest?.session === state.session_id && playRequest.place === narrationPlace(activity) ? playRequest.token : 0} />}
-      <p className="text-xs text-muted">{voiceLabel}</p>
+      <p className={routine ? 'sr-only' : 'text-xs text-muted'}>{voiceLabel}</p>
       <button type="button" className={unrecorded && !playing ? 'tutor-device-passage-button' : 'tutor-narration-button'} aria-label={playing ? 'Pause narration' : unrecorded ? 'Use device voice for this passage' : 'Play narration'} disabled={!available || state.on_break} onClick={() => transport?.toggle()}>{playing ? <Pause aria-hidden="true" size={20} fill="currentColor" /> : unrecorded ? 'Use device voice' : <Play aria-hidden="true" size={20} fill="currentColor" />}</button>
     </div>;
   };

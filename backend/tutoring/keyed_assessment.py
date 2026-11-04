@@ -73,3 +73,58 @@ def checked_ordering_assessment(snapshot, answer):
         'help': None, 'assistance_used': False, 'follow_up': None if correct else
         ('Qual é a sequência completa, na ordem das frases impressas?' if portuguese else 'What is the complete sequence in printed order?'),
         'ready_to_continue': correct, 'concept': None, 'activity_requests': []}
+
+
+def _short_answer(value):
+    """A number, a fraction or a few words, normalised; None when unreadable."""
+    if not isinstance(value, str):
+        return None
+    text = unicodedata.normalize('NFKC', value).casefold().strip().replace('−', '-').replace('–', '-')
+    text = re.sub(r'[.!]+$', '', text).strip()
+    compact = text.replace(' ', '')
+    if re.fullmatch(r'-?\d{1,3}(?:,\d{3})+(?:\.\d+)?', compact):
+        compact = compact.replace(',', '')
+    if re.fullmatch(r'-?\d+(?:\.\d+)?', compact):
+        from decimal import Decimal
+        return ('number', Decimal(compact))
+    if re.fullmatch(r'-?\d+/\d+', compact) and not compact.endswith('/0'):
+        from fractions import Fraction
+        return ('number', Fraction(compact))
+    words = ' '.join(re.findall(r"[^\W_]+", text))
+    return ('words', words) if words else None
+
+
+def checked_blanks_assessment(boxes, expected, observed, language=None):
+    """Check one answer per box against the pinned key, or None if any box is unclear.
+
+    Numbers and fractions compare by value; words must match the key exactly.
+    A different word may still be an equivalent answer, so it goes to the tutor.
+    """
+    if not boxes or not expected or not isinstance(observed, dict) or len(expected) != len(boxes):
+        return None
+    results = {}
+    for box, key in zip(boxes, expected):
+        want, got = _short_answer(key), _short_answer(observed.get(box['id']))
+        if want is None or got is None:
+            return None
+        if want[0] == 'number' and got[0] == 'number':
+            results[box['id']] = want[1] == got[1]
+        elif want == got:
+            results[box['id']] = True
+        elif want[0] == 'number':
+            results[box['id']] = False  # a number was expected and something else was written
+        else:
+            return None
+    right = sum(results.values())
+    wrong = [box['label'] for box in boxes if not results[box['id']]]
+    portuguese = (language or '').lower().startswith('pt')
+    if not wrong:
+        feedback = ('Isso mesmo!' if portuguese else 'Correct!') if len(boxes) == 1 else (
+            f'Todas as {len(boxes)} certas!' if portuguese else f'All {len(boxes)} correct!')
+    elif portuguese:
+        feedback = f'{right} de {len(boxes)} certas. Confira de novo: ' + '; '.join(wrong)
+    else:
+        feedback = f'{right} of {len(boxes)} right. Take another look at: ' + '; '.join(wrong)
+    return {'feedback': feedback, 'result': 'Correct' if not wrong else 'Partly correct' if right else 'Not yet',
+        'transcription': None, 'help': None, 'assistance_used': False, 'follow_up': None,
+        'ready_to_continue': not wrong, 'concept': None, 'activity_requests': [], 'blank_results': results}

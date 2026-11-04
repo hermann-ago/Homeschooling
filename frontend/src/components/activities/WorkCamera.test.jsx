@@ -77,6 +77,7 @@ it('explains denied permission and never opens the file picker automatically', a
   const upload = vi.fn(); const picker = vi.spyOn(HTMLInputElement.prototype, 'click');
   render(<ResponseCapture sessionId="synthetic-camera" activity={{ id: 'one', interaction: { id: 'first' },
     content: { response_modes: ['text', 'photo'] } }} onUpload={upload} onSubmit={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText('How to answer'), { target: { value: 'photo' } });
   fireEvent.click(screen.getByRole('button', { name: 'Take photo of my work' }));
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Camera permission'));
   expect(picker).not.toHaveBeenCalled();

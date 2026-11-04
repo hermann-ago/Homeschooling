@@ -83,6 +83,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(() => readSaved(storageKey(sessionId, 'pending')));
   const [question, setQuestion] = useState('');
+  // Help belongs to one step: it closes when the lesson moves on.
+  const [helpFor, setHelpFor] = useState(null);
   const [fullThread, setFullThread] = useState(true);
   const [expandedActivity, setExpandedActivity] = useState(null);
   const [triedAgain, setTriedAgain] = useState(null); // interaction where the grown-up asked for another go
@@ -237,6 +239,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   };
   if (!state) return <section className="p-4" aria-label="Tutor activities">{problem ? <><p role="alert" className="text-problem">{problem}</p><Button size="sm" onClick={refresh}>Try opening the lesson again</Button></> : <p role="status">Opening your saved lesson…</p>}</section>;
   const activity = state.active_activity;
+  const helpKey = activity ? `${activity.id}.${activity.interaction?.id || ''}` : null;
+  const helpOpen = helpKey !== null && helpFor === helpKey;
+  const setHelpOpen = (next) => setHelpFor((typeof next === 'function' ? next(helpOpen) : next) ? helpKey : null);
   const definition = activityDefinition(activity);
   const status = activity?.interaction?.status;
   const stage = responseStage(activity);
@@ -369,11 +374,21 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {definition.family === 'break' && <Button variant="primary" disabled={busy || Boolean(pending)} onClick={() => event('take_break')}>Save my place and take a break</Button>}
         {!state.learning_summary && activity.kind === 'close_lesson' && activity.content?.unfinished?.length > 0 && <div><p className="font-semibold">Work to return to</p><ul className="list-disc pl-5 text-sm">{activity.content.unfinished.map((text, i) => <li key={i}>{text}</li>)}</ul></div>}
         {definition.family === 'unsupported' && <p role="alert">This activity needs a supported definition. Ask a parent to review it; no learner result has been inferred.</p>}
-        {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help">
-          {(needsResponse(activity) || activity.kind === 'read_source') && <div aria-label="Help choices" className="flex flex-col gap-2"><div className="flex gap-2 flex-wrap">{[['explain', 'Explain that differently'], ['example', 'Show an example'], ['hint', 'Give me a hint']].map(([kind, label]) => <Button key={kind} size="sm" disabled={busy || Boolean(pending) || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)} onClick={() => event('request_hint', { kind })}>{label}</Button>)}</div></div>}
-          {needsResponse(activity) && <Button size="sm" variant="quiet" disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Leave this to revisit</Button>}
-          {activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id && <Button size="sm" variant="quiet" disabled={busy || Boolean(pending)} onClick={() => event('parent_check', { result: 'checked' })}>A grown-up checked this in the book</Button>}
-          <details><summary className="text-sm font-semibold text-action cursor-pointer">Ask for help or a follow-up</summary><div className="mt-2 flex flex-col gap-2"><label className="text-sm">Your question<textarea rows={2} value={question} maxLength={2000} className={`${inputClasses} h-auto py-2 mt-1`} disabled={busy} onChange={(event) => setQuestion(event.target.value)} /></label><Button size="sm" disabled={busy || Boolean(pending) || !question.trim()} onClick={async () => { const next = await event('request_followup', { prompt: question }); if (next) setQuestion(''); }}>Ask the teacher</Button></div></details>
+        {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help flex flex-col gap-2">
+          {/* Two equal choices; everything else waits inside Help, in one style. */}
+          <div className={needsResponse(activity) ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+            <Button aria-expanded={helpOpen} aria-controls={`help-${activity.id}`} disabled={busy || Boolean(pending)} onClick={() => setHelpOpen((open) => !open)}>{helpOpen ? 'Close help' : 'Help'}</Button>
+            {needsResponse(activity) && <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>}
+          </div>
+          {helpOpen && <div id={`help-${activity.id}`} role="group" aria-label="Help choices" className="rounded-xl border border-line bg-paper/40 p-2 flex flex-col gap-1">
+            {(needsResponse(activity) || activity.kind === 'read_source') && [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']].map(([kind, label]) =>
+              <Button key={kind} variant="quiet" className="justify-start" disabled={busy || Boolean(pending) || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)}
+                onClick={() => { setHelpOpen(false); event('request_hint', { kind }); }}>{label}</Button>)}
+            {activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id &&
+              <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending)} onClick={() => { setHelpOpen(false); event('parent_check', { result: 'checked' }); }}>A grown-up checked this in the book</Button>}
+            <label className="text-sm font-semibold flex flex-col gap-1 p-2">Ask your teacher a question<textarea rows={2} value={question} maxLength={2000} className={`${inputClasses} h-auto py-2 font-normal`} disabled={busy} onChange={(event) => setQuestion(event.target.value)} /></label>
+            <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending) || !question.trim()} onClick={async () => { const next = await event('request_followup', { prompt: question }); if (next) { setQuestion(''); setHelpOpen(false); } }}>Ask</Button>
+          </div>}
         </div>}
       </>}</>}
       </div>

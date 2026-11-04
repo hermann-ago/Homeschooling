@@ -130,3 +130,39 @@ describe('Answer keyboard submission', () => {
     expect(submit.mock.calls[0][0].assess_after_save).toBeUndefined();
   });
 });
+
+describe('One answer box per problem', () => {
+  const boxes = [{ id: 'blank-1', label: '58 - 27 =' }, { id: 'blank-2', label: '92 - 61 =' }];
+  const work = (extra = {}) => ({ id: 'practice-1', kind: 'request_book_work', interaction: { id: 'first' },
+    content: { prompt: '1. Use Number Line Hopping.', response_modes: ['text', 'photo'], blanks: boxes }, ...extra });
+
+  it('moves through the boxes with Enter and checks once every box is filled', () => {
+    const submit = vi.fn().mockResolvedValue(null);
+    render(<ResponseCapture sessionId="math" activity={work()} onSubmit={submit} />);
+    expect(screen.queryByLabelText('How to answer')).toBeNull();
+    const first = screen.getByLabelText('Answer for 58 - 27 =');
+    fireEvent.change(first, { target: { value: '31' } });
+    fireEvent.keyDown(first, { key: 'Enter' });
+    expect(document.activeElement).toBe(screen.getByLabelText('Answer for 92 - 61 ='));
+    expect(submit).not.toHaveBeenCalled();
+    fireEvent.change(document.activeElement, { target: { value: '31' } });
+    fireEvent.keyDown(document.activeElement, { key: 'Enter' });
+    expect(submit.mock.calls[0][0]).toMatchObject({ method: 'typed', blanks: { 'blank-1': '31', 'blank-2': '31' }, assess_after_save: true });
+  });
+
+  it('starts a retry from the last answers and marks which were right', () => {
+    const last = { id: 'r1', original: { blanks: { 'blank-1': '31', 'blank-2': '30' } }, blank_results: { 'blank-1': true, 'blank-2': false } };
+    render(<ResponseCapture sessionId="math" activity={work({ interaction: { id: 'retry' }, responses: [last] })} onSubmit={vi.fn()} />);
+    expect(screen.getByLabelText('Answer for 58 - 27 =').value).toBe('31');
+    expect(screen.getByLabelText('Right')).toBeTruthy();
+    expect(screen.getByLabelText('Answer for 92 - 61 =').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText('Look again')).toBeTruthy();
+  });
+
+  it('offers a photo of the book instead of typing', () => {
+    render(<ResponseCapture sessionId="math" activity={work()} onSubmit={vi.fn()} onUpload={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Send a photo of my book instead' }));
+    expect(screen.queryByLabelText('Answer for 58 - 27 =')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Take photo of my work' })).toBeTruthy();
+  });
+});

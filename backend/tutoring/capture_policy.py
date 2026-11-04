@@ -11,7 +11,7 @@ These capture rules take precedence over conflicting older subject instructions 
 def direct_text_capture(content):
     return bool('text' in content.get('response_modes',[]) and (
         content.get('evidence_requirement')=='spelling' or
-        content.get('matching') and content.get('evidence_requirement','answer')=='answer'))
+        (content.get('matching') or content.get('blanks')) and content.get('evidence_requirement','answer')=='answer'))
 
 
 def answer_only_task(prompt, answer_format='text'):
