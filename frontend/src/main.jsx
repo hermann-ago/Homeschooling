@@ -11,8 +11,10 @@ import { Lesson, StyleGuide } from './app/lazyScreens.js'
 import { createQueryClient } from './api/queries.js'
 import { FeedbackProvider } from './ui/feedback.jsx'
 import LearnerProvider from './app/LearnerProvider.jsx'
+import { registerInstallable } from './utils/installable.js'
 
 const queryClient = createQueryClient()
+if (import.meta.env.PROD) window.addEventListener('load', () => registerInstallable())
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

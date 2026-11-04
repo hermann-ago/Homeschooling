@@ -166,7 +166,9 @@ def create_app(app_context=None) -> FastAPI:
                 return JSONResponse(status_code=404, content={"detail": "Not found"})
             candidate = (FRONTEND_DIST / path).resolve()
             if path and candidate.is_file() and FRONTEND_DIST.resolve() in candidate.parents:
-                return FileResponse(candidate)
+                # The installed app checks these for updates, so browsers must not keep old copies.
+                fresh = {"Cache-Control": "no-cache"} if path in ("sw.js", "manifest.webmanifest", "offline.html") else None
+                return FileResponse(candidate, headers=fresh)
             return FileResponse(FRONTEND_DIST / "index.html", headers={"Cache-Control": "no-cache"})
     return app
 
