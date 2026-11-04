@@ -2,6 +2,9 @@ import {useState} from 'react';
 import {useQuery,useQueryClient} from '@tanstack/react-query';
 import {tutorApi} from '../api/tutor';
 import {Button} from '../ui';
+import AnswerApprovals from './AnswerApprovals';
+
+const approvable=item=>item.blanks?.length&&!item.answer&&(item.proposed_answers?.length||item.approved_answers);
 
 export default function ScriptReview({guideId}) {
   const client=useQueryClient();
@@ -31,6 +34,8 @@ export default function ScriptReview({guideId}) {
           </li>)}
         </ol>
       </details>}
+      {/* Only boxes with one clear answer per box, as the lesson writer proposed. */}
+      {data.answer_key?.some(approvable)&&<AnswerApprovals key={guideId} guideId={guideId} entries={data.answer_key.filter(approvable)}/>}
       {['failed','outdated','not_reviewed'].includes(data.status.status)&&<div className="flex flex-col gap-2 mt-3"><Button disabled={busy} onClick={retry}>{busy?'Reviewing…':'Review saved script'}</Button><p className="text-xs text-muted">Review costs are tracked with your teaching usage. Saved replies are reused. A failed or uncertain purchase is not automatically replaced.</p></div>}
       {['needs_changes','needs_source_review'].includes(data.status.status)&&<p className="mt-3">Update the relevant teaching skill or source note, then select “Generate a new tutor script” below. Saved lessons and audio remain available.</p>}
     </>}

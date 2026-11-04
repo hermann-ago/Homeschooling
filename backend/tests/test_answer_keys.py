@@ -99,7 +99,7 @@ def test_grading_finds_the_pinned_answer_for_each_book_activity():
     rows = {('lesson_playback', 's'): {'guide_id': 'g', 'context_snapshot': {
                 'prepared_guide': {'teaching_script': {'script': script}}}},
             ('guides', 'g'): {'guide_path': 'g.json', 'guide_file_sha256': None}}
-    ctx = SimpleNamespace(store=SimpleNamespace(get=lambda table, key: rows.get((table, key))),
+    ctx = SimpleNamespace(store=SimpleNamespace(get=lambda table, key: rows.get((table, key)), find=lambda table, **equals: []),
                           file_bytes=lambda path, sha: json.dumps(guide).encode())
     found = page_script.answer_for(ctx, {'session_id': 's', 'action_id': 'activity-1'})
     assert found['answer_key'] == 'Mehmed the Conqueror' and found['answer_key_page'] == 174
@@ -113,8 +113,8 @@ def test_true_false_answers_are_not_mistaken_for_leaks():
 
 def test_family_review_lists_each_exercise_with_its_key_answer():
     snapshot = {'teaching_script': {'script': {'turns': [{'type': 'say', 'text': 'Hi.'}, work()]}}}
-    assert page_script.answer_key(snapshot) == [{'prompt': work()['prompt'], 'answer': 'Mehmed the Conqueror',
-                                                 'answer_page': 174}]
+    assert page_script.answer_key(snapshot) == [{'index': 0, 'prompt': work()['prompt'], 'answer': 'Mehmed the Conqueror',
+        'answer_page': 174, 'blanks': [], 'proposed_answers': [], 'approved_answers': None}]
     assert page_script.answer_key({}) == []
 
 

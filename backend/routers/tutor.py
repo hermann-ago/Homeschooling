@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import copy
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
@@ -559,12 +560,47 @@ class ScriptReviewRequest(BaseModel):
 def script_review_details(guide_id:str):
     from tutoring import script_review
     row=get_or_404(store(),'guides',guide_id,'Guide')
-    from tutoring.page_script import answer_key
+    from tutoring.page_script import answer_key, approvals
     return {'review':script_review.latest(context(),guide_id),
         'status':script_review.status(context(),row),
         'input_sha256':script_review.identity(script_review.inputs(context(),row)),
         # Family-only route: the teacher's key answers recorded by the writer.
-        'answer_key':answer_key(row.get('context_snapshot'))}
+        'answer_key':answer_key(row.get('context_snapshot'),approvals(context(),guide_id))}
+
+
+class AnswerApproval(BaseModel):
+    answers:list[str]=Field(min_length=1,max_length=30)
+
+
+def _approvable(guide_id:str,work_index:int):
+    from tutoring.page_script import answer_key
+    row=get_or_404(store(),'guides',guide_id,'Guide')
+    entries=answer_key(row.get('context_snapshot'))
+    if not 0<=work_index<len(entries) or not entries[work_index]['blanks'] or entries[work_index]['answer']:
+        raise HTTPException(400,'Only answer boxes without a book key can be approved here')
+    return entries[work_index]
+
+
+@router.put('/guides/{guide_id}/answers/{work_index}',dependencies=[Depends(require_family)])
+def approve_answers(guide_id:str,work_index:int,payload:AnswerApproval):
+    """A grown-up confirms the expected answer for each box, so it is checked instantly."""
+    entry=_approvable(guide_id,work_index)
+    answers=[a.strip() for a in payload.answers]
+    if len(answers)!=len(entry['blanks']) or any(not a or len(a)>200 for a in answers):
+        raise HTTPException(400,'Give one short answer for each box')
+    record_id=f'{guide_id}:{work_index}'
+    with write('tutor.answer_approval',f'Approved answers for exercise {work_index+1}') as tx:
+        values={'guide_id':guide_id,'work_index':work_index,'answers':answers,'approved_at':datetime.now(timezone.utc)}
+        if tx.get('answer_approvals',record_id):tx.update('answer_approvals',record_id,values)
+        else:tx.insert('answer_approvals',{'id':record_id,**values})
+    return {'index':work_index,'approved_answers':answers}
+
+
+@router.delete('/guides/{guide_id}/answers/{work_index}',status_code=204,dependencies=[Depends(require_family)])
+def withdraw_answers(guide_id:str,work_index:int):
+    _approvable(guide_id,work_index)
+    with write('tutor.answer_approval_withdrawn','Withdrew approved answers') as tx:
+        if tx.get('answer_approvals',f'{guide_id}:{work_index}'):tx.delete('answer_approvals',f'{guide_id}:{work_index}')
 
 
 class SourceSpacingRequest(BaseModel):

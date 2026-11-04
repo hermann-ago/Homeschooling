@@ -59,12 +59,18 @@ class BookWork(Content):
     # Teacher-only, for blanks: the key's answer for each box, in order, so the
     # app can check simple answers itself.
     answers: list[str] = Field(default_factory=list, max_length=30)
+    # Teacher-only, for blanks no key covers: the writer's expected answer per
+    # box. Never used for checking until a grown-up approves it.
+    proposed_answers: list[str] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode='after')
     def answers_match_blanks(self):
-        if self.answers and (self.response.format != 'blanks' or len(self.answers) != len(self.response.blanks)
-                             or any(not a.strip() or len(a) > 200 for a in self.answers)):
-            raise ValueError('Answers give one short key answer per blank, in order.')
+        for values in (self.answers, self.proposed_answers):
+            if values and (self.response.format != 'blanks' or len(values) != len(self.response.blanks)
+                           or any(not a.strip() or len(a) > 200 for a in values)):
+                raise ValueError('Answers give one short key answer per blank, in order.')
+        if self.answers and self.proposed_answers:
+            raise ValueError('Proposed answers are only for blanks the answer key does not cover.')
         return self
 
 
@@ -246,11 +252,20 @@ def prompt(passage, *, subject, learner, grade, language, skill='', learner_cont
                          skill=skill, learner_context=learner_context, policy=VERSION)
 
 
-def answer_key(snapshot):
-    """Each book exercise with its recorded key answer, for the family's review."""
+def answer_key(snapshot, approvals=()):
+    """Each book exercise with its recorded key answer, any proposed answers for
+    boxes no key covers, and a grown-up's approval, for the family's review."""
     turns = (((snapshot or {}).get('teaching_script') or {}).get('script') or {}).get('turns', [])
-    return [{'prompt': t['prompt'], 'answer': t.get('answer'), 'answer_page': t.get('answer_page')}
-            for t in turns if t.get('type') == 'book_work']
+    approved = {a['work_index']: a['answers'] for a in approvals}
+    work = [t for t in turns if t.get('type') == 'book_work']
+    return [{'index': i, 'prompt': t['prompt'], 'answer': t.get('answer'), 'answer_page': t.get('answer_page'),
+             'blanks': (t.get('response') or {}).get('blanks') or [],
+             'proposed_answers': t.get('proposed_answers') or [], 'approved_answers': approved.get(i)}
+            for i, t in enumerate(work)]
+
+
+def approvals(ctx, guide_id):
+    return ctx.store.find('answer_approvals', guide_id=guide_id)
 
 
 def answer_for(ctx, action):
@@ -258,12 +273,14 @@ def answer_for(ctx, action):
 
     compile_script emits one required-book activity per book_work turn, in
     order, so the running lesson's frozen raw script lines up with its guide.
+    A grown-up's approved answers stand in for a key the book does not have.
     """
     playback = ctx.store.get('lesson_playback', action['session_id'])
     prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
     turns = [t for t in ((prepared.get('teaching_script') or {}).get('script') or {}).get('turns', [])
              if t.get('type') == 'book_work']
-    if not any(t.get('answer') for t in turns):
+    approved = lambda: {a['work_index']: a['answers'] for a in approvals(ctx, playback['guide_id'])} if playback else {}
+    if not any(t.get('answer') for t in turns) and not approved():
         return None
     row = ctx.store.get('guides', playback['guide_id'])
     guide = json.loads(ctx.file_bytes(row['guide_path'], row.get('guide_file_sha256')))
@@ -271,7 +288,13 @@ def answer_for(ctx, action):
             if a.get('origin') == 'required_book' and a['kind'] in ('request_book_work', 'explain_or_observe')]
     if len(work) != len(turns) or action['action_id'] not in work:
         return None
-    turn = turns[work.index(action['action_id'])]
+    index = work.index(action['action_id'])
+    turn = turns[index]
+    granted = {} if turn.get('answer') else approved()
+    if index in granted:
+        return {'answer_key': '; '.join(granted[index]), 'answer_items': granted[index],
+                'note': 'Approved by a grown-up for this lesson (the book has no key). Judge against the question '
+                        'and the assigned reading too; equivalent wording is correct unless exact wording is the task.'}
     if not turn.get('answer'):
         return None
     return {'answer_key': turn['answer'], 'answer_key_page': turn.get('answer_page'),

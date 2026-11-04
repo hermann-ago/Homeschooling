@@ -66,6 +66,12 @@ TABLES: dict[str, Table] = {t.name: t for t in [
         'data':'json','created_at':'datetime',
     }, id_type='str', teacher_only=True, foreign_keys=(ForeignKey('guide_id','guides'),),
         required=('guide_id','input_sha256','policy_version','status','method')),
+    # A grown-up's approved answers for one exercise without a book key (the
+    # n-th book_work of a saved guide). Kept apart, so the guide stays frozen.
+    _t('answer_approvals', 'Approved Answers', {
+        'guide_id':'str','work_index':'int','answers':'json','approved_at':'datetime',
+    }, id_type='str', teacher_only=True, unique=(('guide_id','work_index'),), foreign_keys=(ForeignKey('guide_id','guides'),),
+        required=('guide_id','work_index','answers')),
     # ── Existing app entities ────────────────────────────────────────────────
     _t("children", "Children", {
         "name": "str", "nickname": "str", "color": "str", "grade_year": "str", "created_at": "datetime",

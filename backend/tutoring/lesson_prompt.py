@@ -93,6 +93,10 @@ Turns:
   PDF page; null when no key page covers it. The child never sees them.
   For blanks, also copy each box's key answer into answers, in the same
   order (for example ["31", "31", "47"]); empty when no key covers them.
+  When no key covers a blanks exercise but each box has one clear answer
+  from the page, put your expected answers in proposed_answers instead; a
+  grown-up approves them before they are used. Leave it empty when answers
+  may vary.
 ask and book_work need response.format: text, spelling, true_false,
 single_choice, multiple_select, matching, reasoning, written_steps,
 handwriting, diagram, parent_check, observe or blanks. Choice work lists all original choices;

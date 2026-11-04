@@ -3,6 +3,8 @@ import { fetchApi, request } from './client';
 export const tutorApi = {
   scriptReview: guide => fetchApi(`/tutor/guides/${encodeURIComponent(guide)}/review`),
   retryScriptReview: (guide,data) => fetchApi(`/tutor/guides/${encodeURIComponent(guide)}/review`,{method:'POST',body:JSON.stringify(data)}),
+  approveAnswers: (guide,index,answers) => fetchApi(`/tutor/guides/${encodeURIComponent(guide)}/answers/${index}`,{method:'PUT',body:JSON.stringify({answers})}),
+  withdrawAnswers: (guide,index) => fetchApi(`/tutor/guides/${encodeURIComponent(guide)}/answers/${index}`,{method:'DELETE'}),
   teachingStyle: () => fetchApi('/tutor/teaching-style'),
   saveTeachingStyle: (content, profiles, expectedVersion) => fetchApi('/tutor/teaching-style', {
     method:'PUT', body:JSON.stringify({content,profiles,expected_version:expectedVersion}),
