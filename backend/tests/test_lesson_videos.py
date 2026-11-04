@@ -111,3 +111,19 @@ def test_a_lesson_without_a_video_has_no_video_step(harness, monkeypatch):
 class FakeWebNoTitle:
     def get(self, url, params=None, **kwargs):
         return Reply(status=404)
+
+
+def test_the_writer_hears_about_a_video_only_when_the_lesson_has_one(harness):
+    db = harness.ctx.store
+    with db.transaction() as tx:
+        child = tx.insert('children', {'name': 'Test'})['id']
+        subject = tx.insert('subjects', {'child_id': child, 'name': 'Math'})['id']
+    with_video, without = topics(db, subject, 'Lesson 18: Elapsed Time', 'Lesson 19: Rounding')
+    videos.set_for_topic(db, with_video, 'https://vimeo.com/579391393', http=FakeWebNoTitle())
+    assert videos.context_for(db, with_video) == {'lesson_video': {'title': None}}
+    assert videos.context_for(db, without) == {}
+    from tutoring.lesson_prompt import writer_prompt
+    passage = {'title': 'Lesson 18', 'sentences': []}
+    told = writer_prompt(passage, subject='Math', learner='Lucas', grade='4', language='en-US', learner_context=videos.context_for(db, with_video))
+    plain = writer_prompt(passage, subject='Math', learner='Lucas', grade='4', language='en-US', learner_context={})
+    assert 'VIDEO LESSON' in told and 'VIDEO LESSON' not in plain

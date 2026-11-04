@@ -148,7 +148,7 @@ def _block(title, value):
 
 def writer_prompt(passage, *, subject, learner, grade, language, skill='', learner_context=None, policy=''):
     from .family_skill import SOURCE, instructions
-    from . import book_questions, extra_questions
+    from . import book_questions, extra_questions, videos
     context = learner_context or {}
     family = context.get('family_tutoring') or {'content': SOURCE.read_text(encoding='utf-8'), 'learner_profile': {}}
     visual = context.get('visual_source') or {}
@@ -171,6 +171,7 @@ Preparation policy: {policy}.''',
         HOW_TO_TEACH,
         (READ_ALONG_QUIZ if book_questions.end_quiz(context) else READ_ALONG) if read_along else '',
         extra_questions.AUTHORING if extra_questions.enabled(context) and not read_along else '',
+        videos.AUTHORING if context.get('lesson_video') else '',
         _block('FAMILY TEACHING STYLE (the family\'s own words)', instructions(family)),
         _block('SUBJECT SKILL (the family\'s notes for this subject; the teaching parts apply now, '
                'feedback and grading parts apply later during the lesson; the non-negotiables win any conflict)', skill),

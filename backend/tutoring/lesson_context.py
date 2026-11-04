@@ -21,7 +21,9 @@ def preparation(ctx, child_id, topic, passage):
     notes=annotation_packet(ctx.store,topic)
     from .extra_questions import context_for
     extra = context_for(ctx.store.get("subjects", topic["subject_id"]))
-    # Only a set policy joins the fingerprint, so existing open-question guides stay current.
+    from .videos import context_for as video_context
+    extra = {**extra, **video_context(ctx.store, topic["id"])}
+    # Only a set policy or a video joins the fingerprint, so other guides stay current.
     return {"selected_source_pages": selected_pages, "subject_sources": sources, "source_requirements":source_requirements, "learning_memory": memory, "adaptive_warmup": warmup,
             "source_annotations":notes,"family_tutoring": family, **extra,
             "fingerprint": sha256_text([sources,source_requirements,memory,warmup,family['sha256'],notes, *([extra] if extra else [])])}
