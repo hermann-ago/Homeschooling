@@ -51,6 +51,7 @@ class SubjectResponse(SubjectBase):
     purpose: Optional[str] = None
     library_book_id: Optional[str] = None
     folder: Optional[str] = None  # Kid/Grade/Subject folder in the Homeschooling Drive folder
+    video_pages: Optional[list[str]] = None  # the publisher's video lesson pages
     created_at: datetime
     class Config:
         from_attributes = True

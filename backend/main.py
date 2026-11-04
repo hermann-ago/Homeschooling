@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 
 from dependencies import IdempotencyMiddleware, context, set_context
+from routers import videos
 from routers import activities, annotations, calendar, canvas, checklist, children, documents, progress, scheduler, subjects, \
     system, time_windows, tutor
 from security.network import PrivateNetworkMiddleware
@@ -124,6 +125,7 @@ def create_app(app_context=None) -> FastAPI:
     app.include_router(books.router, prefix="/api", tags=["Books"])
     app.include_router(library.router, prefix="/api/library", tags=["Family library"])
     app.include_router(records.router, prefix="/api", tags=["Records"])
+    app.include_router(videos.router, prefix="/api", tags=["Lesson videos"])
 
     @app.exception_handler(RevisionConflict)
     async def revision_conflict(request: Request, exc: RevisionConflict):

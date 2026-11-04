@@ -18,6 +18,7 @@ import { useCurriculumPreparation } from '../api/preparation';
 import GradeSelect from '../components/GradeSelect';
 import TeachingSkillEditor from '../components/TeachingSkillEditor';
 import SourceNotes from '../components/SourceNotes';
+import SubjectVideos from '../components/SubjectVideos';
 import {
   Badge, Button, CheckButton, Dialog, Field, IconButton, ProgressBar, SegmentedControl, useConfirm, useToast,
 } from '../ui';
@@ -177,6 +178,7 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
             ? 'Questions the tutor adds, and its follow-ups, are true/false or pick one. Book exercises stay as printed. Applies to lessons prepared from now on.'
             : 'The tutor may add typed questions and follow-ups, such as explaining a method.'}</span>
         </div>
+        <SubjectVideos subject={subject} />
         <Field label="Finish by (optional)" type="date" value={form.end_date} onChange={(e) => set({ end_date: e.target.value })}
           hint="Leave empty to finish with the school year." />
         {scheduleChanged && <p className="text-[13px] text-attention">Saving asks to re-plan {child.name}, so the lessons follow these settings.</p>}

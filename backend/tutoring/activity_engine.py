@@ -23,6 +23,7 @@ from .capture_policy import answer_recheck_available
 from .capture_policy import direct_text_capture
 from .capture_policy import HANDWRITING
 
+VIDEO_STEP = "lesson-video"
 INTERNAL = {"review_progress", "prepare_lesson", "record_learning_evidence"}
 RESPONSE_KINDS = {"ask_question", "request_book_work", "capture_and_confirm", "explain_thinking",
     "check_prerequisite", "tell_it_back", "compare_and_connect", "predict_then_check",
@@ -122,6 +123,28 @@ class ActivityEngine:
             "replay_of": previous["id"] if replay and previous else None, "is_replay": replay,
             "dialogue_start_sequence": max((m["sequence"] or 0 for m in tx.find("lesson_dialogue", session_id=session["id"])), default=0)})
 
+    @staticmethod
+    def _review_after_video(actions, playback, action):
+        """The first reading after a watched video is the book's own version of it."""
+        if action.get("activity_kind") != "read_source" or not (playback.get("navigation_state") or {}).get("video_watched"):
+            return False
+        video = next((a for a in actions if a["action_id"] == VIDEO_STEP), None)
+        later = sorted((a for a in actions if a.get("activity_kind") == "read_source" and video
+                        and (a.get("activity_order") or 0) > (video.get("activity_order") or 0)), key=lambda a: a.get("activity_order") or 0)
+        return bool(later) and later[0]["id"] == action["id"]
+
+    def _with_video(self, session, planned):
+        """The book's video lesson, as a step right after the welcome."""
+        from . import videos
+        video = videos.for_topic(self.db, session["topic_id"])
+        if not video or session["status"] == "completed" or any(s["id"] == VIDEO_STEP for s in planned):
+            return planned
+        step = {"id": VIDEO_STEP, "kind": "explain_or_observe", "origin": "required_book",
+            "content": {"title": "Watch the video lesson", "video": video,
+                "text": "This lesson has a video. Watch it, then continue. The book's mini lesson comes next as a quick review."}}
+        at = next((i + 1 for i, s in enumerate(planned) if s["kind"] == "introduce"), 0)
+        return [*planned[:at], step, *planned[at:]]
+
     def bootstrap(self, session_id):
         """Adapt a pinned guide once, without rewriting its source or legacy IDs."""
         with self.lock(session_id):
@@ -145,6 +168,7 @@ class ActivityEngine:
                     "resume_index": len(guide["sentences"]), "origin": "required_book"})
             for spec in planned:
                 self._validate_sources(session, {"content": spec["content"], "source_refs": spec.get("source_refs", [])})
+            planned = self._with_video(session, planned)
             with self.db.transaction(kind="activity.bootstrap") as tx:
                 for index, spec in enumerate(planned):
                     aid = spec["id"]
@@ -259,6 +283,7 @@ class ActivityEngine:
             # (Progress for the dots row is computed below for every view.)
             exercise_row = self._parent_exercise(actions, active_row)
             active["teaching_available"] = bool(exercise_row and self._skipped_teaching(actions, playback, exercise_row))
+            active["review_after_video"] = self._review_after_video(actions, playback, active_row)
         legacy = self.tutor.interactive.state(session_id)
         legacy["actions"] = [{k: a[k] for k in ("id", "action_id", "kind", "status", "prompt", "next_prompt", "help_given")}
             if a["action_id"] == playback["action_id"] or a["status"] != "pending" else
@@ -828,6 +853,11 @@ class ActivityEngine:
                     self._focus_unfinished(tx, session)
                 elif event_type == "continue":
                     self._continue(tx, session, action, interaction)
+                elif event_type == "video_watched":
+                    if not (action.get("activity_content") or {}).get("video"):
+                        raise TutorError("This step has no video")
+                    navigation = dict(tx.get("lesson_playback", session_id).get("navigation_state") or {})
+                    tx.update("lesson_playback", session_id, {"navigation_state": {**navigation, "video_watched": True}})
                 elif event_type == "try_first":
                     self._try_first(tx, session, action, interaction)
                 elif event_type == "show_teaching":
@@ -1749,6 +1779,8 @@ class ActivityEngine:
                     "activity_ids": [a["action_id"] for a in readings],
                     **({"set_aside_ids": sorted(a["action_id"] for a in readings if a["action_id"] in set_aside and a["status"] == "not_assigned")}
                        if set_aside else {})}, "exercises": exercises,
+                **({"video": {"watched": bool((tx.get("lesson_playback", session_id).get("navigation_state") or {}).get("video_watched"))}}
+                   if any(a["action_id"] == VIDEO_STEP for a in actions) else {}),
                 "understanding": tx.get("topics", session["topic_id"])["understanding"] or "Not assessed",
                 "attempt_ids": [a["id"] for a in tx.find("attempts", session_id=session_id)],
                 "pending_work": [{"activity_id": a["action_id"], "prompt": a["prompt"], "origin": a.get("origin"), "status": a["status"]}

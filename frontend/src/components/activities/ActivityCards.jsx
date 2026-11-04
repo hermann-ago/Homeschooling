@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { Button } from '../../ui';
 import { beginNarration, registerNarrator } from '../../utils/narration';
 import { activityDefinition, responseStage } from './registry';
+import VideoLesson from './VideoLesson';
 
 export function ReadAloudButton({ text, language = 'en-US', disabled }) {
   const id = useId();
@@ -106,6 +107,7 @@ export default function ActivityCard({ activity, language, busy, onEvent, onSour
           <div className="whitespace-pre-wrap">{renderTeacherText?.(activity) || content.text}</div>
         </div>
       : content.text && !(definition.family === 'reading' && renderReading) && <p className="whitespace-pre-wrap leading-relaxed">{content.text}</p>}
+    {content.video && <VideoLesson video={content.video} readOnly={readOnly || activity.status !== 'pending'} onWatched={() => onEvent?.('video_watched')} />}
     {definition.family === 'reading' && renderReading?.({ activity, state, complete: () => onEvent('reading_done') })}
     {definition.family === 'reading' && !renderReading && !readOnly && !docked && activity.status === 'pending' && <Button size="sm" disabled={busy} onClick={() => onEvent('reading_done')}>I have finished this reading</Button>}
     {definition.family === 'physical' && <div className="rounded-xl border border-line bg-paper p-3">

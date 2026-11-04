@@ -15,6 +15,11 @@ export const subjectsApi = {
   update: (id, data) => fetchApi(`/subjects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id) => fetchApi(`/subjects/${id}`, { method: 'DELETE' }),
 
+  videos: (subjectId) => fetchApi(`/subjects/${subjectId}/videos`),
+  findVideos: (subjectId, pages) => fetchApi(`/subjects/${subjectId}/videos/find`, { method: 'POST', body: JSON.stringify({ pages }) }),
+  setLessonVideo: (topicId, body) => fetchApi(`/topics/${topicId}/video`, { method: 'PUT', body: JSON.stringify(body) }),
+  clearLessonVideo: (topicId) => fetchApi(`/topics/${topicId}/video`, { method: 'DELETE' }),
+
   getTopics: (subjectId) => fetchApi(`/subjects/${subjectId}/topics`),
   updateTopic: (subjectId, topicId, data) => fetchApi(`/subjects/${subjectId}/topics/${topicId}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTopic: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}`, { method: 'DELETE' }),
