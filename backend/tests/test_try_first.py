@@ -85,3 +85,24 @@ def test_show_me_how_replaces_an_extra_question_the_tutor_added_after_a_miss(har
     state = event(engine, state, 'continue')
     state = event(engine, state, 'finish')  # nothing left pending behind the scenes
     assert harness.ctx.store.get('tutor_sessions', state['session_id'])['status'] == 'completed'
+
+
+def test_progress_marks_first_try_and_another_go(harness, monkeypatch):
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    state = event(engine, state, 'try_first')
+    assert state['progress']['items'] == [{'id': 'action-1', 'outcome': 'pending'}]
+    answers(monkeypatch, NOT_YET, RIGHT)
+    state = event(engine, state, 'submit_response', {'response_id': 'first', 'text': 'A guess', 'assess_after_save': True})
+    state = event(engine, state, 'submit_response', {'response_id': 'second', 'text': 'The river', 'assess_after_save': True})
+    progress = state['progress']
+    assert progress['items'] == [{'id': 'action-1', 'outcome': 'again'}]
+    assert progress['first_try'] == 0 and progress['graded'] == 1 and len(progress['practise']) == 1
+
+
+
+def test_progress_marks_a_first_try_success(harness, monkeypatch):
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    answers(monkeypatch, RIGHT)
+    state = event(engine, state, 'try_first')
+    state = event(engine, state, 'submit_response', {'response_id': 'only', 'text': 'The river', 'assess_after_save': True})
+    assert state['progress']['items'][0]['outcome'] == 'first_try' and state['progress']['first_try'] == 1

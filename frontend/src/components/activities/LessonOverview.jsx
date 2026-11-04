@@ -2,6 +2,7 @@ import { modeHref } from '../../api/mode';
 import { Button } from '../../ui';
 import { activityDefinition,practiceHistory } from './registry';
 import { learningLabel } from '../../utils/learningLabels';
+import { ProgressDots } from './Progress';
 
 export function LessonPosition({ state, compact = false, header = false }) {
   const roots = (state.activities || []).filter((item) => item.status !== 'not_assigned' && !item.parent_activity_id && !activityDefinition(item).internal);
@@ -20,6 +21,7 @@ export function LessonPosition({ state, compact = false, header = false }) {
   return <nav aria-label="Lesson position" className={header ? 'tutor-lesson-position' : 'rounded-xl bg-paper/60 p-3 text-sm'}>
     <p className="font-semibold mb-2">{state.status === 'completed' ? 'Lesson finished' : `Step ${index + 1} of ${steps.length}`}{state.on_break ? ' · On a break' : ''}</p>
     <div role="progressbar" aria-label="Position in this lesson" aria-valuemin={1} aria-valuemax={steps.length} aria-valuenow={index + 1} aria-valuetext={`${label(steps[index])}, step ${index + 1} of ${steps.length}`} className="h-1 rounded-full bg-line overflow-hidden"><div className="h-full bg-action" style={{ width: `${100 * (index + 1) / steps.length}%` }} /></div>
+    <ProgressDots progress={state.progress} currentId={current?.id} />
     <ol className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">{visible.map((step) => <li key={step.id} aria-current={step.position === index ? 'step' : undefined} className={step.position === index ? 'text-action font-bold' : 'text-muted'}>{step.position + 1}. {label(step)}{step.status === 'skipped' ? ' · to revisit' : ''}</li>)}</ol>
   </nav>;
 }

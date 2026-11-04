@@ -153,7 +153,7 @@
 .tutor-lesson-position { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: .3rem; }
 .tutor-lesson-position > p { margin: 0; font-size: .75rem; }
 .tutor-lesson-position > ol { margin-top: 0; font-size: .7rem; column-gap: .75rem; row-gap: .15rem; }
-.tutor-chat-header .tutor-lesson-position > ol { display: none; }
+.tutor-chat-header .tutor-lesson-position > ol:not(.progress-dots) { display: none; }
 .tutor-session-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: .4rem; width: 100%; min-width: 0; }
 .tutor-session-controls > label { min-width: 0; }
 .tutor-session-controls select { height: 2rem; border: 1px solid var(--color-line); border-radius: .6rem; background: var(--color-surface); color: var(--color-ink); padding: .25rem; font-size: .75rem; }
@@ -291,3 +291,18 @@
   .response-composer > button:last-child { grid-column: 1 / -1; }
   .response-composer > p[id] { grid-column: 1 / -1; }
 }
+
+/* Progress dots: one per exercise. Green: first try; gold: after another go. */
+.progress-dots { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .5rem; list-style: none; padding: 0; }
+.progress-dot { width: .7rem; height: .7rem; border-radius: 999px; border: 2px solid var(--color-line); background: transparent; }
+.progress-dot.is-first_try { background: var(--color-saved); border-color: var(--color-saved); }
+.progress-dot.is-again { background: #d9a21b; border-color: #d9a21b; }
+.progress-dot.is-practise { background: var(--color-attention-soft); border-color: var(--color-attention); }
+.progress-dot.is-done, .progress-dot.is-skipped { background: var(--color-line); }
+.progress-dot.is-current { outline: 2px solid var(--color-action); outline-offset: 2px; }
+.progress-dot.is-new { animation: dot-pop .5s ease-out; }
+@keyframes dot-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.celebration-stars { display: flex; justify-content: center; gap: .4rem; font-size: 1.6rem; color: #d9a21b; }
+.celebration-stars span { display: inline-block; animation: star-rise .9s ease-out both; animation-delay: calc(var(--i) * 90ms); }
+@keyframes star-rise { 0% { opacity: 0; transform: translateY(.8rem) scale(.4) rotate(-30deg); } 70% { opacity: 1; transform: translateY(-.25rem) scale(1.2) rotate(8deg); } 100% { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .progress-dot.is-new, .celebration-stars span { animation: none; } }

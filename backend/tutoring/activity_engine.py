@@ -254,6 +254,7 @@ class ActivityEngine:
         if active and active_row and session["status"] in ("active", "unfinished") and not playback.get("on_break"):
             active["can_try_first"] = bool(_teaching(active_row) and self._try_first_plan(actions, active_row))
             # An extra question the tutor added after a miss belongs to its exercise.
+            # (Progress for the dots row is computed below for every view.)
             exercise_row = self._parent_exercise(actions, active_row)
             active["teaching_available"] = bool(exercise_row and self._skipped_teaching(actions, playback, exercise_row))
         legacy = self.tutor.interactive.state(session_id)
@@ -270,6 +271,7 @@ class ActivityEngine:
         return {"session_id": session_id, "child_id": session["child_id"], "revision": session["revision"],
             "page_work": page_work_view(self, session_id),
             "status": session["status"], "playback": safe_playback, "active_activity": active, "activities": views,
+            "progress": self._progress(actions, session_id),
             "completion_summary": session.get("completion_summary"),
             "learning_summary": self._learning_summary(session, actions) if session["status"] == "completed" or active and active["kind"] == "close_lesson" else None,
             "catch_up": self._catch_up_info(session, actions),
@@ -1141,6 +1143,34 @@ class ActivityEngine:
             raise TutorError("Choose Looks good or Let's try again")
         interaction = tx.update("activity_interactions", interaction["id"], {"status": "ready_to_continue"})
         self._continue(tx, session, action, interaction)
+
+    def _progress(self, actions, session_id):
+        """One entry per exercise, for the child's dots and end-of-lesson celebration.
+
+        first_try: right on the first answer without help; again: right after
+        another go or with help; practise: moved on without getting it right;
+        done: checked by a grown-up or answered without a right/wrong verdict.
+        """
+        said = {}
+        for m in sorted(self.db.find("lesson_dialogue", session_id=session_id), key=lambda m: m["sequence"] or 0):
+            if m["role"] == "student" and m["status"] == "assessed":
+                said.setdefault(m["action_id"], []).append((m.get("assessment") or {}).get("result"))
+        items = []
+        for action in self._main_sequence(actions):
+            if not _exercise(action) or action["status"] == "not_assigned":
+                continue
+            results = said.get(action["action_id"], [])
+            outcome = ("skipped" if action["status"] == "skipped"
+                       else "first_try" if results[:1] == ["Correct"] and not action.get("help_given")
+                       else "again" if "Correct" in results
+                       else "practise" if action["status"] == "answered" and results
+                       else "done" if action["status"] == "answered"
+                       else "pending")
+            items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt")})
+        graded = [i for i in items if i["outcome"] in ("first_try", "again", "practise")]
+        return {"items": [{k: i[k] for k in ("id", "outcome")} for i in items],
+                "first_try": sum(i["outcome"] == "first_try" for i in items), "graded": len(graded),
+                "practise": [i["prompt"] for i in items if i["outcome"] in ("again", "practise")][:6]}
 
     # "Let me try first": a child who knows the material goes straight to the
     # next exercise. The teaching before it is set aside (not_assigned, so it is

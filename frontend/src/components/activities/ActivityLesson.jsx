@@ -10,6 +10,7 @@ import { activityDefinition, needsResponse, responseStage, visibleActivities, pr
 import { operationCommitted, operationId, readSaved, storageKey, writeSaved } from './durable';
 import { learningLabel } from '../../utils/learningLabels';
 import { AttemptNavigation, CatchUpNotice, ClosingSummary, LessonPosition } from './LessonOverview';
+import { Celebration } from './Progress';
 import LessonOptions from './LessonOptions';
 import PageWorkCapture from './PageWorkCapture';
 import { focusLessonControl } from '../../utils/lessonFocus';
@@ -372,6 +373,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {parentReview && response && <>{!sourceIssue && <p className="text-sm text-attention">This work needs a parent to check the actual source or written evidence. It is not marked wrong.</p>}<ParentReview key={response.id} response={response} sourceIssue={sourceIssue} busy={busy || Boolean(pending)} onEvent={event} /></>}
         {awaitingReveal && <Button variant="primary" disabled={busy || Boolean(pending)} onClick={() => event('reveal')}>Check my prediction</Button>}
         {definition.family === 'break' && <Button variant="primary" disabled={busy || Boolean(pending)} onClick={() => event('take_break')}>Save my place and take a break</Button>}
+        {activity.kind === 'close_lesson' && <Celebration progress={state.progress} />}
         {!state.learning_summary && activity.kind === 'close_lesson' && activity.content?.unfinished?.length > 0 && <div><p className="font-semibold">Work to return to</p><ul className="list-disc pl-5 text-sm">{activity.content.unfinished.map((text, i) => <li key={i}>{text}</li>)}</ul></div>}
         {definition.family === 'unsupported' && <p role="alert">This activity needs a supported definition. Ask a parent to review it; no learner result has been inferred.</p>}
         {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help flex flex-col gap-2">
