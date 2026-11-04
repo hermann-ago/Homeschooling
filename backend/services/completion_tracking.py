@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import uuid
 
 
@@ -9,6 +9,17 @@ def mark_topic_completed(topic: dict, completed_at: datetime | None = None, *, s
     if topic.get("completed_at") is None:
         topic["completed_at"] = completed_at or datetime.now(timezone.utc)
     return topic
+
+
+def complete_scheduled_history(tx, topic_ids, recorded_at):
+    """A finished topic ticks its daily tasks through today, however the lesson was opened.
+
+    Future days stay as they are, so the planner can still move or drop them.
+    """
+    done = {c["slot_id"] for c in tx.all("completions")}
+    for slot in tx.all("scheduled_slots"):
+        if slot["topic_id"] in topic_ids and slot["date"] <= date.today() and slot["id"] not in done:
+            tx.insert("completions", {"slot_id": slot["id"], "completed_at": recorded_at})
 
 
 def mark_topic_incomplete(topic: dict) -> dict:

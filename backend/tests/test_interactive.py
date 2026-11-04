@@ -1,6 +1,6 @@
 """Real HTTP/storage flows with deterministic AI responses and isolated curriculum files."""
 import base64
-from datetime import date
+from datetime import date, timedelta
 
 from tests.test_tutoring import seed_history, FakeTTS
 from tutoring import guide as guide_mod, audio, interactive, skills
@@ -153,6 +153,24 @@ def test_pause_answer_continue_finish_saves_topic_and_slot_without_playback_mast
     assert state["status"] == "completed"
     assert harness.ctx.store.get("topics", seeded["genghis"]["id"])["understanding"] == "Independent"
     assert harness.ctx.store.find("completions", slot_id=slot["id"])
+
+
+def test_finish_ticks_the_daily_task_even_when_the_lesson_was_opened_elsewhere(harness, monkeypatch):
+    seeded, guide = prepare(harness, monkeypatch)
+    slots = {}
+    with harness.ctx.store.transaction() as tx:
+        for name, day in (("yesterday", date.today() - timedelta(days=1)), ("today", date.today()), ("tomorrow", date.today() + timedelta(days=1))):
+            slots[name] = tx.insert("scheduled_slots", {"child_id": seeded["lucas"]["id"], "subject_id": seeded["history"]["id"],
+                "topic_id": seeded["genghis"]["id"], "date": day, "time_start": "09:00", "time_end": "09:20"})["id"]
+    state = pause(harness, start(harness, seeded, guide), guide)  # opened without a daily task
+    monkeypatch.setattr(interactive, "gemini_turn", correct)
+    response = harness.call("POST", f"/api/tutor/sessions/{state['session_id']}/answer", key="answer-elsewhere",
+                            json={"expected_revision": state["revision"], "action_id": "action-1", "message_id": "answer-1", "text": "He united them."})
+    state = change(harness, response.json(), "continue")
+    state = change(harness, state, "playback", sentence_index=len(guide["sentences"]), reading_finished=True)
+    assert change(harness, state, "interactive-finish")["status"] == "completed"
+    ticked = {name for name, slot_id in slots.items() if harness.ctx.store.find("completions", slot_id=slot_id)}
+    assert ticked == {"yesterday", "today"}
 
 
 def test_skip_persists_for_next_session_and_final_topic_can_finish(harness, monkeypatch):

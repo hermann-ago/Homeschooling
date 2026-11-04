@@ -551,6 +551,9 @@ class TutorService:
             topic_changes["completed_at"] = topic["completed_at"] or _now()
             topic_changes['completion_source']='tutor'
         tx.update("topics", session["topic_id"], topic_changes)
+        if payload.get("complete_topic") is True:
+            from services.completion_tracking import complete_scheduled_history
+            complete_scheduled_history(tx, {session["topic_id"]}, _now())
         for chapter_update in payload.get("chapter_updates") or []:
             chapter = next((c for c in tx.find("chapters", subject_id=session["subject_id"])
                             if c["chapter"] == chapter_update.get("chapter")), None)

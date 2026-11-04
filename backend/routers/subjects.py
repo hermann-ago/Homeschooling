@@ -1,6 +1,6 @@
 import hashlib
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -12,7 +12,7 @@ from dependencies import context, require_family, store
 from schemas import AIAnalysisResult, SubjectCreate, SubjectResponse, SubjectUpdate, TopicResponse, TopicUpdate
 from schemas.topics import TopicBase
 from services.ai_analyzer import analyze_curriculum
-from services.completion_tracking import mark_topic_completed, mark_topic_incomplete, save_topic
+from services.completion_tracking import complete_scheduled_history, mark_topic_completed, mark_topic_incomplete, save_topic
 from services.documents import MAX_PDF_BYTES, add_drive_document, add_uploaded_document, inspect_pdf
 from storage import FileUnavailable, OutsideBoundary, layout
 from utils import get_or_404
@@ -257,14 +257,6 @@ def delete_topic(subject_id: int, topic_id: int):
 
 # ─── Topic Completion ────────────────────────────────────────────────
 
-def _complete_history(tx, topic_ids, recorded_at):
-    """Preserve completed study history through today without protecting future assignments."""
-    completed = {c["slot_id"] for c in tx.all("completions")}
-    for slot in tx.all("scheduled_slots"):
-        if slot["topic_id"] in topic_ids and slot["date"] <= date.today() and slot["id"] not in completed:
-            tx.insert("completions", {"slot_id": slot["id"], "completed_at": recorded_at})
-
-
 @router.post("/{subject_id}/topics/{topic_id}/toggle-complete", response_model=TopicResponse)
 def toggle_topic_complete(subject_id: int, topic_id: int):
     topic = _topic(subject_id, topic_id)
@@ -277,7 +269,7 @@ def toggle_topic_complete(subject_id: int, topic_id: int):
                     tx.delete("completions", completion["id"])
         else:
             mark_topic_completed(topic, recorded_at)
-            _complete_history(tx, {topic_id}, recorded_at)
+            complete_scheduled_history(tx, {topic_id}, recorded_at)
         return save_topic(tx, topic)
 
 
@@ -294,7 +286,7 @@ def complete_previous(subject_id: int, topic_id: int):
         for topic in topics:
             if not topic["completed"]:
                 save_topic(tx, mark_topic_completed(topic, recorded_at))
-        _complete_history(tx, {t["id"] for t in topics}, recorded_at)
+        complete_scheduled_history(tx, {t["id"] for t in topics}, recorded_at)
     return {"message": "Updated previous topics"}
 
 
