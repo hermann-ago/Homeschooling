@@ -375,12 +375,16 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {!state.learning_summary && activity.kind === 'close_lesson' && activity.content?.unfinished?.length > 0 && <div><p className="font-semibold">Work to return to</p><ul className="list-disc pl-5 text-sm">{activity.content.unfinished.map((text, i) => <li key={i}>{text}</li>)}</ul></div>}
         {definition.family === 'unsupported' && <p role="alert">This activity needs a supported definition. Ask a parent to review it; no learner result has been inferred.</p>}
         {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help flex flex-col gap-2">
+          {/* After a miss, the teaching set aside by "Let me try first" is one tap away. */}
+          {activity.teaching_available && (activity.responses?.length > 0 || activity.parent_activity_id) && <Button disabled={busy || Boolean(pending)} onClick={() => event('show_teaching')}>Show me how</Button>}
           {/* Two equal choices; everything else waits inside Help, in one style. */}
-          <div className={needsResponse(activity) ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+          <div className={needsResponse(activity) || activity.can_try_first ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
             <Button aria-expanded={helpOpen} aria-controls={`help-${activity.id}`} disabled={busy || Boolean(pending)} onClick={() => setHelpOpen((open) => !open)}>{helpOpen ? 'Close help' : 'Help'}</Button>
             {needsResponse(activity) && <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>}
+            {!needsResponse(activity) && activity.can_try_first && <Button disabled={busy || Boolean(pending)} onClick={() => event('try_first')}>Let me try first</Button>}
           </div>
           {helpOpen && <div id={`help-${activity.id}`} role="group" aria-label="Help choices" className="rounded-xl border border-line bg-paper/40 p-2 flex flex-col gap-1">
+            {activity.teaching_available && !activity.responses?.length && !activity.parent_activity_id && <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending)} onClick={() => { setHelpOpen(false); event('show_teaching'); }}>Show me the lesson first</Button>}
             {(needsResponse(activity) || activity.kind === 'read_source') && [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']].map(([kind, label]) =>
               <Button key={kind} variant="quiet" className="justify-start" disabled={busy || Boolean(pending) || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)}
                 onClick={() => { setHelpOpen(false); event('request_hint', { kind }); }}>{label}</Button>)}

@@ -25,6 +25,18 @@ INTERNAL = {"review_progress", "prepare_lesson", "record_learning_evidence"}
 RESPONSE_KINDS = {"ask_question", "request_book_work", "capture_and_confirm", "explain_thinking",
     "check_prerequisite", "tell_it_back", "compare_and_connect", "predict_then_check",
     "find_and_fix_mistake", "apply_somewhere_new", "recall_later", "worked_example"}
+# Steps a confident child may set aside with "Let me try first"; a grown-up
+# check is hands-on work, not teaching.
+def _teaching(action):
+    return (action.get("activity_kind") in ("introduce", "read_source", "explain_or_observe")
+            and not (action.get("activity_content") or {}).get("parent_check") and not action.get("parent_activity_id"))
+
+
+def _exercise(action):
+    return not action.get("parent_activity_id") and (action.get("activity_kind") in RESPONSE_KINDS
+            or (action.get("activity_content") or {}).get("parent_check"))
+
+
 OPEN = {"awaiting_input", "awaiting_confirmation", "ready_to_assess", "assessment_pending",
         "assessment_failed", "awaiting_followup", "parent_review", "awaiting_work", "awaiting_reveal", "ready_to_continue"}
 VISUAL_EVIDENCE = {"spelling", "handwriting", "written_steps", "diagram"}
@@ -239,6 +251,11 @@ class ActivityEngine:
         root_id = self._navigation_root(self.db, active_row) if active_row else None
         current_step = next((a for a in steps if a["action_id"] == root_id), None)
         can_go_back = bool(active and (active.get("parent_activity_id") or current_step and steps.index(current_step) > 0))
+        if active and active_row and session["status"] in ("active", "unfinished") and not playback.get("on_break"):
+            active["can_try_first"] = bool(_teaching(active_row) and self._try_first_plan(actions, active_row))
+            # An extra question the tutor added after a miss belongs to its exercise.
+            exercise_row = self._parent_exercise(actions, active_row)
+            active["teaching_available"] = bool(exercise_row and self._skipped_teaching(actions, playback, exercise_row))
         legacy = self.tutor.interactive.state(session_id)
         legacy["actions"] = [{k: a[k] for k in ("id", "action_id", "kind", "status", "prompt", "next_prompt", "help_given")}
             if a["action_id"] == playback["action_id"] or a["status"] != "pending" else
@@ -801,6 +818,10 @@ class ActivityEngine:
                     self._focus_unfinished(tx, session)
                 elif event_type == "continue":
                     self._continue(tx, session, action, interaction)
+                elif event_type == "try_first":
+                    self._try_first(tx, session, action, interaction)
+                elif event_type == "show_teaching":
+                    self._show_teaching(tx, session, action)
                 elif event_type == "parent_check":
                     self._parent_check(tx, session, action, interaction, payload)
                 elif event_type == "finish":
@@ -1120,6 +1141,95 @@ class ActivityEngine:
             raise TutorError("Choose Looks good or Let's try again")
         interaction = tx.update("activity_interactions", interaction["id"], {"status": "ready_to_continue"})
         self._continue(tx, session, action, interaction)
+
+    # "Let me try first": a child who knows the material goes straight to the
+    # next exercise. The teaching before it is set aside (not_assigned, so it is
+    # neither done nor owed) and offered again after a miss.
+    @staticmethod
+    def _main_sequence(actions):
+        return sorted((a for a in actions if not a.get("parent_activity_id")),
+                      key=lambda a: (a.get("activity_order") or 0, a["id"]))
+
+    def _try_first_plan(self, actions, current):
+        """The teaching steps from here to the next exercise, and that exercise."""
+        sequence = self._main_sequence(actions)
+        if current not in sequence:
+            return None
+        teaching = []
+        for action in sequence[sequence.index(current):]:
+            if action["status"] != "pending":
+                continue
+            if _exercise(action):
+                return (teaching, action) if teaching else None
+            if not _teaching(action):
+                return None
+            teaching.append(action)
+        return None
+
+    def _skipped_teaching(self, actions, playback, current):
+        """The most recent teaching set aside at or before this exercise."""
+        skipped = (playback.get("navigation_state") or {}).get("tried_first") or {}
+        by_id = {a["action_id"]: a for a in actions}
+        order = lambda a: (a.get("activity_order") or 0, a["id"])
+        candidates = [by_id[e] for e, ids in skipped.items() if ids and e in by_id and order(by_id[e]) <= order(current)]
+        if not candidates:
+            return None
+        key = max(candidates, key=order)["action_id"]
+        return key, [by_id[i] for i in skipped[key] if i in by_id and by_id[i]["status"] == "not_assigned"]
+
+    def _try_first(self, tx, session, action, interaction):
+        plan = _teaching(action) and self._try_first_plan(tx.find("lesson_actions", session_id=session["id"]), action)
+        if not plan:
+            raise TutorConflict("There is no exercise ahead to try first")
+        teaching, exercise = plan
+        for step in teaching:
+            # The welcome counts as seen; only real teaching waits to be offered again.
+            welcome = step["activity_kind"] == "introduce"
+            tx.update("lesson_actions", step["id"], {"status": "answered" if welcome else "not_assigned"})
+            current = self._interaction(tx, session["id"], step["action_id"])
+            if current and current["status"] != "completed":
+                tx.update("activity_interactions", current["id"], {"status": "completed"})
+        playback = tx.get("lesson_playback", session["id"])
+        navigation = dict(playback.get("navigation_state") or {})
+        navigation["tried_first"] = {**(navigation.get("tried_first") or {}),
+            exercise["action_id"]: [s["action_id"] for s in teaching if s["activity_kind"] != "introduce"]}
+        if not self._interaction(tx, session["id"], exercise["action_id"]):
+            self._new_interaction(tx, session, exercise)
+        tx.update("lesson_playback", session["id"], {"action_id": exercise["action_id"], "narration_cursor": None,
+            "navigation_state": navigation, "sentence_index": exercise["start_sentence"] if exercise.get("start_sentence") is not None
+            else playback["sentence_index"]})
+
+    @staticmethod
+    def _parent_exercise(actions, action):
+        if action.get("parent_activity_id"):
+            action = next((a for a in actions if a["action_id"] == action["parent_activity_id"]), None) or {}
+        return action if action and _exercise(action) else None
+
+    def _show_teaching(self, tx, session, action):
+        actions = tx.find("lesson_actions", session_id=session["id"])
+        playback = tx.get("lesson_playback", session["id"])
+        exercise = self._parent_exercise(actions, action)
+        found = exercise and self._skipped_teaching(actions, playback, exercise)
+        if not found or not found[1]:
+            raise TutorConflict("There is no set-aside teaching for this exercise")
+        key, teaching = found
+        if action["id"] != exercise["id"]:
+            # The teaching replaces the tutor's extra question; the exercise itself stays.
+            tx.update("lesson_actions", action["id"], {"status": "not_assigned"})
+            extra = self._interaction(tx, session["id"], action["action_id"])
+            if extra and extra["status"] != "completed":
+                tx.update("activity_interactions", extra["id"], {"status": "completed"})
+        # Teaching comes earlier in the lesson, so Continue walks through it and
+        # then returns to this exercise, whose interaction and draft are kept.
+        for step in teaching:
+            tx.update("lesson_actions", step["id"], {"status": "pending"})
+            self._new_interaction(tx, session, tx.get("lesson_actions", step["id"]))
+        navigation = dict(playback.get("navigation_state") or {})
+        navigation["tried_first"] = {k: v for k, v in (navigation.get("tried_first") or {}).items() if k != key}
+        first = teaching[0]
+        tx.update("lesson_playback", session["id"], {"action_id": first["action_id"], "narration_cursor": None,
+            "navigation_state": navigation, "sentence_index": first["start_sentence"] if first.get("start_sentence") is not None
+            else playback["sentence_index"]})
 
     def _continue(self, tx, session, action, interaction):
         optional_discussion = can_continue_discussion(tx, action, interaction)
@@ -1561,7 +1671,11 @@ class ActivityEngine:
         with self.db.transaction(kind="activity.finish") as tx:
             self.tutor.interactive.finish(tx, session_id, session["revision"])
             actions = tx.find("lesson_actions", session_id=session_id)
-            readings = [a for a in actions if a.get("activity_kind") == "read_source" and a['status'] != 'not_assigned']
+            # Readings set aside by "Let me try first" were assigned: they count as unread.
+            tried = (tx.get("lesson_playback", session_id).get("navigation_state") or {}).get("tried_first") or {}
+            set_aside = {i for ids in tried.values() for i in ids}
+            readings = [a for a in actions if a.get("activity_kind") == "read_source"
+                        and (a['status'] != 'not_assigned' or a["action_id"] in set_aside)]
             exercises = []
             for action in actions:
                 item = tx.get("assignment_items", action["assignment_item_id"]) if action.get("assignment_item_id") else None
@@ -1570,7 +1684,9 @@ class ActivityEngine:
                         "exercise_id": item["exercise_id"], "version_id": item["version_id"], "status": item["status"]})
             tx.update("tutor_sessions", session_id, {"completion_summary": {"version": 1, "lesson_status": "completed",
                 "reading": {"status": 'not_assigned' if not readings else "reached" if all(a["status"] == "answered" for a in readings) else "incomplete",
-                    "activity_ids": [a["action_id"] for a in readings]}, "exercises": exercises,
+                    "activity_ids": [a["action_id"] for a in readings],
+                    **({"set_aside_ids": sorted(a["action_id"] for a in readings if a["action_id"] in set_aside and a["status"] == "not_assigned")}
+                       if set_aside else {})}, "exercises": exercises,
                 "understanding": tx.get("topics", session["topic_id"])["understanding"] or "Not assessed",
                 "attempt_ids": [a["id"] for a in tx.find("attempts", session_id=session_id)],
                 "pending_work": [{"activity_id": a["action_id"], "prompt": a["prompt"], "origin": a.get("origin"), "status": a["status"]}

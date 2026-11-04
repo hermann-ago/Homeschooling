@@ -323,6 +323,24 @@ describe('Shared activity lesson', () => {
     await waitFor(() => expect(api.event).toHaveBeenCalledTimes(2));
     expect(api.event.mock.calls[1][1]).toEqual(api.event.mock.calls[0][1]);
   });
+  it('offers Let me try first beside Help on a teaching step', async () => {
+    api.state.mockResolvedValue(makeState(makeActivity({ id: 'read1', kind: 'read_source', content: { text: 'Elapsed time is…' },
+      interaction: { id: 'r1', status: 'ready_to_continue' }, can_try_first: true })));
+    api.event.mockResolvedValue(makeState());
+    show();
+    const tryFirst = await screen.findByRole('button', { name: 'Let me try first' });
+    expect(screen.queryByRole('button', { name: 'Skip for now' })).toBeNull();
+    fireEvent.click(tryFirst);
+    await waitFor(() => expect(api.event.mock.calls.at(-1)?.[1]).toMatchObject({ type: 'try_first', activity_id: 'read1' }));
+  });
+  it('offers Show me how after a miss when the teaching was set aside', async () => {
+    api.state.mockResolvedValue(makeState(makeActivity({ teaching_available: true, interaction: { id: 'i2', status: 'awaiting_followup' },
+      responses: [{ id: 'r1', status: 'assessed', original: { text: 'A guess' } }] })));
+    api.event.mockResolvedValue(makeState());
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Show me how' }));
+    await waitFor(() => expect(api.event.mock.calls.at(-1)?.[1]).toMatchObject({ type: 'show_teaching' }));
+  });
   it('sends distinct explanation, example and hint requests from the current question', async () => {
     api.event.mockResolvedValue(makeState());
     show();
