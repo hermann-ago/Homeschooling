@@ -2,6 +2,7 @@ import { focusLessonControl } from '../../utils/lessonFocus';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '../../ui';
 import { inputClasses } from '../../ui/classes';
+import { modeHref } from '../../api/mode';
 import { operationId, readSaved, storageKey, writeSaved } from './durable';
 import WorkCamera from './WorkCamera';
 
@@ -15,9 +16,11 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
   const restoredUnsupported = useRef(false);
   // The latest checked answer for these boxes: a retry starts from it, with each box's result.
   const lastBoxes = content.blanks && [...(activity.responses || [])].reverse().find((r) => r.original?.blanks);
+  // Another go starts the way the last answer was given: a photo stays a photo.
+  const lastPhoto = modes.includes('photo') && activity.responses?.at(-1)?.method === 'photo';
   const [draft, setDraft] = useState(() => {
     const fresh={
-      method: modes.includes('written_steps') || content.evidence_requirement === 'written_steps' && modes.includes('text') ? 'written_steps' : modes.includes('choice') ? 'choice' : modes.includes('text') ? 'typed' : modes.includes('device_dictation') || modes.includes('audio') ? 'dictation' : modes.includes('photo') ? 'photo' : 'parent_review',
+      method: lastPhoto ? 'photo' : modes.includes('written_steps') || content.evidence_requirement === 'written_steps' && modes.includes('text') ? 'written_steps' : modes.includes('choice') ? 'choice' : modes.includes('text') ? 'typed' : modes.includes('device_dictation') || modes.includes('audio') ? 'dictation' : modes.includes('photo') ? 'photo' : 'parent_review',
       text: '', reasoning: '', choice_ids: [], matches:{}, blanks: { ...(lastBoxes?.original?.blanks || {}) }, evidence_ids: activity.interaction?.is_replay || activity.interaction?.replay_of ? [] : draftEvidence.map((file) => file.id), response_id: operationId(),
     };
     const saved={...fresh,...readSaved(key,activity.draft || fresh)};
@@ -30,6 +33,7 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
   const [notice, setNotice] = useState(() => restoredUnsupported.current?'The answer options changed. Your saved words are kept; review them before sending.':'');
   const [savedWhere, setSavedWhere] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
+  const sendPhoto = useRef(false);
   const saveGeneration = useRef(0);
   const fileInput = useRef(null);
   const textInput = useRef(null);
@@ -90,18 +94,32 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
     onPauseNarration?.();
     try {
       const id = await onUpload(file);
-      if (id) { setDraft((previous) => ({ ...previous, evidence_ids: [...new Set([...previous.evidence_ids, id])] })); setNotice('Photo saved. Add a readable transcript when you can; original work remains available for checking.'); return true; }
+      if (id) {
+        // A photo answer goes straight on to be read; there is nothing else to fill in.
+        sendPhoto.current = draft.method === 'photo';
+        setDraft((previous) => ({ ...previous, evidence_ids: [...new Set([...previous.evidence_ids, id])] }));
+        setNotice(sendPhoto.current ? '' : 'Photo saved.');
+        return true;
+      }
     } catch (error) { setNotice(error.message); }
   };
   const send = async () => {
     if (!canSubmit || submitting.current) return;
     submitting.current = true;
     onPauseNarration?.();
-    try { await onSubmit({ ...draft, ...(checkOnSend ? { assess_after_save: true } : {}) }); }
+    // A photo is read from the picture itself, never from boxes typed before switching.
+    const answer = draft.method === 'photo' ? { ...draft, text: '', blanks: {}, matches: {} } : draft;
+    try { await onSubmit({ ...answer, ...(checkOnSend ? { assess_after_save: true } : {}) }); }
     finally { submitting.current = false; }
     // Do not clear until the server's state changes interaction/status. An ambiguous
     // transport failure must retain the original response ID and all original work.
   };
+  useEffect(() => {
+    // Wait for the upload to finish; an answer that still needs words waits for them.
+    if (!sendPhoto.current || !draft.evidence_ids.length || busy) return;
+    sendPhoto.current = false;
+    if (canSubmit) void send();
+  });
   const submitOnEnter = (event) => {
     if (event.key !== 'Enter' || event.shiftKey || event.ctrlKey || event.altKey || event.metaKey || event.nativeEvent.isComposing || event.keyCode === 229) return;
     event.preventDefault();
@@ -139,10 +157,17 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
         </label>;
       })}
     </fieldset>}
-    {content.blanks && modes.includes('photo') && <Button size="sm" variant="quiet" disabled={busy} onClick={() => change({ method: draft.method === 'photo' ? 'typed' : 'photo' })}>
+    {content.blanks && modes.includes('photo') && <Button size="sm" variant="quiet" disabled={busy} onClick={() => {
+      const photo = draft.method !== 'photo';
+      change({ method: photo ? 'photo' : 'typed' });
+      if (photo && !draft.evidence_ids.length) { onPauseNarration?.(); setCameraOpen(true); }
+    }}>
       {draft.method === 'photo' ? 'Type my answers instead' : 'Send a photo of my book instead'}</Button>}
     {!choiceOnly && !content.blanks && <label className="text-sm font-semibold flex flex-col gap-1">How to answer
-      <select className={inputClasses} value={draft.method} disabled={busy} onChange={(event) => change({ method: event.target.value })}>
+      <select className={inputClasses} value={draft.method} disabled={busy} onChange={(event) => {
+        change({ method: event.target.value });
+        if (event.target.value === 'photo' && !draft.evidence_ids.length) { onPauseNarration?.(); setCameraOpen(true); }
+      }}>
         {modes.includes('text') && <option value="typed">Type an answer</option>}
         {modes.includes('choice') && <option value="choice">{multiple ? 'Select all that apply' : 'Choose an answer'}</option>}
         {(modes.includes('device_dictation') || modes.includes('audio')) && <option value="dictation">Spoken transcript</option>}
@@ -158,7 +183,7 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
       const text=matching.items.filter((row)=>matches[row.id]).map((row)=>`${row.label} → ${matching.options.find((option)=>option.id===matches[row.id])?.label || ''}`).join('\n');
       change({matches,text});
     }}><option value="">Choose a match</option>{matching.options.map((option)=><option key={option.id} value={option.id} disabled={!matching.allow_reuse && Object.entries(selectedMatches).some(([id,value])=>id!==item.id && value===option.id)}>{option.label}</option>)}</select></label>)}</fieldset>}
-    {draft.method !== 'choice' && !matching && !boxes && <label className="text-sm font-semibold flex flex-col gap-1">
+    {draft.method !== 'choice' && draft.method !== 'photo' && !matching && !boxes && <label className="text-sm font-semibold flex flex-col gap-1">
       {draft.method === 'dictation' ? 'Your spoken transcript' : draft.method === 'written_steps' ? 'Your written steps' : draft.method === 'photo' ? 'What you wrote (optional transcript)' : draft.method === 'parent_review' ? 'What you would like checked (optional)' : activity.kind === 'find_and_fix_mistake' ? 'Your corrected example' : 'Your answer'}
       <textarea ref={textInput} lang={language} rows={draft.method === 'written_steps' ? 4 : compact ? 2 : 3} placeholder={compact ? 'Write your answer…' : undefined} maxLength={4000} value={draft.text} disabled={busy} onKeyDown={submitOnEnter} aria-describedby={keyboardHelpId} onChange={(event) => change({ text: event.target.value })} className={`${inputClasses} h-auto py-3 font-normal`} />
     </label>}
@@ -166,7 +191,7 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
     {reasoningInputRequired ? reasoningBox : draft.method==='choice' && !choiceOnly && <details><summary className="text-sm text-action cursor-pointer">Add an explanation (optional)</summary><div className="mt-2">{reasoningBox}</div></details>}
     {physicalEvidence && <p className="text-sm text-muted">{content.evidence_requirement.replaceAll('_', ' ')} needs the actual work checked. A spoken answer alone does not show everything written on the page.</p>}
     {content.evidence_requirement === 'spelling' && <p className="text-sm text-muted">Type the complete word, including its accents. A photo is optional.</p>}
-    {draft.method === 'photo' && !draft.evidence_ids.length && <p role="status" className="text-sm text-muted">Attach a photo before sending. To check the words without a photo, choose Type an answer when available.</p>}
+    {draft.method === 'photo' && !draft.evidence_ids.length && <p role="status" className="text-sm text-muted">Take a photo of your book. It is read and checked as soon as you use it.</p>}
     {(modes.includes('photo') || physicalEvidence) && ['photo', 'written_steps', 'parent_review'].includes(draft.method) && <>
       <Button size="sm" disabled={busy || draft.evidence_ids.length >= 5} onClick={() => { onPauseNarration?.(); setCameraOpen(true); }}>Take photo of my work</Button>
       <Button size="sm" variant="quiet" disabled={busy || draft.evidence_ids.length >= 5} onClick={() => fileInput.current?.click()}>Choose an existing photo</Button>
@@ -178,11 +203,11 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
     {reasoningInputRequired && canSend && !draft.reasoning.trim() && <p role="status" className="text-sm text-muted">Add your explanation in “Explain your thinking” before sending.</p>}
     {savedWhere && <p role="status" className={savedWhere.startsWith('Draft not saved') ? 'text-xs text-attention' : 'sr-only'}>{savedWhere}</p>}
     <p id={keyboardHelpId} className="sr-only">{choiceOnly ? 'Enter to send' : boxes ? 'Enter goes to the next box' : 'Enter to send · Shift+Enter for a new line'}</p>
-    <Button variant="primary" disabled={!canSubmit} onClick={send}>{busy ? 'Saving…' : draft.method === 'parent_review' ? 'Ask a parent to check' : draft.method === 'dictation' || draft.method === 'photo' || draft.evidence_ids.length ? 'Save answer for confirmation' : checkOnSend ? 'Check my answer' : 'Save answer'}</Button>
+    <Button variant="primary" disabled={!canSubmit} onClick={send}>{busy ? 'Saving…' : draft.method === 'parent_review' ? 'Ask a parent to check' : draft.method === 'photo' ? 'Read my photo' : draft.method === 'dictation' || draft.evidence_ids.length ? 'Save answer for confirmation' : checkOnSend ? 'Check my answer' : 'Save answer'}</Button>
   </div>;
 }
 
-export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnConfirm = false }) {
+export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnConfirm = false, language }) {
   const key = storageKey(sessionId, `confirmation.${response.id}`);
   const [saved] = useState(() => readSaved(key));
   const originalText = typeof response.original === 'string' ? response.original : response.original?.text || response.text || '';
@@ -191,16 +216,20 @@ export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnC
   const edited = useRef(Boolean(saved?.edited));
   useEffect(() => { setLocallySaved(writeSaved(key, { text, edited: edited.current })); }, [key, text]);
   useEffect(() => { if (!edited.current && response.proposed_text) setText(response.proposed_text); }, [response.proposed_text]);
+  const photos = response.evidence_ids || [];
   return <section className="rounded-xl border border-attention bg-attention-soft p-3 flex flex-col gap-3" aria-label="Confirm your answer">
-    <p className="font-semibold">Check that this is what you said or wrote.</p>
-    <p className="text-sm text-muted">Correct transcription errors here. They are not learner mistakes.</p>
-    {response.transcription_status === 'uncertain' && <p className="text-sm text-attention">Some writing was unclear. Check the original photo and correct the proposed words.</p>}
-    <label className="text-sm font-semibold flex flex-col gap-1">Confirmed answer<textarea value={text} maxLength={4000} rows={3} disabled={busy} onChange={(event) => { edited.current = true; setText(event.target.value); }} className={`${inputClasses} h-auto py-3 font-normal`} /></label>
-    {response.evidence_ids?.length > 0 && <p className="text-sm">{response.evidence_ids.length} original photo{response.evidence_ids.length === 1 ? '' : 's'} saved for checking.</p>}
-    <p className="text-xs text-muted">{locallySaved ? 'Transcript edits saved on this device. Confirm to send them to your home server.' : 'Keep this page open until you confirm your transcript.'}</p>
-    <Button variant="primary" disabled={busy || !text.trim()} onClick={async () => {
+    <p className="font-semibold">{photos.length ? 'Is this what you wrote?' : 'Check that this is what you said.'}</p>
+    <p className="text-sm text-muted">{photos.length ? 'Look at your photo. If I read a word wrong, fix it here. Fixing my reading is not a mistake.' : 'Correct transcription errors here. They are not learner mistakes.'}</p>
+    {response.transcription_status === 'uncertain' && <p className="text-sm text-attention">Some writing was hard to read. Check those words against your photo.</p>}
+    <div className={photos.length ? 'grid gap-3 sm:grid-cols-2 items-start' : ''}>
+      {photos.length > 0 && <div className="flex flex-col gap-2">{photos.map((id, index) => <a key={id} href={modeHref(`/api/student-work/${encodeURIComponent(id)}`)} target="_blank" rel="noreferrer">
+        <img src={modeHref(`/api/student-work/${encodeURIComponent(id)}`)} alt={`Your photo ${index + 1}`} className="w-full max-h-72 object-contain rounded-lg bg-surface" /></a>)}</div>}
+      <label className="text-sm font-semibold flex flex-col gap-1">{photos.length ? 'What I read' : 'Confirmed answer'}<textarea lang={language} value={text} maxLength={4000} rows={Math.min(10, Math.max(3, text.split('\n').length))} disabled={busy} onChange={(event) => { edited.current = true; setText(event.target.value); }} className={`${inputClasses} h-auto py-3 font-normal text-base`} /></label>
+    </div>
+    {!locallySaved && <p className="text-xs text-attention">Keep this page open until you confirm your answer.</p>}
+    <Button data-lesson-primary variant="primary" disabled={busy || !text.trim()} onClick={async () => {
       const next = await onConfirm(text);
       if (next) writeSaved(key, null);
-    }}>{checkOnConfirm ? 'Confirm and check my answer' : 'This matches my answer'}</Button>
+    }}>{checkOnConfirm ? photos.length ? 'Yes, check it' : 'Confirm and check my answer' : 'This matches my answer'}</Button>
   </section>;
 }

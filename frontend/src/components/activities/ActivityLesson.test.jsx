@@ -168,12 +168,13 @@ describe('Shared activity lesson', () => {
     expect(api.event.mock.calls[0][1]).toMatchObject({type:'assess',payload:{response_id:'old-photo'}});
     expect(screen.queryByText('Parent assessment')).toBeNull();
   });
-  it('requires an attached image when Photo of my work is selected', async () => {
+  it('opens the camera for Photo of my work and sends nothing without a photo', async () => {
     show();
     fireEvent.change(await screen.findByLabelText('How to answer'), { target: { value: 'photo' } });
-    fireEvent.change(screen.getByLabelText('What you wrote (optional transcript)'), { target: { value: 'A typed word' } });
-    expect(screen.getByRole('button', { name: 'Save answer for confirmation' }).disabled).toBe(true);
-    expect(screen.getByText(/Attach a photo before sending/)).toBeTruthy();
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.queryByLabelText('What you wrote (optional transcript)')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Read my photo' }).disabled).toBe(true);
+    expect(screen.getByText(/Take a photo of your book/)).toBeTruthy();
     expect(api.event).not.toHaveBeenCalled();
   });
   it('allows Continue after sufficient generated discussion without inventing a follow-up answer', async () => {

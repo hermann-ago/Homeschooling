@@ -166,3 +166,24 @@ describe('One answer box per problem', () => {
     expect(screen.getByRole('button', { name: 'Take photo of my work' })).toBeTruthy();
   });
 });
+
+describe('Photo answers', () => {
+  it('sends a photo as soon as it is attached, without words typed before switching', async () => {
+    const submit = vi.fn().mockResolvedValue(null);
+    const upload = vi.fn().mockResolvedValue('E1');
+    const current = activity({ response_modes: ['text', 'photo'], blanks: [{ id: 'blank-1', label: '__umor:' }, { id: 'blank-2', label: '__orta:' }] });
+    render(<ResponseCapture compact sessionId="photo" activity={current} onSubmit={submit} onUpload={upload} />);
+    fireEvent.change(screen.getByLabelText('Answer for __umor:'), { target: { value: 'hu' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send a photo of my book instead' }));
+    expect(screen.queryByLabelText('What you wrote (optional transcript)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Photo of your work'), { target: { files: [new File(['x'], 'work.jpg', { type: 'image/jpeg' })] } });
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    expect(submit.mock.calls[0][0]).toMatchObject({ method: 'photo', evidence_ids: ['E1'], text: '', blanks: {} });
+  });
+
+  it('starts another go with a photo when the last answer was a photo', () => {
+    const current = { ...activity({ response_modes: ['text', 'photo'] }), responses: [{ id: 'r1', method: 'photo', original: { text: '' } }] };
+    render(<ResponseCapture compact sessionId="again" activity={current} onSubmit={vi.fn()} onUpload={vi.fn()} />);
+    expect(screen.getByLabelText('How to answer').value).toBe('photo');
+  });
+});

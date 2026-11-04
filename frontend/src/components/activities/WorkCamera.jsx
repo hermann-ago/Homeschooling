@@ -7,6 +7,8 @@ export default function WorkCamera({ onPhoto, onClose }) {
   const video = useRef(null);
   const stream = useRef(null);
   const picker = useRef(null);
+  const takeButton = useRef(null);
+  const useButton = useRef(null);
   const [photo, setPhoto] = useState(null);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,6 +50,9 @@ export default function WorkCamera({ onPhoto, onClose }) {
     return () => { cancelled = true; stop(); };
   }, [photo, insecure, windows]);
 
+  // Space presses the focused button: first Take photo, then Use this photo.
+  useEffect(() => { if (ready && !photo) takeButton.current?.focus(); }, [ready, photo]);
+  useEffect(() => { if (photo) useButton.current?.focus(); }, [photo]);
   const takePhoto = () => {
     const frame = video.current;
     if (!ready || !frame?.videoWidth || !frame?.videoHeight) return;
@@ -87,14 +92,14 @@ export default function WorkCamera({ onPhoto, onClose }) {
   };
 
   return <Dialog open title="Take a photo of your work" onClose={onClose} width={680}
-    description={nativeCamera ? 'Use Windows Camera on this computer, then choose the photo you took.' : 'Hold the page in front of the webcam. Make sure the writing is clear.'}
+    description={nativeCamera ? 'Use Windows Camera on this computer, then choose the photo you took.' : 'Hold the page close to the webcam so your writing fills the picture. Press Space to take the photo.'}
     footer={<div className="flex flex-wrap justify-end gap-2 w-full">
       <Button disabled={saving} onClick={onClose}>Cancel</Button>
       {!photo && nativeCamera && <Button as="a" href="microsoft.windows.camera:" variant="primary">Open Windows Camera</Button>}
       {!photo && <Button disabled={saving} onClick={() => picker.current?.click()}>Choose a saved photo</Button>}
       {photo ? <><Button disabled={saving} onClick={() => setPhoto(null)}>Retake photo</Button>
-        <Button variant="primary" disabled={saving} onClick={usePhoto}>{saving ? 'Saving photo…' : 'Use this photo'}</Button></> :
-        !nativeCamera && <Button variant="primary" disabled={!ready} onClick={takePhoto}>Take photo</Button>}
+        <Button ref={useButton} variant="primary" disabled={saving} onClick={usePhoto}>{saving ? 'Saving photo…' : 'Use this photo'}</Button></> :
+        !nativeCamera && <Button ref={takeButton} variant="primary" disabled={!ready} onClick={takePhoto}>Take photo</Button>}
     </div>}>
     <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Choose work photo" className="hidden" onChange={event => { choosePhoto(event.target.files?.[0]); event.target.value = ''; }} />
     {!photo && nativeCamera && <div className="rounded-xl bg-paper p-4 text-sm flex flex-col gap-3">

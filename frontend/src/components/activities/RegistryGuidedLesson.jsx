@@ -7,6 +7,8 @@ import { modeHref } from '../../api/mode';
 import WarmUpCard from './WarmUpCard';
 import { Button } from '../../ui';
 import { pauseNarration } from '../../utils/narration';
+import { focusLessonControl } from '../../utils/lessonFocus';
+import { nextStepButton, pressable, useSpaceBar } from '../../utils/spaceBar';
 import { NARRATION_SPEEDS } from '../../utils/narrationSettings';
 import ReadAlong from '../ReadAlong';
 import LessonVoiceStatus from '../LessonVoiceStatus';
@@ -105,6 +107,26 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
   const activeInteraction = useRef(null);
   const currentSession = useRef(sessionId);
   const [transport, setTransport] = useState(null);
+  const transportRef = useRef(null);
+  const activePlace = useRef('');
+  useEffect(() => { transportRef.current = transport; }, [transport]);
+  // Space: pause or resume this step's voice; once it has finished, move on.
+  useSpaceBar((target) => {
+    const voice = transportRef.current;
+    if (sessionId && voice && voice.place === activePlace.current && voice.available && !voice.ended) { voice.toggle(); return true; }
+    if (pressable(target)) return false;
+    const next = nextStepButton();
+    if (!next) return false;
+    next.click();
+    return true;
+  });
+  useEffect(() => {
+    // When the voice finishes, the next-step button waits under the finger.
+    if (!transport?.ended || transport.place !== activePlace.current) return;
+    if (document.activeElement?.closest?.('textarea, input, select, [contenteditable="true"]')) return;
+    const next = nextStepButton();
+    if (next) focusLessonControl(next);
+  }, [transport?.ended, transport?.place]);
   const [playRequest, setPlayRequest] = useState(null);
   const [feedbackRequest,setFeedbackRequest]=useState(null);
   const seenReplies=useRef(null);
@@ -123,6 +145,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     if (next.session_id !== currentSession.current) return;
     setNavigation(next.attempt_navigation || null);
     const activity = next.active_activity;
+    activePlace.current = narrationPlace(activity);
     const messages=(activity?.messages || []).filter((message)=>!(activity.interaction?.is_replay || activity.interaction?.replay_of) || message.sequence>activity.interaction.dialogue_start_sequence);
     const reply=[...messages].reverse().find((message)=>message.role==='teacher');
     if (seenReplies.current && reply && !seenReplies.current.has(reply.id)) setFeedbackRequest({sessionId:next.session_id,id:reply.id});
@@ -190,8 +213,10 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
       : voiceError ? voiceError.includes('429') ? 'Google voice paused: quota or rate limit. Try preparing it later.' : 'Voice preparation paused. Your lesson is saved.'
       : available ? 'Device voice · Play to listen' : 'Text only · No saved narration for this step';
     // A step without narration shows nothing; routine voice states need no words.
-    if (voiceLabel === 'Text only · No saved narration for this step') return null;
-    const routine = ['Reading aloud', 'Saved lesson voice · Autoplay on next step', 'Reading saved · Continue when you are ready', 'Device voice · Play to listen'].includes(voiceLabel);
+    // A step with a recording still mounts its hidden reader: that reader loads
+    // the audio and reports when it is available.
+    if (!range && voiceLabel === 'Text only · No saved narration for this step') return null;
+    const routine = ['Reading aloud', 'Saved lesson voice · Autoplay on next step', 'Reading saved · Continue when you are ready', 'Device voice · Play to listen', 'Text only · No saved narration for this step'].includes(voiceLabel);
     return <div className="tutor-narration-controls">
       {range && activity.kind !== 'read_source' && <ActivityReading key={`${state.session_id}.${narrationPlace(activity)}`} headless
         activity={{ ...activity, start_sentence: range.start, end_sentence: range.end }} state={state} guide={guide}
@@ -239,9 +264,9 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     {!sessionId && <header className="tutor-chat-header"><div className="tutor-header-top"><p className="font-semibold text-sm">Your tutor</p><LessonOptions>{options}</LessonOptions></div>{sessionControls({ activity: null, state: {}, busy })}</header>}
     {!sessionId && <LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} closed={closed} onChanged={onVoiceBuilt}/>}
     {!sessionId ? <div className="p-5 mt-auto flex flex-col gap-3">
-      {warmUp && (warmUp.last || warmUp.next) ? <WarmUpCard warmUp={warmUp} /> : <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>}
+      {warmUp && (warmUp.last || warmUp.next) ? <WarmUpCard warmUp={warmUp} onFinished={() => focusLessonControl(nextStepButton())} /> : <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>}
       {resumeLesson && <><p className="text-sm text-muted">Your place in {resumeLesson.title} stays saved while you start this lesson.</p><a href={modeHref(resumeLesson.path)} className="text-sm font-semibold text-action underline">Resume unfinished lesson</a></>}
-      <Button variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>
+      <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
       onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}

@@ -31,6 +31,8 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const [partIndex, setPartIndex] = useState(0);
   const [partUrl, setPartUrl] = useState(null);
   const [playing, setPlaying] = useState(false);
+  // The range was read to its end; the next step can take over.
+  const [ended, setEnded] = useState(false);
   const preferredSource = usable.find((t) => t.preferred && t.synchronized)?.track_id;
   useEffect(() => {
     if (playing) playbackStarted.current = true;
@@ -182,6 +184,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
     audioRef.current?.pause();
     stopSpeech();
     setPlaying(false);
+    setEnded(true);
     if (!rangeEnded.current) { rangeEnded.current = true; endRef.current?.(); }
   }, [stopSpeech]);
   useEffect(() => {
@@ -200,6 +203,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
       const voices = window.speechSynthesis.getVoices?.() || [];
       utterance.voice = voices.find((v) => v.lang.toLowerCase() === language.toLowerCase()) || voices.find((v) => v.lang.slice(0, 2) === language.slice(0, 2)) || null;
       utterance.onstart = () => {
+        setEnded(false);
         onActiveIndex(index);
         reportCursor({ track_id: source, part_index: source === DEVICE ? 0 : partIndex, offset_seconds: 0, sentence_index: index });
       }; // the device reports when this sentence starts
@@ -214,7 +218,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
             pendingSeek.current = { time: 0, play: true };
             setPlaying(true); setPartIndex(partIndex + 1);
           }
-          else { setPlaying(false); endRef.current?.(); }
+          else { setPlaying(false); setEnded(true); endRef.current?.(); }
         } else speakRef.current?.(index + 1);
       };
       utterance.onerror = () => setPlaying(false);
@@ -306,8 +310,8 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const unrecordedPart = source !== DEVICE && Boolean(parts[partIndex]?.fallback);
   const deviceAvailable = (source === DEVICE || unrecordedPart) && Boolean(window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined');
   useEffect(() => {
-    onTransport?.({ playing, recorded: recordedPart, unrecorded: unrecordedPart, error, available: (recordedPart || deviceAvailable) && !held && !unsafePassages, toggle: () => toggleRef.current?.(), replay: () => replayRef.current?.() });
-  }, [onTransport, playing, recordedPart, unrecordedPart, deviceAvailable, held, unsafePassages, error]);
+    onTransport?.({ playing, ended, recorded: recordedPart, unrecorded: unrecordedPart, error, available: (recordedPart || deviceAvailable) && !held && !unsafePassages, toggle: () => toggleRef.current?.(), replay: () => replayRef.current?.() });
+  }, [onTransport, playing, ended, recordedPart, unrecordedPart, deviceAvailable, held, unsafePassages, error]);
   useEffect(() => {
     if (!autoPlayRequest || autoplayed.current === autoPlayRequest || !recordedPart || held || unsafePassages) return;
     autoplayed.current = autoPlayRequest;
@@ -405,7 +409,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
               e.currentTarget.play().catch(() => {});
             }
           }}
-          onPlay={() => { beginNarration(narratorId.current); setPlaying(true); if (passageMode && parts[partIndex]) onActiveIndex(parts[partIndex].startSentence); }}
+          onPlay={() => { beginNarration(narratorId.current); setPlaying(true); setEnded(false); if (passageMode && parts[partIndex]) onActiveIndex(parts[partIndex].startSentence); }}
           onPause={() => { setPlaying(false); if (cursorRef.current) cursorCallback.current?.(cursorRef.current); }}
           onTimeUpdate={(e) => {
             reportCursor({ track_id: source, part_index: partIndex, offset_seconds: e.currentTarget.currentTime,
@@ -443,6 +447,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
               setPartIndex(partIndex + 1);
             } else {
               setPlaying(false);
+              setEnded(true);
               endRef.current?.();
             }
           }}

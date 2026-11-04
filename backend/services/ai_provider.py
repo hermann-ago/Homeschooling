@@ -27,6 +27,7 @@ _generation_scope = ContextVar("generation_scope", default=None)
 _request_identity = ContextVar("generation_request_identity", default=None)
 _provider_override = ContextVar('generation_provider_override',default=None)
 _preparing_lesson = ContextVar('preparing_lesson', default=False)
+_reading_handwriting = ContextVar('reading_handwriting', default=False)
 
 
 class StructuredResponseError(ValueError):
@@ -144,7 +145,7 @@ class AIService:
     def selection(self):
         provider = _provider_override.get() or self.settings.get("provider", "openai")
         if provider == "openai":
-            return provider, PREPARATION_MODEL if _preparing_lesson.get() else DEFAULT_MODEL
+            return provider, PREPARATION_MODEL if _preparing_lesson.get() or _reading_handwriting.get() else DEFAULT_MODEL
         if provider == "google":
             return provider, GOOGLE_TEXT_MODEL
         raise ValueError("Choose a supported teaching provider in Settings")
@@ -157,6 +158,19 @@ class AIService:
             yield
         finally:
             _preparing_lesson.reset(token)
+
+    @contextmanager
+    def reading_handwriting(self):
+        """Copy a child's handwriting with the careful model, briefly reasoning.
+
+        The quick model tends to 'fix' a misspelt word into the printed word
+        beside it, which hides the very mistake the check is looking for.
+        """
+        token = _reading_handwriting.set(True)
+        try:
+            yield
+        finally:
+            _reading_handwriting.reset(token)
 
     @contextmanager
     def using_provider(self,provider=None):
@@ -378,7 +392,7 @@ class AIService:
                 content.append({"type": "input_file", "filename": "pages.pdf",
                                 "file_data": "data:application/pdf;base64," + base64.b64encode(pdf).decode()})
             body = {"model": model, "input": [{"role": "user", "content": content}], "instructions": instructions,
-                      "reasoning": {"effort": PREPARATION_REASONING if model == PREPARATION_MODEL else
+                      "reasoning": {"effort": "low" if _reading_handwriting.get() else PREPARATION_REASONING if model == PREPARATION_MODEL else
                           "low" if (category == "teaching" and (images or pdf)) or (category == "books" and pdf) else "none"},
                       "max_output_tokens": max_output, "store": False}
             if schema:
