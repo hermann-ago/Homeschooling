@@ -627,7 +627,50 @@ class TutorService:
                 "audio": self.audio_tracks(topic, package, exclude=guide["passage_sha256"] if guide else None),
                 "guide": {**guide, "audio": self.audio_tracks(topic, guide, only=guide["passage_sha256"]),
                           "voice_preparation": voice_preparation_status(self.ctx, guide["guide_id"])}
-                if guide else None}
+                if guide else None,
+                "warm_up": None if session_id else self.warm_up(topic)}
+
+    def warm_up(self, topic: dict) -> dict | None:
+        """Before a lesson starts: where it sits (last, today, next) and the
+        tutor's closing words from the last finished lesson, with their saved
+        recording when one exists. Nothing to answer."""
+        order = lambda t: (t.get("chapter_order") or 0, t["id"])
+        topics = sorted((t for t in self.store.find("topics", subject_id=topic["subject_id"])
+                         if t.get("is_core") and not t.get("archived")), key=order)
+        if not any(t["id"] == topic["id"] for t in topics):
+            return None
+        here = next(i for i, t in enumerate(topics) if t["id"] == topic["id"])
+        last = next((t for t in reversed(topics[:here]) if t["completed"]), None)
+        upcoming = next((t for t in topics[here + 1:] if not t["completed"]), None)
+        return {"last": last and {"title": last["title"], **self._closing_words(last)},
+                "today": topic["title"], "next": upcoming and upcoming["title"]}
+
+    def _closing_words(self, topic: dict) -> dict:
+        rows = sorted(self.store.find("guides", topic_id=topic["id"]), key=lambda g: str(g.get("created_at")), reverse=True)
+        for row in rows:
+            try:
+                content = json.loads(self.ctx.file_bytes(row["guide_path"], row.get("guide_file_sha256")))
+            except Exception:
+                continue
+            closing = next((a for a in content.get("activities", []) if a.get("kind") == "close_lesson"), None)
+            text = ((closing or {}).get("content") or {}).get("text")
+            if not text:
+                continue
+            words = {"summary": text}
+            track = next((t for t in self.store.find("audio_tracks", topic_id=topic["id"])
+                          if t["passage_sha256"] == row["guide_sha256"] and t.get("manifest_path") and t.get("status") in (None, "ready")), None)
+            if track and closing.get("start_sentence") is not None:
+                try:
+                    parts = json.loads(self.ctx.file_bytes(track["manifest_path"], None)).get("tracks", [])
+                    start = closing["start_sentence"]
+                    part = next((i for i, p in enumerate(parts) if p.get("startSentence") is not None
+                                 and p["startSentence"] <= start < p["startSentence"] + (p.get("sentenceCount") or 0)), None)
+                    if part is not None:
+                        words["audio"] = {"track_id": track["id"], "part": part}
+                except Exception:
+                    pass
+            return words
+        return {}
 
     def guide(self, topic: dict, package: dict, guide_id: str | None = None) -> dict | None:
         """The lesson's guided walk-through, if one was written (see tutoring/guide.py)."""

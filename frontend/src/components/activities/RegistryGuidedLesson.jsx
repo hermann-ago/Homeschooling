@@ -4,6 +4,7 @@ import { Pause, Play } from 'lucide-react';
 import { activitiesApi } from '../../api/activities';
 import { tutorApi } from '../../api/tutor';
 import { modeHref } from '../../api/mode';
+import WarmUpCard from './WarmUpCard';
 import { Button } from '../../ui';
 import { pauseNarration } from '../../utils/narration';
 import { NARRATION_SPEEDS } from '../../utils/narrationSettings';
@@ -72,7 +73,7 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
 }
 
 /** Keeps the original book reader while the shared activity engine owns progress. */
-export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson,
+export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, warmUp,
   activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt }) {
   const [startedSession, setStartedSession] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -238,7 +239,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     {!sessionId && <header className="tutor-chat-header"><div className="tutor-header-top"><p className="font-semibold text-sm">Your tutor</p><LessonOptions>{options}</LessonOptions></div>{sessionControls({ activity: null, state: {}, busy })}</header>}
     {!sessionId && <LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} closed={closed} onChanged={onVoiceBuilt}/>}
     {!sessionId ? <div className="p-5 mt-auto flex flex-col gap-3">
-      <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>
+      {warmUp && (warmUp.last || warmUp.next) ? <WarmUpCard warmUp={warmUp} /> : <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>}
       {resumeLesson && <><p className="text-sm text-muted">Your place in {resumeLesson.title} stays saved while you start this lesson.</p><a href={modeHref(resumeLesson.path)} className="text-sm font-semibold text-action underline">Resume unfinished lesson</a></>}
       <Button variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}

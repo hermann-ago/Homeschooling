@@ -133,7 +133,7 @@ export function LessonReadMode({ mode, onChange, resumePath }) {
 }
 
 /** The guided lesson: written once by the AI, then read like any passage. */
-export function GuidePanel({ guide, learner, topic, session, pinned, slotId, closed, resumeLesson, activeIndex, onActiveIndex, language, onChanged, onStarted, onFinished, onPassageModeChange, onSource }) {
+export function GuidePanel({ guide, learner, topic, session, pinned, slotId, closed, resumeLesson, warmUp, activeIndex, onActiveIndex, language, onChanged, onStarted, onFinished, onPassageModeChange, onSource }) {
   const preparation = <LessonPreparationBar learner={learner} topic={topic} guide={guide} pinned={pinned} onChanged={onChanged} />;
   if (!guide) return <div className="flex flex-col min-h-0">
     {preparation}
@@ -145,7 +145,7 @@ export function GuidePanel({ guide, learner, topic, session, pinned, slotId, clo
   return <div className="guide-chat-panel" data-in-session={Boolean(session)}>
     {preparation}
     {!guide.current && !pinned && <p className="px-4 py-2 text-sm bg-attention-soft">Update available · the teaching instructions or book pages have changed.</p>}
-    <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson}
+    <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson} warmUp={warmUp}
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} closed={closed} language={language} onStarted={onStarted} onFinished={onFinished}
       onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} lessonOptions={<>
         <LessonSourcePages topic={topic}/>
@@ -348,7 +348,7 @@ export default function Lesson() {
                   onChange={(next) => { pauseNarration(); setReadMode(next); }} />
               )}
               {activeTab === 'read' && mode === 'guide' && (
-                <GuidePanel guide={guide} learner={learner} topic={topic} session={session} pinned={lesson.interactive} slotId={slotId} closed={closed} resumeLesson={lesson.resume_lesson}
+                <GuidePanel guide={guide} learner={learner} topic={topic} session={session} pinned={lesson.interactive} slotId={slotId} closed={closed} resumeLesson={lesson.resume_lesson} warmUp={lesson.warm_up}
                   activeIndex={guideIndex} onActiveIndex={setGuideIndex} language={lesson.language} onChanged={load}
                   onPassageModeChange={setPassageVoice}
                   onSource={(source) => { pauseNarration(); setSourcePage(source); }}
