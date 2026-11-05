@@ -136,6 +136,15 @@ def ranges(pages):
     return rows
 
 
+def keys_for(books, lesson_documents):
+    """Key PDFs that may answer these lesson documents. A key declared for another
+    book in the subject (e.g. a second workbook with the same "Lição 6" labels) is
+    never searched, however well its labels match."""
+    lesson_keys = {b['key'] for b in books if b['document_id'] in lesson_documents}
+    return {b['document_id'] for b in books if b['role'] == 'answer_key'
+            and (not b.get('answer_for_keys') or lesson_keys & set(b['answer_for_keys']))}
+
+
 def for_lesson(ctx, topic, selected):
     """Answer-key page ranges for a lesson, as page-selection rows with role
     answer_key. `selected` are the lesson's checked page selections."""
@@ -150,7 +159,7 @@ def for_lesson(ctx, topic, selected):
         offset = topic.get('pdf_page_offset') or 0
         lesson.append((main, range(topic['page_start'] + offset, (topic.get('page_end') or topic['page_start']) + offset + 1)))
     lesson = [(d, pages) for d, pages in lesson if d]
-    keys = {b['document_id'] for b in books if b['role'] == 'answer_key'}
+    keys = keys_for(books, {d['id'] for d, _ in lesson})
     rows = []
 
     def add(document, pages):

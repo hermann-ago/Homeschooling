@@ -25,8 +25,10 @@ creates student answers, completion, mastery or a pretend lesson session.
 4. Extra reading books are **read-along**, not workbook assignments. Read printed
    reflection, brainstorming and discussion questions in source order as the
    author's food for thought. Do not omit them, turn them into waiting/graded
-   questions, replace them with choice checks or add an automatic quiz. Use read
-   and say turns without expecting answers. Ordinary curriculum textbooks and
+   questions or replace them with choice checks. Use read and say turns without
+   expecting answers. When the subject's end-of-chapter quiz is on (the prompt
+   then says so under READ-ALONG BOOK), finish with that short choice quiz after
+   the last reading; otherwise add no quiz. Ordinary curriculum textbooks and
    workbooks retain their required exercises. Answer actual learner questions.
 5. Validate, fix any findings, then import through the normal server workflow:
 
@@ -42,7 +44,8 @@ creates student answers, completion, mastery or a pretend lesson session.
    copy `saved-guide.json` into an eval folder and run `tools/lesson_eval.py`
    (it flags questions spoken in narration and answers revealed near questions). Review these alongside
    the source: counts are informational, never quotas or a measure of usefulness.
-   The compiler rejects answerable activities in new read-along book scripts.
+   The compiler rejects answerable activities in read-along scripts, except the
+   short choice quiz after the last reading when the subject has it on.
 6. Inspect `saved-guide.json`: full class, first introduction, final closing,
    correct source pages, useful explanations/comparisons in the reading flow,
    correct response controls and approved review. Explanations use say turns;

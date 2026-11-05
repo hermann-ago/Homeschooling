@@ -62,6 +62,16 @@ def test_filled_in_copies_are_matched_to_the_lesson_pages_they_repeat():
     assert answer_keys.ranges([3, 4, 7]) == [[3, 4], [7, 7]]
 
 
+def test_a_key_declared_for_another_book_is_not_used_for_this_lesson():
+    books = [{'key': 'course', 'document_id': 21, 'role': 'combined', 'answer_for_keys': []},
+             {'key': 'spelling', 'document_id': 23, 'role': 'combined', 'answer_for_keys': []},
+             {'key': 'spelling-key', 'document_id': 24, 'role': 'answer_key', 'answer_for_keys': ['spelling']},
+             {'key': 'any-key', 'document_id': 25, 'role': 'answer_key', 'answer_for_keys': []}]
+    # Both books have a "Lição 6"; only the spelling book's lessons may search its key.
+    assert answer_keys.keys_for(books, {21}) == {25}
+    assert answer_keys.keys_for(books, {23}) == {24, 25}
+
+
 PASSAGE = {'title': 'T', 'sentences': [{'text': 'Mehmed took the city.', 'paragraphIndex': 0}]}
 CONTEXT = {'visual_source': {'pages': [{'document_id': 5, 'page': 94, 'role': 'test', 'book_name': 'Tests'}]}}
 
