@@ -1029,8 +1029,11 @@ class ActivityEngine:
                 playback = self.db.get("lesson_playback", session_id)
                 if not playback:
                     raise TutorError("This lesson has no saved guide to repeat")
+                # A repeat uses the newest approved script; continuing unfinished work keeps its own.
+                newer = None if unfinished_only else self.tutor.newer_guide(original["topic_id"], playback["guide_id"])
+                guide_id = newer["id"] if newer else playback["guide_id"]
                 with self.db.transaction(operation_id=f"activity:{session_id}:{operation_id}", kind="activity.repeat") as tx:
-                    next_id = self.tutor.interactive.start(tx, original["child_id"], original["topic_id"], playback["guide_id"])
+                    next_id = self.tutor.interactive.start(tx, original["child_id"], original["topic_id"], guide_id)
                     self._event(tx, original, operation_id, _hash(["repeat_lesson", session_id]),
                                 "repeat_lesson", None, payload={"session_id": next_id, "from_beginning": from_beginning, 'unfinished_only': unfinished_only})
         if unfinished_only:
@@ -1069,11 +1072,9 @@ class ActivityEngine:
                     raise TutorError('Choose a different prepared script for this exact lesson')
                 if any(job['status'] in ('running', 'claimed', 'pending') for job in self.db.find('activity_jobs', session_id=session_id)):
                     raise TutorConflict('Wait for the current saved response or help request to finish first')
-                topic = self.db.get('topics', original['topic_id'])
-                from . import passages
-                current = self.tutor.guide(topic, passages.load(self.ctx, topic))
-                if not current or not current['current'] or current['guide_id'] != guide_id:
-                    raise TutorError('Prepare a current script before opening the replacement')
+                newer = self.tutor.newer_guide(original['topic_id'], playback['guide_id'])
+                if not newer or newer['id'] != guide_id:
+                    raise TutorError('Open the newest approved script prepared for this lesson')
                 with self.db.transaction(operation_id=f'activity:{session_id}:{operation_id}', kind='activity.replace_script') as tx:
                     self.tutor.guard(tx, session_id, expected_revision)
                     tx.update('tutor_sessions', session_id, {'status':'superseded'})

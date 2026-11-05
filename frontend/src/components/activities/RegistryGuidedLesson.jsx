@@ -77,7 +77,7 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
 /** Keeps the original book reader while the shared activity engine owns progress. */
 /** An unfinished session runs an earlier script than the one now prepared: the family chooses. */
 export function EarlierVersionChoice({ earlier, guide, busy, closed, onOpen }) {
-  const [command] = useState(() => ({ operation_id: operationId(), expected_revision: earlier.revision, guide_id: guide.guide_id }));
+  const [command] = useState(() => ({ operation_id: operationId(), expected_revision: earlier.revision, guide_id: earlier.updated_guide_id || guide.guide_id }));
   return <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
     <p className="text-sm">This lesson was started with an earlier version. A newer version has been prepared since then.</p>
     <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={() => onOpen(command)}>{busy ? 'Opening the updated lesson…' : 'Start the updated lesson'}</Button>

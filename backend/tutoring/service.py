@@ -600,16 +600,29 @@ class TutorService:
             return "closed"
         return self._readers.get(session_id, {}).get("state", "open")
 
+    def newer_guide(self, topic_id, guide_id):
+        """The newest approved script prepared for this lesson after guide_id, if any.
+        Approval is the review it received when written; later notes edits do not withdraw it."""
+        from .script_review import latest
+        old = self.store.get('guides', guide_id)
+        rows = sorted((r for r in self.store.find('guides', topic_id=topic_id) if r['mode'] != 'practice'),
+                      key=lambda r: (r['created_at'], r['id']), reverse=True)
+        newest = rows[0] if rows else None
+        if not newest or not old or newest['id'] == guide_id or (newest['created_at'], newest['id']) <= (old['created_at'], old['id']):
+            return None
+        report = latest(self.ctx, newest['id'])
+        return newest if report and report.get('status') == 'approved' else None
+
     def _resume_same(self, session, guide):
         """This lesson's unfinished session. When it runs an earlier version of
-        the script than the one now prepared, say so: the family chooses whether
+        the script than one prepared since, say so: the family chooses whether
         to continue it or start the updated lesson."""
         playback = self.store.get('lesson_playback', session['id']) if session else None
         if not playback:
             return None
-        earlier = bool(guide and guide.get('current') and guide['guide_id'] != playback['guide_id'])
+        newer = self.newer_guide(session['topic_id'], playback['guide_id'])
         return {"path": self.reader_path(session), "session_id": session['id'], "revision": session['revision'],
-                "earlier_version": earlier, **({"updated_guide_id": guide['guide_id']} if earlier else {})}
+                "earlier_version": bool(newer), **({"updated_guide_id": newer['id']} if newer else {})}
 
     def reader(self, child_id: int, topic_id: int, session_id: str | None) -> dict:
         topic = self.store.get("topics", topic_id)
