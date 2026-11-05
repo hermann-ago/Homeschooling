@@ -7,6 +7,15 @@ import time
 from urllib.parse import quote
 
 MODEL = 'inworld-tts-2-flash'
+# Flash's Brazilian Portuguese was not usable for the family; Portuguese uses
+# Inworld's top model (better pronunciation and intonation). The language comes
+# from the lesson's topic. List prices per million characters (On-Demand).
+MODELS_BY_LANGUAGE = {'pt-BR': 'inworld-tts-2'}
+USD_PER_MILLION = {'inworld-tts-2-flash': 15, 'inworld-tts-2': 25}
+
+
+def model_for(language):
+    return MODELS_BY_LANGUAGE.get(language, MODEL)
 CURATED = {
     ('en-US', 'male'): ['Brian', 'Dennis', 'Oliver', 'Alex', 'Timothy'],
     ('en-US', 'female'): ['Ashley', 'Hazel', 'Lauren', 'Nadia', 'Zoe'],
@@ -79,14 +88,15 @@ def preview(ctx, voice):
     if not any(v['id'] == voice for v in catalog(ctx)):
         raise ValueError('Choose an available Inworld voice.')
     key = ctx.ai.key('inworld')
-    digest = hashlib.sha256(json.dumps([MODEL, voice, hashlib.sha256(key.encode()).hexdigest()]).encode()).hexdigest()
+    model = model_for(next(v['language'] for v in catalog(ctx) if v['id'] == voice))
+    digest = hashlib.sha256(json.dumps([model, voice, hashlib.sha256(key.encode()).hexdigest()]).encode()).hexdigest()
     path = ctx.config.dir / 'cache' / 'inworld-previews' / (digest + '.mp3')
     with _lock:
         if path.exists():
             return path.read_bytes()
         try:
             response = ctx.ai.http.get('https://api.inworld.ai/tts/v1/voice:preview',
-                headers={'Authorization': f'Basic {key}'}, params={'voice_id': voice, 'model_id': MODEL})
+                headers={'Authorization': f'Basic {key}'}, params={'voice_id': voice, 'model_id': model})
         except Exception:
             raise ValueError('Could not reach the Inworld preview service. Try again later.') from None
         if not response.is_success:

@@ -25,10 +25,13 @@ Saving a credential does not request speech or change the current narrator.
 Never paste credentials into chat or put them in client code or lesson files.
 
 Select **Inworld Flash** as the narration provider, enable it, and save settings.
-The app fixes the synthesis model to `inworld-tts-2-flash`; it never upgrades to
-the more expensive model. Flash speech is charged by characters, not LLM tokens.
-The app tracks the On-Demand list-price equivalent ($15 per million characters),
-without enforcing a local allowance. Inworld credits and the actual bill apply.
+English lessons use `inworld-tts-2-flash`. Brazilian Portuguese lessons use
+`inworld-tts-2`, Inworld's top model: Flash's Portuguese was not usable for the
+family (`inworld_voices.MODELS_BY_LANGUAGE`; the language comes from the
+lesson). Speech is charged by characters, not LLM tokens. The app tracks the
+On-Demand list-price equivalent ($15 per million characters for Flash, $25 for
+TTS-2), without enforcing a local allowance. Inworld credits and the actual bill
+apply. Existing Flash recordings stay until a lesson is narrated again.
 
 Open **Settings → Narrator voices** near the top of the page, or go directly to
 `/settings#narrator-voices`. This section and its sample players are available on

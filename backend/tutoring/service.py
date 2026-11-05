@@ -800,8 +800,10 @@ class TutorService:
             subject = self.store.get('subjects', topic['subject_id'])
             from .voice_choices import selected
             preferred_voice = selected(self.store, topic['id']) or narrator(self.ctx, audio_mod.language_of(self.store, subject), subject['child_id'])
+        inworld_model = None
         if preferred_provider == 'inworld':
-            from .inworld_voices import narrator, selected
+            from .inworld_voices import narrator, selected, model_for
+            inworld_model = model_for(audio_mod.language_of(self.store, self.store.get('subjects', topic['subject_id'])))
             subject = self.store.get('subjects', topic['subject_id'])
             choice = selected(self.store, topic['id'])
             preferred_voice = choice or narrator(self.ctx, audio_mod.language_of(self.store, subject), subject['child_id'])
@@ -835,7 +837,9 @@ class TutorService:
             tracks.append({"track_id": row["id"], "provider": row["provider"], "voice": row["voice"],
                            'voice_name': narrator_name(self.ctx, row['voice']) if row['provider']=='elevenlabs' else row['voice'],
                            "preferred": row['id'] == explicit if explicit else (row["provider"] == preferred_provider and row["voice"] == preferred_voice
-                                         and row["speaking_rate"] == (tts.get("rate") or audio_mod.DEFAULT_RATE)),
+                                         and row["speaking_rate"] == (tts.get("rate") or audio_mod.DEFAULT_RATE)
+                                         # Inworld: prefer the language's current model (TTS-2 for Portuguese).
+                                         and (row["provider"] != "inworld" or not manifest.get("model") or manifest.get("model") == inworld_model)),
                            "model": manifest.get("model"), "cost_usd": manifest.get("cost_usd"),
                            "job_status": manifest.get("job_status"), "fallback_parts": manifest.get("fallback_parts", 0),
                            "speaking_rate": row["speaking_rate"], "status": row["status"],

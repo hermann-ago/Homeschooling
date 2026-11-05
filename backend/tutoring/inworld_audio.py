@@ -1,4 +1,4 @@
-"""Flash-only narration: stable activity blocks, durable purchases, exact timings."""
+"""Inworld narration (Flash, or TTS-2 for Portuguese): stable activity blocks, durable purchases, exact timings."""
 import base64
 import hashlib
 import io
@@ -9,11 +9,11 @@ import wave
 
 from services.ai_budget import BudgetError, micros
 from storage import layout
-from .inworld_voices import MODEL, narrator
+from .inworld_voices import MODEL, USD_PER_MILLION as PRICES, model_for, narrator
 
 PROVIDER = 'inworld'
 VERSION = 'inworld-flash-timed-v1'
-USD_PER_MILLION = 15  # On-Demand list rate; paid plans may discount actual billing.
+USD_PER_MILLION = PRICES[MODEL]  # On-Demand list rate for Flash; paid plans may discount actual billing.
 _lock = threading.RLock()
 
 
@@ -38,7 +38,7 @@ def blocks(sentences):
 
 def identity(text, voice, language, rate):
     return 'voice:inworld:' + hashlib.sha256(json.dumps(
-        [VERSION, MODEL, voice, language, rate, text], ensure_ascii=False).encode()).hexdigest()
+        [VERSION, model_for(language), voice, language, rate, text], ensure_ascii=False).encode()).hexdigest()
 
 
 def recording(ctx, result, sentences, language):
@@ -94,13 +94,15 @@ def generate(ctx, topic, passage, *, voice=None, rate=.9, language='en-US', dry_
 
 def _generate(ctx, topic, passage, sections, ids, key, voice, rate, language, dry_run, purpose):
     ledger = ctx.ai.ledger
+    model = model_for(language)
+    price = PRICES[model]
     saved = [ledger.part(rid) for rid in ids]
     missing = [i for i, part in enumerate(saved) if not part]
-    costs = [micros(characters(text) * USD_PER_MILLION / 1_000_000) for _, _, text in sections]
+    costs = [micros(characters(text) * price / 1_000_000) for _, _, text in sections]
     purchases = {ids[i]: i for i in missing if ledger.result(ids[i]) is None}
     uncertain = any(ledger.request_state(rid) not in (None, 'rejected') for rid in purchases)
     allowed = not uncertain and (not purchases or bool(ctx.ai.key(PROVIDER) and ctx.config.get('tts', {}).get('inworld_enabled')))
-    estimate = {'track_id': key, 'provider': PROVIDER, 'model': MODEL, 'voice': voice, 'rate': rate, 'language': language,
+    estimate = {'track_id': key, 'provider': PROVIDER, 'model': model, 'voice': voice, 'rate': rate, 'language': language,
         'parts': len(sections), 'completed_parts': len(sections) - len(missing),
         'characters': sum(characters(t) for _, _, t in sections),
         'estimated_cost_usd': sum(costs[i] for i in purchases.values()) / 1_000_000,
@@ -118,7 +120,7 @@ def _generate(ctx, topic, passage, sections, ids, key, voice, rate, language, dr
         if not any(v['id'] == voice and v['language'] == language for v in catalog(ctx)):
             raise ValueError('Choose an available Inworld narrator in the lesson language.')
     previous = next((j for j in ledger.jobs() if j['id'] == key), {})
-    job = {**previous, 'provider': PROVIDER, 'model': MODEL, 'voice': voice, 'topic_id': topic['id'],
+    job = {**previous, 'provider': PROVIDER, 'model': model, 'voice': voice, 'topic_id': topic['id'],
         'purpose': purpose, 'passage_sha256': passage['passage_sha256'], 'parts': len(sections),
         'completed_parts': len(sections) - len(missing), 'request_ids': ids, 'status': 'running',
         'error': None, 'timing': 'provider-alignment', 'cost_basis': 'on_demand_list_rate'}
@@ -133,8 +135,8 @@ def _generate(ctx, topic, passage, sections, ids, key, voice, rate, language, dr
             if cached is None:
                 if ledger.request_state(rid) not in (None, 'rejected'):
                     raise BudgetError('This Inworld request was already sent. Its uncertain outcome will not be purchased again.')
-                ledger.reserve(rid, 'voice', costs[i], ctx.ai.limits, provider=PROVIDER, model=MODEL, operation='narration')
-                body = {'text': text, 'voiceId': voice, 'modelId': MODEL, 'language': language,
+                ledger.reserve(rid, 'voice', costs[i], ctx.ai.limits, provider=PROVIDER, model=model, operation='narration')
+                body = {'text': text, 'voiceId': voice, 'modelId': model, 'language': language,
                     'audioConfig': {'audioEncoding': 'LINEAR16', 'sampleRateHertz': 24000, 'speakingRate': rate},
                     'timestampType': 'CHARACTER', 'applyTextNormalization': 'OFF'}
                 try:
@@ -155,9 +157,9 @@ def _generate(ctx, topic, passage, sections, ids, key, voice, rate, language, dr
                 processed = (result.get('usage') or {}).get('processedCharactersCount', characters(text))
                 if not isinstance(processed, int) or isinstance(processed, bool) or processed < 0:
                     processed = characters(text)
-                ledger.settle(rid, micros(processed * USD_PER_MILLION / 1_000_000), {
+                ledger.settle(rid, micros(processed * price / 1_000_000), {
                     'characters': processed, 'request_id': response.headers.get('x-request-id') or response.headers.get('request-id'),
-                    'cost_basis': 'on_demand_list_rate', 'usd_per_million_characters': USD_PER_MILLION})
+                    'cost_basis': 'on_demand_list_rate', 'usd_per_million_characters': price})
             else:
                 result = json.loads(cached)
             data, duration, offsets, timing = recording(ctx, result, passage['sentences'][first:first + count], language)

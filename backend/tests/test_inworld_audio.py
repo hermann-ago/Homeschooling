@@ -272,3 +272,20 @@ def test_phone_can_save_only_narrator_preferences_without_speech_or_account_chan
     assert remote.put('/api/ai/inworld/narrators', json={**payload, 'english_voice': 'Bruna'}).status_code == 400
     assert harness.call('PUT', '/api/ai/inworld/narrators', role='tutor', json=payload).status_code == 403
     assert inworld_voices.narrator(harness.ctx, 'en-US', s['lucas']['id']) == 'Oliver'
+
+
+def test_portuguese_lessons_use_inworld_tts2_and_its_price(harness):
+    calls = []
+    def respond(request):
+        body = json.loads(request.content)
+        calls.append(body)
+        return speech(body['text'])
+    s, package = setup(harness, respond)
+    english = inworld_audio.generate(harness.ctx, s['genghis'], package, language='en-US', dry_run=True)
+    portuguese = inworld_audio.generate(harness.ctx, s['genghis'], package, voice='Bruna', language='pt-BR', dry_run=True)
+    assert english['model'] == 'inworld-tts-2-flash' and portuguese['model'] == 'inworld-tts-2'
+    assert portuguese['estimated_cost_usd'] == pytest.approx(english['estimated_cost_usd'] * 25 / 15, rel=0.05)
+    made = inworld_audio.generate(harness.ctx, s['genghis'], package, voice='Bruna', language='pt-BR')
+    assert {c['modelId'] for c in calls} == {'inworld-tts-2'} and {c['language'] for c in calls} == {'pt-BR'}
+    manifest = json.loads(harness.ctx.file_bytes(harness.ctx.store.get('audio_tracks', made['track_id'])['manifest_path']))
+    assert manifest['model'] == 'inworld-tts-2'
