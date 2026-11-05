@@ -19,6 +19,9 @@ def test_newer_script_is_offered_instead_of_silently_resuming_the_old_one(harnes
     assert resume['earlier_version'] and resume['updated_guide_id'] == newer['guide_id']
     assert resume['session_id'] == state['session_id']
 
+    inside = harness.call('GET', '/api/tutor/reader', params={'learner': lucas, 'topic': topic, 'session': state['session_id']}).json()
+    assert inside['newer_version'] == {'session_id': state['session_id'], 'updated_guide_id': newer['guide_id']}
+
     blocked = harness.call('POST', '/api/tutor/interactive/start', json={'learner': lucas, 'topic': topic, 'guide_id': newer['guide_id']})
     assert blocked.status_code == 409 and blocked.json()['detail']['code'] == 'earlier_version_open'
     # Continuing the earlier version still works with its own script.

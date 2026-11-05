@@ -613,6 +613,14 @@ class TutorService:
         report = latest(self.ctx, newest['id'])
         return newest if report and report.get('status') == 'approved' else None
 
+    def _newer_for_open(self, session_id, playback):
+        """An open session viewed directly whose script has been replaced since."""
+        session = self.store.get('tutor_sessions', session_id) if session_id else None
+        if not playback or not session or session['status'] not in OPEN_SESSION:
+            return None
+        newer = self.newer_guide(session['topic_id'], playback['guide_id'])
+        return {'session_id': session_id, 'updated_guide_id': newer['id']} if newer else None
+
     def _resume_same(self, session, guide):
         """This lesson's unfinished session. When it runs an earlier version of
         the script than one prepared since, say so: the family chooses whether
@@ -648,6 +656,7 @@ class TutorService:
                 "session_id": session_id,
                 "interactive": bool(playback), "resume_lesson": resume_lesson,
                 "resume_current_lesson": self._resume_same(same_lesson, guide),
+                "newer_version": self._newer_for_open(session_id, playback),
                 "reader_state": self.reader_state(session_id) if session_id else "open",
                 "passage": package,
                 "audio": self.audio_tracks(topic, package, exclude=guide["passage_sha256"] if guide else None),

@@ -86,7 +86,28 @@ export function EarlierVersionChoice({ earlier, guide, busy, closed, onOpen }) {
   </div>;
 }
 
-export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, earlierVersion, warmUp,
+/** Inside an open session whose script was replaced since: offer the updated lesson. */
+export function NewerVersionNotice({ newer, onSwitched }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [operation] = useState(() => operationId());
+  const switchNow = async () => {
+    setBusy(true); setProblem(''); pauseNarration();
+    try {
+      const state = await activitiesApi.state(newer.session_id);
+      const next = await activitiesApi.replaceScript(newer.session_id, { operation_id: operation, expected_revision: state.revision, guide_id: newer.updated_guide_id });
+      onSwitched?.(next.session_id);
+    } catch (error) { setProblem(error.message); } finally { setBusy(false); }
+  };
+  return <div role="status" className="mx-4 my-2 flex flex-col gap-2 rounded-xl border border-line bg-attention-soft p-3 text-sm">
+    <p>A newer version of this lesson has been prepared.</p>
+    <div><Button size="sm" variant="primary" disabled={busy} onClick={switchNow}>{busy ? 'Opening the updated lesson…' : 'Switch to the updated lesson'}</Button></div>
+    <p className="text-xs text-muted">Answers from this version stay saved.</p>
+    {problem && <p role="alert" className="text-problem">{problem}</p>}
+  </div>;
+}
+
+export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, earlierVersion, newerVersion, warmUp,
   activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt }) {
   const [startedSession, setStartedSession] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -286,6 +307,6 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
       onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
-      sessionNotice={<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
+      sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;
 }
