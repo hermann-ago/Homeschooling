@@ -1,6 +1,7 @@
 import LessonWorkspace from '../components/LessonWorkspace';
 import useViewportHeight from '../app/useViewportHeight';
 import LessonSourcePages from '../components/LessonSourcePages';
+import ExerciseAssignment from '../components/ExerciseAssignment';
 import LessonPreparationBar from '../components/LessonPreparationBar';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -149,6 +150,7 @@ export function GuidePanel({ guide, learner, topic, session, pinned, slotId, clo
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} closed={closed} language={language} onStarted={onStarted} onFinished={onFinished}
       onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} lessonOptions={<>
         <LessonSourcePages topic={topic}/>
+        <ExerciseAssignment topic={topic}/>
         <p className="text-xs text-muted">Prepared{guide.created_at ? ` on ${new Date(guide.created_at).toLocaleDateString()}` : ''}. Guide and voice generation are available above the lesson.</p>
       </>} />
   </div>;

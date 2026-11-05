@@ -55,6 +55,11 @@ TABLES: dict[str, Table] = {t.name: t for t in [
         'topic_id':'int','sources':'json',
     }, id_type='str', required=('topic_id','sources'), unique=(('topic_id',),),
         foreign_keys=(ForeignKey('topic_id','topics'),), teacher_only=True),
+    # Which items on exercise pages shared by several lessons belong to which
+    # lesson (tutoring/exercise_assignment.py); id names the page set and lessons.
+    _t('exercise_assignments', 'Exercise Assignments', {
+        'subject_id':'int','data':'json',
+    }, id_type='str', required=('subject_id','data'), foreign_keys=(ForeignKey('subject_id','subjects'),), teacher_only=True),
     _t('source_annotations', 'Source Teaching Notes', {
         'key':'str','version':'int','document_sha256':'str','first_page':'int','last_page':'int',
         'title':'str','teaching_note':'str','assessment_note':'str','references':'json','active':'bool',

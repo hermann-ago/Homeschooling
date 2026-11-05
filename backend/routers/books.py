@@ -141,6 +141,65 @@ def save_lesson_source_pages(topic_id: int, payload: LessonPagesSave):
         raise HTTPException(400, str(exc)) from exc
 
 
+def _exercise_view(topic):
+    from tutoring import exercise_assignment
+    members = exercise_assignment.group(store(), topic)
+    row = exercise_assignment.saved(store(), members)
+    lessons = [{'topic_id': t, 'title': (store().get('topics', t) or {}).get('title')} for t in members['topics']] if members else []
+    return {'shared': bool(members), 'lessons': lessons, 'pages': members['pages'] if members else [],
+            'revision': row['revision'] if row else 0,
+            'assignment': {k: row['data'][k] for k in ('items', 'method')} if row else None}
+
+
+@router.get('/topics/{topic_id}/exercise-assignment')
+def exercise_assignment_view(topic_id: int):
+    """Which items on this lesson's shared exercise pages each lesson teaches."""
+    return _exercise_view(get_or_404(store(), 'topics', topic_id, 'Lesson'))
+
+
+class ExerciseAssignmentSave(BaseModel):
+    items: list[dict] = Field(min_length=1, max_length=300)
+    expected_revision: int = Field(ge=0)
+
+
+@router.put('/topics/{topic_id}/exercise-assignment')
+def save_exercise_assignment(topic_id: int, payload: ExerciseAssignmentSave):
+    """A grown-up's assignment replaces the AI's for new preparations."""
+    from tutoring import exercise_assignment
+    topic = get_or_404(store(), 'topics', topic_id, 'Lesson')
+    members = exercise_assignment.group(store(), topic)
+    if not members:
+        raise HTTPException(400, 'This lesson’s exercise pages are not shared with other lessons.')
+    try:
+        with write('lesson.exercise_assignment', 'Assigned shared exercise items to lessons') as tx:
+            old = tx.get('exercise_assignments', members['id'])
+            if (old['revision'] if old else 0) != payload.expected_revision:
+                raise ValueError('Reload the exercise assignment before saving.')
+            exercise_assignment.persist(tx, members, payload.items, 'family')
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return _exercise_view(topic)
+
+
+@router.post('/topics/{topic_id}/exercise-assignment')
+def run_exercise_assignment(topic_id: int):
+    """Ask the AI once for a shared page set; a saved assignment is returned as is."""
+    from services.ai_budget import micros
+    from tutoring import exercise_assignment
+    topic = get_or_404(store(), 'topics', topic_id, 'Lesson')
+    members = exercise_assignment.group(store(), topic)
+    if not members:
+        raise HTTPException(400, 'This lesson’s exercise pages are not shared with other lessons.')
+    scope = 'exercise-assignment-' + members['id'].rsplit(':', 1)[-1]
+    context().ai.ledger.configure_scope(scope, micros(exercise_assignment.MAXIMUM_USD), category='teaching')
+    try:
+        with context().ai.preparing_lesson(), context().ai.scoped(scope):
+            exercise_assignment.assign(context(), members)
+    except ValueError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return _exercise_view(topic)
+
+
 @router.get('/subjects/{subject_id}/source-notes')
 def source_notes(subject_id:int):
     from tutoring import source_annotations as notes

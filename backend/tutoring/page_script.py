@@ -51,6 +51,9 @@ class BookWork(Content):
     document_id: int = Field(ge=1)
     page: int = Field(ge=1)
     prompt: str = Field(min_length=1, max_length=8000)
+    # The printed item labels this turn covers ("10", "B3"), checked against
+    # the lesson's exercise assignment when its pages are shared.
+    items: list[str] = Field(default_factory=list, max_length=30)
     response: Response = Field(default_factory=Response)
     # Teacher-only: the answer key's answer for this exercise and the key page
     # it came from. Frozen with the raw script; never compiled into child content.
@@ -161,8 +164,35 @@ def compile_script(value, passage, context, language):
             segments.append({'type': 'activity', 'activity_kind': 'explain_or_observe' if observation else 'request_book_work',
                 'content': content, 'origin': 'required_book',
                 'source_refs': [{'document_id': turn.document_id, 'page': turn.page}]})
+    check_assigned_items(script, context.get('exercise_assignment'))
     segments.append({'type': 'recap', 'text': script.closing})
     return GuidePlan.model_validate({'mode': 'tidy', 'segments': segments}).model_dump(by_alias=True, exclude_none=True)
+
+
+def check_assigned_items(script, assignment):
+    """On shared exercise pages, the script covers exactly this lesson's items."""
+    if not assignment:
+        return
+    from .exercise_assignment import label_key
+    expected = {(p['document_id'], p['page']): {label_key(i): i for i in p['items']} for p in assignment['pages']}
+    covered = set()
+    for turn in script.turns:
+        if not isinstance(turn, BookWork) or (turn.document_id, turn.page) not in expected:
+            continue
+        if not turn.items:
+            raise ValueError(f'Book work on PDF page {turn.page} must list the printed items it covers.')
+        for label in turn.items:
+            key = (turn.document_id, label_key(label))
+            # An item continued from an earlier shared page keeps that page's label.
+            pages = [page for (doc, page), labels in expected.items() if doc == turn.document_id and label_key(label) in labels]
+            if not pages:
+                raise ValueError(f'Item {label} on PDF page {turn.page} belongs to another lesson.')
+            if key in covered:
+                raise ValueError(f'Item {label} appears more than once.')
+            covered.add(key)
+    missing = [label for (doc, _), labels in expected.items() for key, label in labels.items() if (doc, key) not in covered]
+    if missing:
+        raise ValueError('The lesson leaves out its assigned exercise items: ' + ', '.join(missing) + '.')
 
 
 BINARY_ANSWERS = {'true', 'false', 'verdadeiro', 'falso', 'yes', 'no', 'sim', 'não'}

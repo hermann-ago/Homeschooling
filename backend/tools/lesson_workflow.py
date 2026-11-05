@@ -52,6 +52,9 @@ def main():
     export.add_argument('--learner', type=int, required=True)
     export.add_argument('--topic', type=int, required=True)
     export.add_argument('--out', type=Path, required=True)
+    assign = sub.add_parser('assign', help='Assign the items of exercise pages shared with other lessons '
+                            '(one small AI call per shared page set; a saved assignment is reused)')
+    assign.add_argument('--topic', type=int, required=True)
     for command in ('validate', 'import'):
         step = sub.add_parser(command)
         step.add_argument('--packet', type=Path, required=True)
@@ -67,6 +70,9 @@ def main():
         print(json.dumps(summary))
         return
     with httpx.Client(base_url=args.server, timeout=240) as client:
+        if args.command == 'assign':
+            print(json.dumps(request(client, 'POST', f'/api/topics/{args.topic}/exercise-assignment'), ensure_ascii=False, indent=2))
+            return
         if args.command == 'export':
             packet = request(client, 'POST', '/api/tutor/reader/guide', json={
                 'learner': args.learner, 'topic': args.topic, 'dry_run': True,

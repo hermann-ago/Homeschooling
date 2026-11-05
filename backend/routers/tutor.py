@@ -738,6 +738,25 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     learner_context['preparation_policy']=teaching_script.VERSION
     from tutoring.navigation import checked_selections, selections
     learner_context['selected_source_pages'] = checked_selections(store(), topic, selections(context(), topic))
+    # Exercise pages shared with other lessons: this lesson teaches only its own items.
+    from tutoring import exercise_assignment
+    shared_exercises = exercise_assignment.group(store(), topic)
+    assignment = exercise_assignment.saved(store(), shared_exercises)
+    if shared_exercises and not assignment and not payload.dry_run and not payload.export_inputs and reviewed_plan is None:
+        from services.ai_budget import micros
+        scope = 'exercise-assignment-' + shared_exercises['id'].rsplit(':', 1)[-1]
+        context().ai.ledger.configure_scope(scope, micros(exercise_assignment.MAXIMUM_USD), category='teaching')
+        try:
+            with context().ai.scoped(scope):
+                assignment = exercise_assignment.assign(context(), shared_exercises)
+        except ValueError as exc:
+            raise HTTPException(502, {'code': 'exercise_assignment_failed', 'message': str(exc)}) from exc
+    if assignment:
+        learner_context['exercise_assignment'] = exercise_assignment.for_topic(assignment, topic['id'])
+    elif shared_exercises and (payload.export_inputs or reviewed_plan is not None):
+        raise HTTPException(409, {'code': 'exercise_assignment_needed',
+            'message': 'These exercise pages are shared with other lessons. Assign their items first '
+                       '(lesson_workflow.py assign, or Prepare lesson in the app).'})
     if payload.rewrite and existing:
         from tutoring.script_review import revision_context
         feedback=revision_context(context(),store().get('guides',existing['guide_id']))
@@ -814,6 +833,9 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         if source_inventory_needed:cached_script=False
         if cached_script:ceiling=0
         ceiling+=review_ceiling
+        # A first lesson on shared exercise pages also pays for their assignment (capped).
+        assignment_ceiling=exercise_assignment.MAXIMUM_USD if shared_exercises and not assignment else 0
+        ceiling+=assignment_ceiling
         failure=context().ai.cached_failure(text,schema=plan_schema,
             instructions=guide_mod.FORMAT_INSTRUCTIONS,max_output=guide_mod.MAX_PLAN_OUTPUT,pdf=writer_pdf)
         return {"reused": False, "estimated_cost_usd": ceiling, "remaining_usd": remaining,
@@ -835,6 +857,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
             'source_inventory_required':source_inventory_needed,
             'source_inventory_cached':source_inventory_cached,
             "review_estimated_cost_usd":review_ceiling,
+            "exercise_assignment_estimated_cost_usd":assignment_ceiling,
             "note": "Estimated generation cost includes review and one possible editorial repair. Costs are tracked; provider billing controls spending. Audio follows an approved review."}
     scope_id = _spending_scope or "guided-lesson-" + passages.passage_sha256(text)
     if reviewed_plan is None:

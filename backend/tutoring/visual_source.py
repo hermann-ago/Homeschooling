@@ -98,8 +98,12 @@ def _append(ctx, writer, metadata, document, pages, role, *, exercise_id=None):
         if reader is None:
             reader = PdfReader(io.BytesIO(ctx.file_bytes(document['file_path'], document['sha256'])))
         writer.add_page(reader.pages[page - 1])
+        from .exercise_assignment import printed_page
+        printed = printed_page(reader.pages[page - 1], page)
         metadata.append({'attachment_page': len(metadata) + 1, 'document_id': document['id'],
                          'document_sha256': document['sha256'], 'page': page, 'role': role,
+                         # The number printed on the page, so a child can find it in a paper book.
+                         **({'printed_page': printed} if printed else {}),
                          **({'blank': True} if blank_page(reader.pages[page - 1]) else {}),
                          **({'exercise_id': exercise_id} if exercise_id else {})})
         existing.add((document['id'], page, role))

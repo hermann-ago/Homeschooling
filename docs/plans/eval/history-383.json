@@ -1,0 +1,23 @@
+{
+  "notes": "Story of the World V.2, ch. 25 section 'A New Way of Living', printed pp. 231-234 (PDF 246-249), stop before 'Henry V and the Battle of Agincourt'. Text layer drops capitals and mixes in a running header, a map title and a footnote, so readings are transcribed. Chapter 25 test (printed pp. 95-97, PDF 98-100) covers the whole chapter: items 10-13 and 17-19 belong to this section; 1-9 and 14-16 to 'The Plague'. Key on SOTW2_Tests PDF p. 174. A good lesson explains urbanization, why wages rose and the feudal system weakened, the shorter apprenticeships and the returning forests in the reading's own terms.",
+  "reading": [
+    {"starts": "The Black Death raged for years", "ends": "the Black Death changed the countries of Europe forever"}
+  ],
+  "ignore_patterns": ["232thestoryoftheworldvolume2", "234thestoryoftheworldvolume2", "theendoftheworld233", "europeatthetimeoftheblackdeath", "1thiscomesfromtheaccountkeptbyhenryknightonofleicesterabbey"],
+  "exercises": [
+    {"id": "B10", "snippet": "Why did people begin moving to cities", "answer": "Many of the villages were wiped out and never rebuilt"},
+    {"id": "B11", "snippet": "What happened to the empty houses in the country", "answer": "Peasants moved in and became the new owners"},
+    {"id": "B12", "snippet": "Why did forests spring up all over Europe"},
+    {"id": "C13", "snippet": "killed one out of every three people"},
+    {"id": "C17", "snippet": "apprenticeships usually lasted longer"},
+    {"id": "C18", "snippet": "Little Bo Peep"},
+    {"id": "D19", "snippet": "why did peasants become wealthier while noblemen became poorer"}
+  ],
+  "other_lessons_exercises": [
+    {"id": "A1", "snippet": "People first heard of a strange sickness"},
+    {"id": "B5", "snippet": "What symptoms did people with the mysterious illness have"},
+    {"id": "B9", "snippet": "What happened to farms during the sickness"},
+    {"id": "C14", "snippet": "blamed foreign merchants"},
+    {"id": "C16", "snippet": "sleeping on your stomach"}
+  ]
+}

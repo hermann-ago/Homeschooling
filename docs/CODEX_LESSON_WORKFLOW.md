@@ -14,6 +14,14 @@ creates student answers, completion, mastery or a pretend lesson session.
    backend/venv/Scripts/python.exe backend/tools/lesson_workflow.py export --learner 1 --topic 1689 --out tmp/lesson-1689
    ```
 
+   If export answers `exercise_assignment_needed`, the lesson's exercise pages
+   are shared with other lessons. Run the app's own assignment first (one small
+   AI call per page set), then export again:
+
+   ```powershell
+   backend/venv/Scripts/python.exe backend/tools/lesson_workflow.py assign --topic 1689
+   ```
+
 3. Read `prompt.txt` — it is exactly what the app's own writer receives, and
    its rules are the rules — inspect `source.pdf`, and write `script.json` to
    `schema.json`. Where NUMBERED PAGE TEXT matches the page, read turns can cite

@@ -35,6 +35,15 @@ checked with the eval set — not by adding another prohibition to the prompt.
     the student pages with answers: each lesson page is matched to the key page
     repeating its printed text (e.g. Math 4 Lesson 1 → key page 3).
   Pages the family selects with role `answer_key` take precedence.
+- **Shared exercise pages** (`exercise_assignment`): when lessons share
+  exercise pages (a chapter test linked to each section of its chapter), the
+  first preparation on that page set makes one small AI call with every
+  sharing lesson's reading side by side. It assigns each printed item to
+  exactly one lesson: the lesson whose reading teaches it, or the last one when
+  no single reading does. The assignment is saved per page set and reused. The
+  family can view or replace it at `/api/topics/{id}/exercise-assignment`
+  (`lesson_workflow.py assign` runs it for the Codex workflow). Lessons whose
+  exercise pages are their own need no assignment.
 - **Bundles** (`navigation.attach`): the *student* PDF (assigned + linked pages)
   and the *private* PDF (the same plus key pages). The child only ever sees the
   student bundle.
@@ -55,8 +64,13 @@ checked with the eval set — not by adding another prohibition to the prompt.
 5. The family teaching style (editable in Settings) and the subject's notes
    (editable per subject; teaching parts apply now, grading parts later).
 6. What the app knows about the learner (preferences, learning memory).
-7. Page map, boundaries, answer-key pages (teacher-only), source notes, revision
-   feedback, output format, numbered page text.
+7. Page map (with each page's printed number), boundaries, this lesson's items
+   on shared exercise pages, answer-key pages (teacher-only), source notes,
+   revision feedback, output format, numbered page text.
+
+Answer secrecy is stated as narrowly as the code checks it: no answer in an
+exercise or the explanation just before it. Teaching the reading fully is
+required even when a later exercise asks about it.
 
 The writer receives the private bundle when key pages exist, otherwise the
 student bundle. Output: `welcome`, `turns`, `closing`, where a turn is
@@ -66,8 +80,9 @@ student bundle. Output: `welcome`, `turns`, `closing`, where a turn is
   words) or transcribed `text` with its pages (for garbled or missing text
   layers, captions, other books).
 - `ask` — the tutor's own question (discussion, retelling, reasoning).
-- `book_work` — an original exercise with its page and response format, plus
-  teacher-only `answer` / `answer_page` copied from the key.
+- `book_work` — an original exercise with its page, the printed `items` it
+  covers and its response format, plus teacher-only `answer` / `answer_page`
+  copied from the key.
 
 Model and budget: `gpt-6.1-sol`, high reasoning, `MAX_PLAN_OUTPUT` 32,768 tokens.
 
@@ -76,7 +91,8 @@ Model and budget: `gpt-6.1-sol`, high reasoning, `MAX_PLAN_OUTPUT` 32,768 tokens
 `page_script.compile_script` turns the script into the activity engine's guide:
 references become exact text (split at paragraphs into ≤11,000-character
 segments); reading pages must be attached student pages; book work must point at
-student pages; a key answer may not appear in its own open prompt or in the
+student pages; on shared exercise pages the script covers exactly the lesson's
+assigned items, each once; a key answer may not appear in its own open prompt or in the
 explanation just before it; read-along books may not ask for answers. Answers
 stay in the frozen raw script (`guides.context_snapshot.teaching_script`), never
 in child content.

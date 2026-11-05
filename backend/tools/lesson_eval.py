@@ -179,6 +179,12 @@ def evaluate(guide, packet=None, expected=None, pdf_text=''):
         report['exercises_expected'] = len(items)
         report['exercises_duplicated'] = [i['id'] for i in items if i['found'] > 1]
         report['answer_leaks'] = [i['id'] for i in items if i['answer_leak']]
+    # Items on shared exercise pages that belong to another lesson must not appear.
+    others = expected.get('other_lessons_exercises', [])
+    if others:
+        report['exercises_from_other_lessons'] = [
+            item['id'] for item in others
+            if any(contains(t, item['snippet']) or located(activities[i], t, item) for i, t in enumerate(texts))]
 
     # Questions spoken in teacher narration never wait for an answer.
     report['narration_questions'] = [q for s in segments if s['type'] in TEACHER for q in questions(s.get('text'))]
