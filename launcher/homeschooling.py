@@ -237,6 +237,9 @@ def announce(port: int, open_browser: bool, secure=None):
         webbrowser.open(f"http://localhost:{port}")
 
 
+SHUTDOWN_SECONDS = 300
+
+
 def stop(config: HostConfig):
     record = _read_record(config)
     process = _process(record)
@@ -252,7 +255,9 @@ def stop(config: HostConfig):
     except (urllib.error.URLError, OSError) as error:
         print(f"Graceful stop was not acknowledged ({error}); stopping the recorded process.")
     try:
-        process.wait(timeout=20)
+        # The server backs up and tidies storage while shutting down; give it time
+        # rather than cutting a backup off half-written.
+        process.wait(timeout=SHUTDOWN_SECONDS)
     except psutil.TimeoutExpired:
         process.terminate()  # the verified process we started, never a port lookup
         process.wait(timeout=10)
