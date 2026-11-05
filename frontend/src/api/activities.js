@@ -12,6 +12,7 @@ export const activitiesApi = {
   definitions: () => fetchApi('/tutor/activity-definitions'),
   state: (session) => fetchApi(`${sessionPath(session)}/activity-state`),
   repeat: (session, data) => fetchApi(`${sessionPath(session)}/repeat`, post(data)),
+  replaceScript: (session, data) => fetchApi(`${sessionPath(session)}/replace-script`, post(data)),
   invoke: (session, data) => fetchApi(`${sessionPath(session)}/activities`, post(data)),
   access: (session, enabled) => fetchApi(`${sessionPath(session)}/activity-access`, { method: 'POST', body: JSON.stringify({ enabled }) }),
   event: (session, data) => fetchApi(`${sessionPath(session)}/activity-events`, post(data)),

@@ -106,7 +106,12 @@ recorded as a family review. Narration can be bought only after approval.
 
 ## 5. The lesson
 
-The running session pins its guide, sources and skill version. For book work the
+The running session pins its guide, sources and skill version. When a newer
+script is prepared while a session is unfinished, the start screen offers
+**Start the updated lesson** (the old thread is kept as superseded) or
+**Continue the earlier version**; starting never swaps versions silently.
+Subject notes hold only what is particular to a subject; general teaching
+guidance lives once, in the family style and the writer prompt. For book work the
 grader receives the pinned key answer (`page_script.answer_for`) as teacher-only
 context, plus the private bundle for disputes. Evidence type comes from the
 exercise's declared response format. Hands-on work judged by looking (lines,

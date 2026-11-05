@@ -968,6 +968,13 @@ class InteractiveStartRequest(BaseModel):
 @router.post("/interactive/start", dependencies=[Depends(require_family)])
 def interactive_start(payload: InteractiveStartRequest, background_tasks: BackgroundTasks):
     interactive = service().interactive
+    topic_row = store().get("topics", payload.topic)
+    open_session = service().open_session(payload.learner, topic_row["subject_id"], payload.topic) if topic_row else None
+    open_playback = store().get("lesson_playback", open_session["id"]) if open_session else None
+    if open_playback and open_playback["guide_id"] != payload.guide_id:
+        # Never swap versions silently: an unfinished session keeps its own script.
+        raise HTTPException(409, {"code": "earlier_version_open", "session_id": open_session["id"],
+            "message": "This lesson was started with an earlier version. Continue it, or start the updated lesson."})
     with interactive.lock:
         with write("tutor.interactive_start", "Started or resumed guided teaching") as tx:
             session_id = interactive.start(tx, payload.learner, payload.topic, payload.guide_id, payload.slot_id)

@@ -600,6 +600,17 @@ class TutorService:
             return "closed"
         return self._readers.get(session_id, {}).get("state", "open")
 
+    def _resume_same(self, session, guide):
+        """This lesson's unfinished session. When it runs an earlier version of
+        the script than the one now prepared, say so: the family chooses whether
+        to continue it or start the updated lesson."""
+        playback = self.store.get('lesson_playback', session['id']) if session else None
+        if not playback:
+            return None
+        earlier = bool(guide and guide.get('current') and guide['guide_id'] != playback['guide_id'])
+        return {"path": self.reader_path(session), "session_id": session['id'], "revision": session['revision'],
+                "earlier_version": earlier, **({"updated_guide_id": guide['guide_id']} if earlier else {})}
+
     def reader(self, child_id: int, topic_id: int, session_id: str | None) -> dict:
         topic = self.store.get("topics", topic_id)
         subject = self.store.get("subjects", topic["subject_id"]) if topic else None
@@ -623,8 +634,7 @@ class TutorService:
                 "subject_name": subject["name"], "language": audio_mod.language_of(self.store, subject),
                 "session_id": session_id,
                 "interactive": bool(playback), "resume_lesson": resume_lesson,
-                "resume_current_lesson": {"path": self.reader_path(same_lesson)}
-                    if same_lesson and self.store.get('lesson_playback', same_lesson['id']) else None,
+                "resume_current_lesson": self._resume_same(same_lesson, guide),
                 "reader_state": self.reader_state(session_id) if session_id else "open",
                 "passage": package,
                 "audio": self.audio_tracks(topic, package, exclude=guide["passage_sha256"] if guide else None),

@@ -75,7 +75,18 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
 }
 
 /** Keeps the original book reader while the shared activity engine owns progress. */
-export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, warmUp,
+/** An unfinished session runs an earlier script than the one now prepared: the family chooses. */
+export function EarlierVersionChoice({ earlier, guide, busy, closed, onOpen }) {
+  const [command] = useState(() => ({ operation_id: operationId(), expected_revision: earlier.revision, guide_id: guide.guide_id }));
+  return <div className="flex flex-col gap-2 rounded-xl border border-line p-3">
+    <p className="text-sm">This lesson was started with an earlier version. A newer version has been prepared since then.</p>
+    <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={() => onOpen(command)}>{busy ? 'Opening the updated lesson…' : 'Start the updated lesson'}</Button>
+    <Button as="a" href={modeHref(earlier.path)}>Continue the earlier version</Button>
+    <p className="text-xs text-muted">Answers from the earlier version stay saved either way.</p>
+  </div>;
+}
+
+export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, earlierVersion, warmUp,
   activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt }) {
   const [startedSession, setStartedSession] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -266,7 +277,11 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     {!sessionId ? <div className="p-5 mt-auto flex flex-col gap-3">
       {warmUp && (warmUp.last || warmUp.next) ? <WarmUpCard warmUp={warmUp} onFinished={() => focusLessonControl(nextStepButton())} /> : <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>}
       {resumeLesson && <><p className="text-sm text-muted">Your place in {resumeLesson.title} stays saved while you start this lesson.</p><a href={modeHref(resumeLesson.path)} className="text-sm font-semibold text-action underline">Resume unfinished lesson</a></>}
-      <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>
+      {earlierVersion ? <EarlierVersionChoice earlier={earlierVersion} guide={guide} busy={busy} closed={closed}
+        onOpen={async (command) => { setBusy(true); setProblem(''); pauseNarration();
+          try { const next = await activitiesApi.replaceScript(earlierVersion.session_id, command); advance(next); setStartedSession(next.session_id); onStarted?.(next.session_id); }
+          catch (error) { setProblem(error.message); } finally { setBusy(false); } }} />
+        : <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
       onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
