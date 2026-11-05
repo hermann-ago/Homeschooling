@@ -58,6 +58,7 @@ def snapshot(ctx, topic, jobs=None, voice_jobs=None):
         elif advanced:audio={'status':'partial','voice':advanced[0]['voice'],'provider':advanced[0]['provider']}
     return {'topic_id':topic['id'],'guide_id':guide['guide_id'] if guide else None,
         'review':guide.get('script_review') if guide else None,
+        'origin':guide.get('origin') if guide else None,'revision_of':guide.get('revision_of') if guide else None,
         'script_status':'ready' if guide and guide['current'] else 'outdated' if guide else 'missing',
         'audio':audio,'job':public_job(latest) if latest else None,'error':error,
         'can_prepare':bool(topic.get('document_id'))}
@@ -211,3 +212,26 @@ def launch(ctx, job_id):
     except Exception as exc:
         with ctx.store.transaction(kind='lesson.preparation.launch_failed') as tx:
             tx.update('lesson_preparation_jobs',job_id,{'status':'paused','error':str(exc)[:1000]})
+
+
+def prepare_next(ctx, child_id, subject_id, finished_topic_id):
+    """When a lesson is finished, prepare the subject's next lesson (script, review,
+    then voice) in the background, as Prepare lesson does. A lesson already
+    prepared costs nothing; an active job for it is not duplicated. Turn off with
+    config preparation.auto_next = false. Rehearsals (test mode) never spend."""
+    if ctx.is_test or not (ctx.config.get('preparation') or {}).get('auto_next', True):
+        return None
+    ordered = ctx.tutor._topics(subject_id)
+    position = next((i for i, t in enumerate(ordered) if t['id'] == finished_topic_id), None)
+    if position is None:
+        return None
+    upcoming = next((t for t in ordered[position + 1:] if not t.get('completed')), None)
+    if not upcoming:
+        return None
+    from routers.preparation import StartRequest
+    import uuid
+    job, created = enqueue(ctx, StartRequest(learner=child_id, topic=upcoming['id'], target='both',
+                                             operation_id='auto-next-' + uuid.uuid4().hex))
+    if created:
+        launch(ctx, job['id'])
+    return job

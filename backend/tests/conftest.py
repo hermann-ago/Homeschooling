@@ -31,6 +31,8 @@ class Harness:
         self.drive.mkdir(parents=True)
         self.config = HostConfig(tmp_path / "host")
         self.config.update(drive_folder=str(self.drive))
+        # Tests opt in to background next-lesson preparation (tests/test_prepare_next.py).
+        self.config.update(preparation={'auto_next': False})
         self.ctx = AppContext(self.config, start_worker=False)
         self.app = create_app(self.ctx)
         self.client = TestClient(self.app)

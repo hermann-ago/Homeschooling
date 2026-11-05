@@ -113,6 +113,12 @@ class Transaction:
         self._preserved: dict[tuple[str, object], tuple[int | None, datetime | None]] = {}
         self.result = None
         self.created_files: list[str] = []
+        self._after_commit: list = []
+
+    def after_commit(self, action):
+        """Run action (no arguments) once this transaction is saved; never if it fails.
+        Actions run outside the store lock; an action's own error is logged, not raised."""
+        self._after_commit.append(action)
 
     # ── reads that see staged changes ────────────────────────────────────────
     def get(self, table: str, record_id) -> dict | None:
@@ -370,6 +376,12 @@ class Store:
                     except OSError:
                         pass
                 raise
+        for action in tx._after_commit:
+            try:
+                action()
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception('An after-save action failed; the saved change stands')
 
     def _commit(self, tx: "Transaction") -> dict:
         changes = tx.changes()

@@ -554,6 +554,10 @@ class TutorService:
         if payload.get("complete_topic") is True:
             from services.completion_tracking import complete_scheduled_history
             complete_scheduled_history(tx, {session["topic_id"]}, _now())
+            if hasattr(tx, 'after_commit'):
+                # Start preparing the subject's next lesson in the background once this is saved.
+                from .curriculum_preparation import prepare_next
+                tx.after_commit(lambda: prepare_next(self.ctx, session["child_id"], session["subject_id"], session["topic_id"]))
         for chapter_update in payload.get("chapter_updates") or []:
             chapter = next((c for c in tx.find("chapters", subject_id=session["subject_id"])
                             if c["chapter"] == chapter_update.get("chapter")), None)
