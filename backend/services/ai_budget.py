@@ -212,6 +212,42 @@ class BudgetLedger:
             row = db.execute("SELECT metadata FROM narration_parts WHERE id=?", (part_id,)).fetchone()
         return json.loads(row[0]) if row else None
 
+    def drop_results(self, request_ids):
+        """Forget raw copies of results already saved elsewhere (published narration)."""
+        with self.connect() as db:
+            dropped = 0
+            for rid in request_ids:
+                dropped += db.execute("DELETE FROM ai_results WHERE id=?", (rid,)).rowcount
+        return dropped
+
+    def compact(self):
+        """Return the space of dropped copies to the disk."""
+        connection = sqlite3.connect(self.path, isolation_level=None)
+        try:
+            connection.execute("VACUUM")
+        finally:
+            connection.close()
+
+    def release_parts(self, part_ids, job_ids=()):
+        """Narration files were removed: forget their parts and raw copies, and
+        rename their purchase records (cost history is kept) so the same speech
+        can be bought again later instead of being refused as already sent."""
+        stamp = self.clock().strftime('%Y%m%dT%H%M%S')
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            for rid in part_ids:
+                db.execute("DELETE FROM narration_parts WHERE id=?", (rid,))
+                db.execute("DELETE FROM ai_results WHERE id=?", (rid,))
+                released = f"{rid}:released:{stamp}"
+                db.execute("UPDATE requests SET id=? WHERE id=?", (released, rid))
+                db.execute("UPDATE request_scopes SET request_id=? WHERE request_id=?", (released, rid))
+            for job_id in job_ids:
+                row = db.execute("SELECT metadata FROM narration_jobs WHERE id=?", (job_id,)).fetchone()
+                if row:
+                    import json
+                    metadata = {**json.loads(row[0]), 'status': 'removed'}
+                    db.execute("UPDATE narration_jobs SET metadata=? WHERE id=?", (json.dumps(metadata), job_id))
+
     def save_part(self, part_id, metadata):
         import json
         with self.connect() as db:

@@ -197,6 +197,9 @@ class AppContext:
         return behind
 
     def backup_now(self) -> dict:
+        # Slim first: older lessons' narration and raw recording copies are not backed up.
+        from tutoring.audio_retention import run as keep_recent_narration
+        keep_recent_narration(self)
         result = create_backup(self.store, self.config.backup_dir)
         usage_name = result["name"].replace("homeschooling-", "ai-usage-")
         from storage.backups import prune

@@ -40,6 +40,12 @@ def preparation_lock(ctx, topic):
         return ctx._library_material_locks.setdefault(book["id"], threading.RLock())
 
 
+def reuse_enabled(ctx):
+    """Whether a book lesson prepared for one child is saved for the next. Off by
+    default: the family prefers a fresh lesson (better models, voices) for each child."""
+    return bool((ctx.config.get('library') or {}).get('reuse_prepared_lessons', False))
+
+
 def skill_packet(db, book):
     row = max(db.find("library_book_skills", book_id=book["id"]), key=lambda r: r["version"], default=None)
     if row:

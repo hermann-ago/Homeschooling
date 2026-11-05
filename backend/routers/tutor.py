@@ -794,7 +794,8 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
             'schema': teaching_script.schema(package, learner_context, language).model_json_schema(),
             'source_pdf_base64': base64.b64encode(writer_pdf).decode() if writer_pdf else None,
             'paid_generation': False}
-    shared_material = library_materials.load(context(), shared_key) if shared_key and not payload.rewrite else None
+    shared_material = (library_materials.load(context(), shared_key)
+                       if shared_key and not payload.rewrite and library_materials.reuse_enabled(context()) else None)
     if shared_material and reviewed_plan is None:
         if payload.dry_run:
             return {'reused': True, 'reused_book_material': True, 'estimated_cost_usd': 0,
@@ -948,7 +949,7 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         return _reader_guide(payload.model_copy(update={'rewrite':True,'replace_invalid':False}),background_tasks,
                              _editorial_repairs=0,_spending_scope=scope_id)
     from tutoring.automatic_voice import schedule
-    if shared_book:
+    if shared_book and library_materials.reuse_enabled(context()):
         library_materials.publish_guide(context(), shared_book, shared_key, row, built)
     voice, rate = _narrator(topic)
     if payload.prepare_voice:

@@ -101,6 +101,6 @@ def correct(ctx, row, expected_sha256, replacements):
     script_review.save(ctx, saved, script_review.inputs(ctx, saved), {
         'findings': copy.deepcopy(report['data'].get('findings', [])),
         'based_on_review_id': report['id'], 'teaching_text_revision': context['teaching_text_revision']}, 'family_wording_review')
-    if book and context.get('library_material_key'):
+    if book and context.get('library_material_key') and library_materials.reuse_enabled(ctx):
         library_materials.publish_guide(ctx, book, context['library_material_key'], saved, edited)
     return {**ctx.tutor.guide(topic, package), 'updated_sessions': sessions}

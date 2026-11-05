@@ -13,6 +13,7 @@ from tutoring import books, guide, library_materials
 @pytest.fixture
 def family(harness, monkeypatch):
     h = harness
+    h.ctx.config.update(library={'reuse_prepared_lessons': True})  # reuse is a family option
     first, second = child(h, "First reader private name"), child(h, "Future reader private name")
     pdf = make_pdf([["The first idea", "People exchange things because each expects to benefit from the exchange.",
         "For reflection: Why might both people choose to exchange?"]])

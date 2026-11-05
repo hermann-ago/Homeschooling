@@ -19,9 +19,9 @@ from pathlib import Path
 from .layout import BACKUPS
 from .schema import TABLES, to_cell, column_kind
 
-KEEP_BACKUPS = 30
+KEEP_BACKUPS = 2
 # The AI-usage ledger holds cached replies (well over a gigabyte); fewer copies suffice.
-KEEP_USAGE_BACKUPS = 10
+KEEP_USAGE_BACKUPS = 2
 EXPORT_NAME = "Homeschooling Database (read-only copy).xlsx"
 
 

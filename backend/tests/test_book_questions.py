@@ -97,6 +97,7 @@ def test_prepared_json_review_retry_restart_and_second_reader(harness, monkeypat
     from tutoring.script_review import Review
     from tutoring.activity_engine import service
     from tutoring import library_materials, library
+    harness.ctx.config.update(library={'reuse_prepared_lessons': True})  # second-reader reuse is a family option
     from services.documents import add_drive_document
     from dependencies import select_context
     from fastapi import BackgroundTasks

@@ -124,6 +124,15 @@ colouring, tracing) uses `parent_check`: the step waits until a grown-up taps
 also confirm any other unassigned book exercise from the lesson help. The family sees every recorded answer in
 Curriculum → Prepare lesson → Script review → **Answer key (teacher only)**.
 
+## Storage
+
+Narration stays for every lesson not yet completed and for each subject's five
+most recently completed lessons (`audio_retention`); older finished lessons
+keep their scripts and every learner record, and can be narrated again. The
+AI-usage ledger drops its raw copy of a recording once it is published. Two
+backups of each database are kept. Book lessons are prepared fresh for each
+child unless `library.reuse_prepared_lessons` is turned on.
+
 ## Preparing with Codex or Claude instead of the API
 
 See `CODEX_LESSON_WORKFLOW.md`: export the packet (free), write `script.json`
