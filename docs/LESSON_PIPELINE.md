@@ -63,6 +63,10 @@ checked with the eval set — not by adding another prohibition to the prompt.
 4. Read-along rules (extra reading books only).
 5. The family teaching style (editable in Settings) and the subject's notes
    (editable per subject; teaching parts apply now, grading parts later).
+   Every extra reading book starts from one shared template
+   (`library.teaching_template`, first written for Jonathan Gullible): warm
+   explanations, concrete examples, the book taught as it presents itself, and
+   an end-of-chapter check.
 6. What the app knows about the learner (preferences, learning memory).
 7. Page map (with each page's printed number), boundaries, this lesson's items
    on shared exercise pages, answer-key pages (teacher-only), source notes,

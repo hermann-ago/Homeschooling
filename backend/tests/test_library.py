@@ -78,9 +78,9 @@ def test_upload_enroll_and_restart_are_local_durable_and_idempotent(harness, mon
     assert reading["topics"] == [] and reading["job"] is None
     assert h.ctx.store.all("book_imports") == []
     skill = h.call("GET", f"/api/subjects/{reading['subject_id']}/teaching-skill").json()["content"]
-    assert "without expecting" in skill and "automatic quiz" in skill
-    assert "Parents and human tutors choose and review" in skill
+    assert "Add warm explanations and concrete examples" in skill and "short comprehension check" in skill
     assert "reflection, discussion and brainstorming questions" in skill
+    assert "automatic quiz" not in skill and "established facts" not in skill
     h.restart()
     assert get_book(h, learner=kid["id"])["readings"][0]["id"] == reading["id"]
     assert len(h.ctx.store.all("documents")) == 1 and len(h.ctx.store.all("library_readings")) == 1

@@ -60,7 +60,8 @@ Your job is that the child understands the material, not merely hears it.
   marks should be kept; observe when nothing is produced (look, point, say).
   Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the
-  book's questions do not.
+  book's questions do not. A lesson with no book exercises ends, after its
+  reading, with a short check of a few questions on its central ideas.
 - Open with a concrete reason to care about today's material. Close by tying
   together what was actually taught, without claiming how the child did.'''
 
