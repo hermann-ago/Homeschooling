@@ -9,6 +9,9 @@ import NarratorPicker from './NarratorPicker';
 import PreparationProgress from './PreparationProgress';
 import { reviewRecovered } from '../utils/preparationStatus';
 
+// Who wrote the script: the app's writer, the app's script changed afterwards, or written outside the app.
+const ORIGIN = { app: 'Written by the app', revised: 'Revised', hand: 'Written by hand' };
+
 const working = (status) => ['queued', 'running'].includes(status?.job?.status)
   || ['queued', 'running', 'aligning'].includes(status?.audio?.status);
 
@@ -40,7 +43,7 @@ export default function LessonPreparationBar({ learner, topic, guide, pinned, on
   return <section aria-label="Lesson preparation" className="lesson-preparation-bar">
     <div className="min-w-0 text-xs text-muted" role="status">
       <p className="font-semibold text-ink">Lesson preparation</p>
-      <p>Guide {ready ? 'ready' : status.script_status === 'outdated' ? 'update available' : 'not prepared'} · Voice {voiced ? 'ready' : audioBusy ? 'preparing' : busy ? 'waiting for the script' : 'not prepared'}</p>
+      <p>Guide {ready ? 'ready' : status.script_status === 'outdated' ? 'update available' : 'not prepared'}{ORIGIN[status.origin || guide?.origin] ? ` · ${ORIGIN[status.origin || guide?.origin]}` : ''} · Voice {voiced ? 'ready' : audioBusy ? 'preparing' : busy ? 'waiting for the script' : 'not prepared'}</p>
       {status.job?.error && !busy && !reviewRecovered(status) && <p className="text-attention">Preparation needs attention</p>}
     </div>
     <div className="flex flex-wrap items-center gap-2">

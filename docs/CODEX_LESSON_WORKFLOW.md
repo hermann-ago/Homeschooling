@@ -1,5 +1,21 @@
 # Prepare a lesson with Codex
 
+**From 2026-11-05 every script is written by the app's own writer (API).** This
+workflow is for *revising* a script the app wrote, when the family asks:
+
+```powershell
+backend/venv/Scripts/python.exe backend/tools/lesson_workflow.py revise --learner 1 --topic 383 --out tmp/revise-383
+```
+
+`revise` exports the packet plus the lesson's current saved script as
+`script.json`. Edit it following `prompt.txt` exactly, then `validate` and
+`import` as below: the import is saved marked **Revised**, linked to the
+script it changed and to the app's original (`revision_of`). Then judge the
+change separately, so the app's own preparation keeps improving. Writing a
+script from scratch by hand (`export`) remains possible but is marked
+"Written by hand" and hides the app's real quality, so avoid it.
+
+
 Use the app's source packet, structured compiler and import endpoint. Do not
 write directly to guides, learner records or audio tables. Preparation never
 creates student answers, completion, mastery or a pretend lesson session.

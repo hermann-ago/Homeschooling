@@ -961,6 +961,12 @@ def display_sentences(content, context):
     return sentences
 
 
+def origin(row):
+    if (row.get('context_snapshot') or {}).get('revision_of'):
+        return 'revised'
+    return 'hand' if row.get('model') == 'codex-reviewed' else 'app'
+
+
 def package(ctx, row: dict, fresh: bool) -> dict:
     """The guide as the reader and narration use it (a passage-like object)."""
     content = json.loads(ctx.file_bytes(row["guide_path"], None))
@@ -969,6 +975,8 @@ def package(ctx, row: dict, fresh: bool) -> dict:
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             'source_coverage':content.get('source_coverage'),
             'script_review':review_status(ctx,row),
+            # app: written by the app's writer; revised: an app script changed afterwards; hand: written outside the app.
+            'origin':origin(row), 'revision_of':(row.get('context_snapshot') or {}).get('revision_of'),
             "current": fresh, "sentences": display_sentences(content, row.get('context_snapshot') or {}), "passage_sha256": row["guide_sha256"],
             "title": content.get("title"), "actions": content.get("actions", []), "skill_id": row.get("skill_id"),
             "skill_sha256": row.get("skill_sha256"), "activity_contract_version": CONTRACT_VERSION,

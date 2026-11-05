@@ -52,6 +52,11 @@ def main():
     export.add_argument('--learner', type=int, required=True)
     export.add_argument('--topic', type=int, required=True)
     export.add_argument('--out', type=Path, required=True)
+    revise = sub.add_parser('revise', help='Export a lesson with its current saved script as script.json, '
+                            'to change it; import then saves it marked Revised')
+    revise.add_argument('--learner', type=int, required=True)
+    revise.add_argument('--topic', type=int, required=True)
+    revise.add_argument('--out', type=Path, required=True)
     assign = sub.add_parser('assign', help='Assign the items of exercise pages shared with other lessons '
                             '(one small AI call per shared page set; a saved assignment is reused)')
     assign.add_argument('--topic', type=int, required=True)
@@ -69,10 +74,18 @@ def main():
         print('Valid structured lesson; no API calls or audio generation.')
         print(json.dumps(summary))
         return
+    saved = None  # the saved script being revised, for the revise command
     with httpx.Client(base_url=args.server, timeout=240) as client:
         if args.command == 'assign':
             print(json.dumps(request(client, 'POST', f'/api/topics/{args.topic}/exercise-assignment'), ensure_ascii=False, indent=2))
             return
+        if args.command == 'revise':
+            reader = request(client, 'GET', '/api/tutor/reader', params={'learner': args.learner, 'topic': args.topic})
+            guide = (reader.get('guide') or {}).get('guide_id')
+            if not guide:
+                raise SystemExit('This lesson has no saved script to revise; prepare it in the app first.')
+            saved = request(client, 'GET', f'/api/tutor/guides/{guide}/script')
+            args.command = 'export'
         if args.command == 'export':
             packet = request(client, 'POST', '/api/tutor/reader/guide', json={
                 'learner': args.learner, 'topic': args.topic, 'dry_run': True,
@@ -85,13 +98,21 @@ def main():
             save(args.out / 'packet.json', packet)
             save(args.out / 'schema.json', packet['schema'])
             (args.out / 'prompt.txt').write_text(packet['prompt'], encoding='utf-8')
-            print(f'Exported {args.out.resolve()}; inspect source.pdf before authoring script.json.')
+            if saved:
+                packet['revises_guide_id'] = saved['guide_id']
+                save(args.out / 'packet.json', packet)
+                save(args.out / 'script.json', saved['script'])
+                print(f"Exported {args.out.resolve()} with the saved script of {saved['guide_id']} ({saved['origin']}); "
+                      'edit script.json, validate, then import (it is saved marked Revised).')
+            else:
+                print(f'Exported {args.out.resolve()}; inspect source.pdf before authoring script.json.')
         else:
             packet = read(args.packet)
             script = validate(packet, read(args.script))
             body = {'learner': packet['learner'], 'topic': packet['topic']['id'],
                 'source_sha256': packet['package']['passage_sha256'],
-                'expected_skill_version': packet['skill']['version'], 'script': script}
+                'expected_skill_version': packet['skill']['version'], 'script': script,
+                **({'revises_guide_id': packet['revises_guide_id']} if packet.get('revises_guide_id') else {})}
             token = 'codex-lesson-' + hashlib.sha256(json.dumps(
                 [body, packet['context']], sort_keys=True).encode()).hexdigest()
             result = request(client, 'POST', '/api/tutor/reader/guide/import', json=body,

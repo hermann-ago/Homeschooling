@@ -543,6 +543,9 @@ class ReviewedGuideRequest(BaseModel):
     expected_skill_version:int=Field(ge=0)
     plan:guide_mod.GuidePlan | None = None
     script:OriginalPageScript | None = None
+    # A revision of a script the app wrote (or of an earlier revision): it is
+    # marked Revised and keeps the original's identity.
+    revises_guide_id:str | None = Field(default=None, min_length=1, max_length=300)
 
     @model_validator(mode='after')
     def one_script_format(self):
@@ -554,6 +557,17 @@ class ReviewedGuideRequest(BaseModel):
 class ScriptReviewRequest(BaseModel):
     maximum_usd:float=Field(default=0.30,gt=0,le=1)
     expected_input_sha256:str=Field(pattern=r'^[0-9a-f]{64}$')
+
+
+@router.get('/guides/{guide_id}/script',dependencies=[Depends(require_family)])
+def saved_script(guide_id:str):
+    """The structured script a saved guide was compiled from, to revise it (teacher view)."""
+    row=get_or_404(store(),'guides',guide_id,'Guide')
+    frozen=(row.get('context_snapshot') or {}).get('teaching_script') or {}
+    if not frozen.get('script'):
+        raise HTTPException(404,'This guide has no structured script to revise.')
+    return {'guide_id':row['id'],'topic_id':row['topic_id'],'model':row['model'],'origin':guide_mod.origin(row),
+            'version':frozen.get('version'),'script':frozen['script']}
 
 
 @router.get('/guides/{guide_id}/review',dependencies=[Depends(require_family)])
@@ -670,21 +684,31 @@ def import_reviewed_guide(payload:ReviewedGuideRequest,background_tasks:Backgrou
         raise HTTPException(409,'The source or teaching instructions changed. Review the current version before importing the script.')
     if context().is_test:
         raise HTTPException(400,'Import a reviewed script in the family workspace; test sessions can use its prepared copy.')
+    revision_of=None
+    if payload.revises_guide_id:
+        original=store().get('guides',payload.revises_guide_id)
+        if not original or original['topic_id']!=topic['id']:
+            raise HTTPException(400,'The script being revised does not belong to this lesson.')
+        earlier=(original.get('context_snapshot') or {}).get('revision_of') or {}
+        revision_of={'guide_id':original['id'],'original_guide_id':earlier.get('original_guide_id') or original['id'],
+            'original_model':earlier.get('original_model') or original['model'],
+            'revised_at':datetime.now(timezone.utc).isoformat()}
     return _reader_guide(ReaderGuideRequest(learner=payload.learner,topic=payload.topic,rewrite=True,prepare_voice=False),
-        background_tasks,reviewed_plan=(payload.script or payload.plan).model_dump(by_alias=True,exclude_none=True))
+        background_tasks,reviewed_plan=(payload.script or payload.plan).model_dump(by_alias=True,exclude_none=True),
+        revision_of=revision_of)
 
 
 def _reader_guide(payload: ReaderGuideRequest, background_tasks: BackgroundTasks, *, reviewed_plan=None,
-                  _editorial_repairs=1, _spending_scope=None):
+                  _editorial_repairs=1, _spending_scope=None, revision_of=None):
     from tutoring.library_materials import preparation_lock
     topic = _learners_topic(payload.learner, payload.topic)
     with preparation_lock(context(), topic):
         return _prepare_reader_guide(payload, background_tasks, reviewed_plan=reviewed_plan,
-            _editorial_repairs=_editorial_repairs, _spending_scope=_spending_scope)
+            _editorial_repairs=_editorial_repairs, _spending_scope=_spending_scope, revision_of=revision_of)
 
 
 def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: BackgroundTasks, *, reviewed_plan=None,
-                          _editorial_repairs=1, _spending_scope=None):
+                          _editorial_repairs=1, _spending_scope=None, revision_of=None):
     """Write the lesson's guided walk-through with the AI (or return the current one).
 
     The book text is always read in full and in order; the AI adds an introduction, short
@@ -926,6 +950,8 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
             learner_context['library_material_key'] = shared_key
             learner_context['workbook_fingerprint'] = context().books.fingerprint(subject['id'])
         learner_context['lesson_sources']=visual_source.freeze(tx,topic,visual_pdf,visual_context,review_sources,folder=shared_folder)
+        if revision_of:
+            learner_context['revision_of'] = revision_of
         row = guide_mod.save(tx, topic, package, built, model=model, language=language, skill=skill, learner_context=learner_context,folder=shared_folder)
     if reviewed_plan is not None:
         script_review.run(context(),row,human=True)

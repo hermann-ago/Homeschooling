@@ -124,6 +124,14 @@ colouring, tracing) uses `parent_check`: the step waits until a grown-up taps
 also confirm any other unassigned book exercise from the lesson help. The family sees every recorded answer in
 Curriculum → Prepare lesson → Script review → **Answer key (teacher only)**.
 
+## After a lesson
+
+Finishing a lesson queues the subject's next lesson (script, review, voice) as
+a background preparation job (`curriculum_preparation.prepare_next`, off with
+config `preparation.auto_next = false`). Each saved script shows its origin:
+written by the app, revised (an app script changed afterwards, with
+`revision_of`), or written by hand.
+
 ## Storage
 
 Narration stays for every lesson not yet completed and for each subject's five
