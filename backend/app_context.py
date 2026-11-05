@@ -199,10 +199,13 @@ class AppContext:
     def backup_now(self) -> dict:
         result = create_backup(self.store, self.config.backup_dir)
         usage_name = result["name"].replace("homeschooling-", "ai-usage-")
+        from storage.backups import prune
         self.ai.ledger.backup(self.config.backup_dir / usage_name)
+        prune(self.config.backup_dir)
         if self.files.available:
             from storage.layout import BACKUPS
             self.ai.ledger.backup(self.files.root / BACKUPS / usage_name)
+            prune(self.files.root / BACKUPS)
         return result
 
     def export_now(self) -> str | None:

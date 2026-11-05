@@ -46,9 +46,17 @@ def create_backup(store, local_dir: Path | None = None) -> dict:
 
 
 def _prune(folder: Path):
-    backups = sorted(folder.glob("homeschooling-*.sqlite3"))
-    for old in backups[:-KEEP_BACKUPS]:
-        old.unlink(missing_ok=True)
+    """Keep the newest KEEP_BACKUPS of each kind: the family database and the
+    AI-usage ledger (which grows with cached replies, so unpruned copies fill the disk)."""
+    for pattern in ("homeschooling-*.sqlite3", "ai-usage-*.sqlite3"):
+        backups = sorted(folder.glob(pattern))
+        for old in backups[:-KEEP_BACKUPS]:
+            old.unlink(missing_ok=True)
+            Path(str(old) + "-journal").unlink(missing_ok=True)
+
+
+def prune(folder: Path):
+    _prune(Path(folder))
 
 
 def latest_backup(store, local_dir: Path | None = None) -> str | None:
