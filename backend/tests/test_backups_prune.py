@@ -1,4 +1,4 @@
-"""Backups of both databases are kept to the newest KEEP_BACKUPS each."""
+"""Backups of both databases are pruned, each to its own count."""
 from storage import backups
 
 
@@ -10,7 +10,7 @@ def test_ai_usage_backups_are_pruned_like_family_backups(tmp_path):
     (tmp_path / "before-cleanup.sqlite3").write_text("kept")
     backups.prune(tmp_path)
     assert len(list(tmp_path.glob("homeschooling-*.sqlite3"))) == backups.KEEP_BACKUPS
-    assert len(list(tmp_path.glob("ai-usage-*.sqlite3"))) == backups.KEEP_BACKUPS
+    assert len(list(tmp_path.glob("ai-usage-*.sqlite3"))) == backups.KEEP_USAGE_BACKUPS
     assert not (tmp_path / "ai-usage-20260000T000000Z.sqlite3").exists()
     assert not (tmp_path / "ai-usage-20260000T000000Z.sqlite3-journal").exists()
-    assert (tmp_path / "ai-usage-20260034T000000Z.sqlite3").exists() and (tmp_path / "before-cleanup.sqlite3").exists()
+    assert (tmp_path / "ai-usage-20260034T000000Z.sqlite3").exists() and not (tmp_path / "ai-usage-20260024T000000Z.sqlite3").exists() and (tmp_path / "before-cleanup.sqlite3").exists()

@@ -20,6 +20,8 @@ from .layout import BACKUPS
 from .schema import TABLES, to_cell, column_kind
 
 KEEP_BACKUPS = 30
+# The AI-usage ledger holds cached replies (well over a gigabyte); fewer copies suffice.
+KEEP_USAGE_BACKUPS = 10
 EXPORT_NAME = "Homeschooling Database (read-only copy).xlsx"
 
 
@@ -46,11 +48,11 @@ def create_backup(store, local_dir: Path | None = None) -> dict:
 
 
 def _prune(folder: Path):
-    """Keep the newest KEEP_BACKUPS of each kind: the family database and the
-    AI-usage ledger (which grows with cached replies, so unpruned copies fill the disk)."""
-    for pattern in ("homeschooling-*.sqlite3", "ai-usage-*.sqlite3"):
+    """Keep the newest copies of each kind: KEEP_BACKUPS of the family database and
+    KEEP_USAGE_BACKUPS of the AI-usage ledger (unpruned ledger copies fill the disk)."""
+    for pattern, keep in (("homeschooling-*.sqlite3", KEEP_BACKUPS), ("ai-usage-*.sqlite3", KEEP_USAGE_BACKUPS)):
         backups = sorted(folder.glob(pattern))
-        for old in backups[:-KEEP_BACKUPS]:
+        for old in backups[:-keep]:
             old.unlink(missing_ok=True)
             Path(str(old) + "-journal").unlink(missing_ok=True)
 
