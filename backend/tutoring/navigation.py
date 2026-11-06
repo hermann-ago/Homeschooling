@@ -31,6 +31,9 @@ def identity(doc):
 
 
 def saved(db, doc):
+    # A legacy record whose PDF was never added has no edition identity, so no map.
+    if not doc or not doc.get('sha256'):
+        return None
     return db.get('book_navigation', identity(doc))
 
 

@@ -37,3 +37,8 @@ def test_a_page_without_a_visible_number_takes_its_books_offset():
              {'document_id': 5, 'page': 12, 'role': 'test', 'printed_page': 12}]
     navigation.infer_printed_pages(mixed)
     assert 'printed_page' not in mixed[0]  # no single offset: leave it unknown
+
+
+def test_a_book_record_without_its_pdf_has_no_chapter_map():
+    assert navigation.saved(None, {'id': 1, 'sha256': None}) is None
+    assert navigation.saved(None, None) is None
