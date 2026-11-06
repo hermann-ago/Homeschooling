@@ -11,6 +11,8 @@ import { useLearner } from '../app/learnerContext';
 import useReplanAction from '../app/useReplanAction';
 import { calendarApi } from '../api/calendar';
 import { useBlockedDays, useCompletedTopics, useFamilyProgress, useSchoolYear, useSlotsFor } from '../api/queries';
+import LessonStatusDot, { CornerDot, LessonStatusLegend } from '../components/LessonStatusDot';
+import { useLessonStates } from '../utils/lessonStates';
 import { Button, Dialog, Field, IconButton, SegmentedControl, inputClasses, useConfirm, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
 import { byTime, isoDay, lessonPath, shortTime } from '../utils/lessons';
@@ -75,13 +77,14 @@ function DayOffDialog({ open, onClose, learners, defaultWho, defaultDate, onSave
   );
 }
 
-function LessonChip({ lesson, child, showName, onOpen }) {
+function LessonChip({ lesson, child, showName, onOpen, state }) {
   const tones = learnerTones(child.color);
   const done = lesson.is_completed;
   return (
     <button type="button" onClick={() => onOpen(lesson)} disabled={!lesson.topic_id}
-      className="w-full text-left px-3 py-2 rounded-[10px] flex flex-col gap-0.5 hover:brightness-[0.97] disabled:cursor-default"
+      className="relative w-full text-left px-3 py-2 pr-5 rounded-[10px] flex flex-col gap-0.5 hover:brightness-[0.97] disabled:cursor-default"
       style={{ background: tones.soft }}>
+      {lesson.topic_id && <CornerDot state={state} />}
       <span className="text-xs font-bold truncate" style={{ color: done ? 'var(--color-subtle)' : tones.strong }}>
         {shortTime(lesson.time_start)}{showName ? ` · ${child.name}` : ''} · {lesson.subject_name}
       </span>
@@ -125,6 +128,7 @@ export default function Plan() {
   const end = view === 'week' ? endOfWeek(anchor, { weekStartsOn: 1 }) : endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 });
   const range = { start: isoDay(start), end: isoDay(end) };
   const slots = useSlotsFor(shown, range);
+  const states = useLessonStates(slots.flatMap(({ data }) => (data || []).map((l) => l.topic_id)));
   const { data: blocked = [] } = useBlockedDays(single, range.start, range.end);
   const { data: checked = [] } = useCompletedTopics(single);
 
@@ -191,6 +195,7 @@ export default function Plan() {
           <SegmentedControl label="View" size="sm" value={view} onChange={setView}
             options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
         </div>
+        <LessonStatusLegend />
 
         {view === 'week' ? (
           <div className="grid gap-3.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(var(--days),minmax(0,1fr))]"
@@ -207,7 +212,7 @@ export default function Plan() {
                     </div>
                     {blocksOn(day).map((b) => <BlockedBanner key={b.id} block={b} learner={learner} onRemove={removeBlock} />)}
                     {lessons.map((lesson) => (
-                      <LessonChip key={`${lesson.child_id}-${lesson.id}`} lesson={lesson} child={lesson.child} showName={shown.length > 1} onOpen={open} />
+                      <LessonChip key={`${lesson.child_id}-${lesson.id}`} lesson={lesson} child={lesson.child} showName={shown.length > 1} onOpen={open} state={states[lesson.topic_id]} />
                     ))}
                     {!lessons.length && !blocksOn(day).length && (
                       <button type="button" onClick={() => setDayOff({ date: isoDay(day) })}
@@ -249,6 +254,7 @@ export default function Plan() {
                       return (
                         <span key={`${lesson.child_id}-${lesson.id}`} className={clsx('text-[11px] leading-tight px-1.5 py-0.5 rounded-md truncate', lesson.is_completed && 'line-through opacity-70')}
                           style={{ background: tones.soft, color: tones.strong }}>
+                          {lesson.topic_id && <LessonStatusDot state={states[lesson.topic_id]} className="mr-1 align-middle !w-1.5 !h-1.5" />}
                           {lesson.subject_name}
                         </span>
                       );

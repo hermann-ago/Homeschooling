@@ -15,6 +15,8 @@ import SubjectBookCollection from '../components/SubjectBookCollection';
 import LessonPreparation from '../components/LessonPreparation';
 import { CurriculumPreparationCells, CurriculumPreparationDialog } from '../components/CurriculumLessonPrep';
 import { useCurriculumPreparation } from '../api/preparation';
+import { CornerDot } from '../components/LessonStatusDot';
+import { useLessonStates } from '../utils/lessonStates';
 import GradeSelect from '../components/GradeSelect';
 import TeachingSkillEditor from '../components/TeachingSkillEditor';
 import SourceNotes from '../components/SourceNotes';
@@ -217,9 +219,10 @@ function whenLabel(topic, planned) {
   return { text: isToday(day) ? 'Today' : format(day, 'EEE d MMM'), tone: isToday(day) ? 'today' : 'next' };
 }
 
-function ChapterRow({ topic, when, tones, onToggle, onOpen, onEarlier, onDelete, preparation, onPrepare }) {
+function ChapterRow({ topic, when, tones, onToggle, onOpen, onEarlier, onDelete, preparation, onPrepare, state }) {
   return (
-    <div className="flex flex-wrap md:flex-nowrap items-center gap-x-4 gap-y-1 px-5 py-3 border-b border-line-soft last:border-b-0">
+    <div className="relative flex flex-wrap md:flex-nowrap items-center gap-x-4 gap-y-1 px-5 py-3 pr-6 border-b border-line-soft last:border-b-0">
+      <CornerDot state={state} />
       <CheckButton size={32} done={topic.completed} current={when.tone === 'today'} color={tones.strong}
         label={topic.title} onToggle={onToggle} />
       <div className="flex-1 min-w-[12rem] flex flex-col gap-2">
@@ -264,6 +267,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
   const finished = chapters.filter((t) => t.completed);
   const open = chapters.filter((t) => !t.completed);
   const preparation=useCurriculumPreparation(child.id,subject.id,chapters);
+  const states=useLessonStates(chapters.map((c)=>c.id));
 
   const planned = new Map();
   for (const slot of missed) if (!slot.is_completed && slot.topic_id) {
@@ -278,7 +282,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
   }
 
   const row = (topic) => (
-    <ChapterRow key={topic.id} topic={topic} when={whenLabel(topic, planned)} tones={tones}
+    <ChapterRow key={topic.id} topic={topic} when={whenLabel(topic, planned)} tones={tones} state={states[topic.id]}
       preparation={preparation.statuses.get(topic.id)} onPrepare={target=>setDialog({type:'prepare',topic,target})}
       onToggle={() => change(() => subjectsApi.toggleTopicComplete(subject.id, topic.id))}
       onOpen={topic.document_id ? () => navigate(lessonPath({ topic_id: topic.id }, child.id)) : null}

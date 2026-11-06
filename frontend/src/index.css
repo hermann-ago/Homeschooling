@@ -306,3 +306,18 @@
 .celebration-stars span { display: inline-block; animation: star-rise .9s ease-out both; animation-delay: calc(var(--i) * 90ms); }
 @keyframes star-rise { 0% { opacity: 0; transform: translateY(.8rem) scale(.4) rotate(-30deg); } 70% { opacity: 1; transform: translateY(-.25rem) scale(1.2) rotate(8deg); } 100% { transform: none; } }
 @media (prefers-reduced-motion: reduce) { .progress-dot.is-new, .celebration-stars span { animation: none; } }
+
+/* Lesson status dot: one small circle, the same meaning everywhere (LessonStatusDot.jsx). */
+:root {
+  --color-ready: #2f6fb3;
+}
+.lesson-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 9999px; flex: none; background: var(--color-subtle); }
+.lesson-dot--corner { position: absolute; top: .4rem; right: .4rem; }
+.lesson-dot--done { background: var(--color-saved); }
+.lesson-dot--ready { background: var(--color-ready); }
+.lesson-dot--script { background: var(--color-attention); }
+.lesson-dot--attention { background: var(--color-problem); }
+.lesson-dot--none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--color-subtle); }
+.lesson-dot--preparing { background: var(--color-ready); animation: lesson-dot-pulse 1.4s ease-in-out infinite; }
+@keyframes lesson-dot-pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .lesson-dot--preparing { animation: none; opacity: .6; } }

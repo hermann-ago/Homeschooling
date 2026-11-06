@@ -11,6 +11,8 @@ import {
 } from '../api/queries';
 import { Badge, Button, CheckButton, LessonRow, ProgressBar, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
+import { CornerDot } from '../components/LessonStatusDot';
+import { useLessonStates } from '../utils/lessonStates';
 import { byTime, comingDays, firstDay, greeting, lessonMeta, lessonPath, shortTime, todayFocus } from '../utils/lessons';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -111,6 +113,7 @@ function LearnerLane({ child, lessons, coming, now, actions }) {
   const { current, focus } = todayFocus(lessons, now);
   const tones = learnerTones(child.color);
   const next = firstDay(coming);
+  const states = useLessonStates(lessons.map((l) => l.topic_id));
   return (
     <Card className="overflow-hidden flex flex-col">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-line-soft">
@@ -133,7 +136,7 @@ function LearnerLane({ child, lessons, coming, now, actions }) {
             No lessons today.{next && ` Next: ${next.label} (${next.count} ${next.count === 1 ? 'lesson' : 'lessons'}).`}
           </p>
         ) : [...lessons].sort(byTime).map((lesson) => (
-          <LessonRow key={lesson.id} lesson={{ ...lesson, child_id: child.id }} learnerColor={child.color}
+          <LessonRow key={lesson.id} lesson={{ ...lesson, child_id: child.id }} learnerColor={child.color} state={states[lesson.topic_id]}
             now={lesson.id === focus?.id} tag={current?.id === lesson.id ? 'Now' : 'Next'}
             onToggle={actions.toggle} onOpen={actions.canOpen(lesson) ? actions.open : undefined} />
         ))}
@@ -202,10 +205,11 @@ function EveryoneToday({ learners, select }) {
 
 /* ── One learner ──────────────────────────────────────────────────────── */
 
-function NowCard({ lesson, child, isCurrent, actions }) {
+function NowCard({ lesson, child, isCurrent, actions, state }) {
   const tones = learnerTones(child.color);
   return (
-    <article className="bg-surface border border-line rounded-[20px] overflow-hidden">
+    <article className="relative bg-surface border border-line rounded-[20px] overflow-hidden">
+      {lesson.topic_id && <CornerDot state={state} />}
       <div className="px-6 md:px-8 py-7 flex flex-col gap-2.5" style={{ background: tones.soft }}>
         <div className="flex flex-wrap items-center gap-2.5">
           <Badge color={tones.strong} solid className="text-xs tracking-wide">
@@ -286,6 +290,7 @@ function LearnerToday({ child }) {
   const done = sorted.filter((l) => l.is_completed).length;
   const next = firstDay(coming);
   const tones = learnerTones(child.color);
+  const states = useLessonStates([...lessons, ...missed, ...coming].map((l) => l.topic_id));
 
   return (
     <>
@@ -302,7 +307,7 @@ function LearnerToday({ child }) {
           </div>
 
           {focus ? (
-            <NowCard lesson={focus} child={child} isCurrent={Boolean(current && current.id === focus.id)} actions={actions} />
+            <NowCard lesson={focus} child={child} isCurrent={Boolean(current && current.id === focus.id)} actions={actions} state={states[focus.topic_id]} />
           ) : (
             <Card className="px-8 py-7 flex flex-col gap-2">
               <h2 className="font-display text-[28px] font-medium">{sorted.length ? 'All done for today' : 'A day off from lessons'}</h2>
@@ -317,7 +322,7 @@ function LearnerToday({ child }) {
               <h2 className="text-[13px] font-bold tracking-[0.8px] uppercase text-muted">Coming up {next.label}</h2>
               <Card className="p-2">
                 {coming.filter((l) => l.date === next.date).sort(byTime).map((lesson) => (
-                  <LessonRow key={lesson.id} lesson={{ ...lesson, child_id: child.id }} learnerColor={child.color}
+                  <LessonRow key={lesson.id} lesson={{ ...lesson, child_id: child.id }} learnerColor={child.color} state={states[lesson.topic_id]}
                     openLabel="Preview" onOpen={actions.canOpen(lesson) ? actions.open : undefined} />
                 ))}
               </Card>
@@ -329,7 +334,7 @@ function LearnerToday({ child }) {
               <h2 className="text-[13px] font-bold tracking-[0.8px] uppercase text-muted">{focus ? 'Also today' : 'Today'}</h2>
               <Card className="p-2">
                 {rest.map((lesson) => (
-                  <LessonRow key={lesson.id} lesson={lesson} learnerColor={child.color}
+                  <LessonRow key={lesson.id} lesson={lesson} learnerColor={child.color} state={states[lesson.topic_id]}
                     onToggle={actions.toggle} onOpen={actions.canOpen(lesson) ? actions.open : undefined} />
                 ))}
               </Card>

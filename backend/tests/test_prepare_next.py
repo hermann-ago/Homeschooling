@@ -35,3 +35,12 @@ def test_turned_off_or_in_rehearsal_nothing_is_queued(harness, monkeypatch):
     monkeypatch.setattr(curriculum_preparation, 'launch', lambda ctx, job_id: (_ for _ in ()).throw(AssertionError('no launch')))
     assert finish(harness, seeded, guide, monkeypatch)["status"] == "completed"
     assert not harness.ctx.store.all('lesson_preparation_jobs')
+
+
+def test_lesson_states_summarise_readiness_for_the_dots(harness, monkeypatch):
+    seeded, guide = prepare(harness, monkeypatch)
+    topic = seeded['genghis']['id']
+    states = harness.call('GET', '/api/tutor/preparation/states', params={'topic_ids': [topic]}).json()['states']
+    assert states[str(topic)] in ('script', 'ready')
+    finish(harness, seeded, guide, monkeypatch)
+    assert harness.call('GET', '/api/tutor/preparation/states', params={'topic_ids': [topic]}).json()['states'][str(topic)] == 'done'

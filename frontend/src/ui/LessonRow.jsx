@@ -10,12 +10,15 @@ import { lessonMeta } from '../utils/lessons';
  * Open action. `now` highlights the lesson to do now, labelled `tag` ("Now",
  * or "Next" before it starts).
  */
-export default function LessonRow({ lesson, learnerColor, now = false, tag = 'Now', meta, onToggle, onOpen, busy, openLabel = 'Open' }) {
+import { CornerDot } from '../components/LessonStatusDot';
+
+export default function LessonRow({ lesson, learnerColor, now = false, tag = 'Now', meta, onToggle, onOpen, busy, openLabel = 'Open', state }) {
   const tones = learnerTones(learnerColor || '#2d5f54');
   const done = Boolean(lesson.is_completed);
   const title = lesson.topic_title || 'Study time';
   return (
-    <div className="flex items-center gap-3.5 p-3 rounded-xl" style={now && !done ? { background: tones.soft } : undefined}>
+    <div className="relative flex items-center gap-3.5 p-3 pr-5 rounded-xl" style={now && !done ? { background: tones.soft } : undefined}>
+      {state && <CornerDot state={state} />}
       {onToggle && (
         <CheckButton done={done} current={now} color={tones.strong} label={`${lesson.subject_name}: ${title}`}
           onToggle={(value) => onToggle(lesson, value)} disabled={busy} />

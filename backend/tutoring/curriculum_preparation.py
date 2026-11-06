@@ -235,3 +235,48 @@ def prepare_next(ctx, child_id, subject_id, finished_topic_id):
     if created:
         launch(ctx, job['id'])
     return job
+
+
+def lesson_states(db, topic_ids):
+    """A quick readiness state per lesson, for small status dots across the app:
+    done, preparing, attention (preparation stopped), ready (approved script and
+    its voice), script (script without voice yet) or none. Reads saved rows
+    only; it never prepares or checks freshness."""
+    from .script_review import latest
+    wanted = set(topic_ids)
+    guides, jobs, tracks = {}, {}, {}
+    for row in db.all('guides'):
+        if row['topic_id'] in wanted and row['mode'] != 'practice':
+            if row['topic_id'] not in guides or (row['created_at'], row['id']) > (guides[row['topic_id']]['created_at'], guides[row['topic_id']]['id']):
+                guides[row['topic_id']] = row
+    for job in db.all('lesson_preparation_jobs'):
+        if job['topic_id'] in wanted and (job['topic_id'] not in jobs or (job['created_at'], job['id']) > (jobs[job['topic_id']]['created_at'], jobs[job['topic_id']]['id'])):
+            jobs[job['topic_id']] = job
+    for track in db.all('audio_tracks'):
+        if track['topic_id'] in wanted and track.get('status') == 'ready' and track.get('manifest_path') \
+                and not (track.get('note') or '').startswith('feedback:'):
+            tracks.setdefault(track['topic_id'], set()).add(track['passage_sha256'])
+    states = {}
+    for topic_id in wanted:
+        topic = db.get('topics', topic_id)
+        if not topic:
+            continue
+        job, guide = jobs.get(topic_id), guides.get(topic_id)
+        if topic.get('completed'):
+            states[topic_id] = 'done'
+        elif job and job['status'] in ACTIVE:
+            states[topic_id] = 'preparing'
+        elif not guide:
+            states[topic_id] = 'attention' if job and job['status'] == 'paused' else 'none'
+        else:
+            report = latest(_Ctx(db), guide['id'])
+            approved = not report or report.get('status') == 'approved'
+            voiced = guide['guide_sha256'] in tracks.get(topic_id, set())
+            states[topic_id] = ('ready' if voiced else 'script') if approved else 'attention'
+    return states
+
+
+class _Ctx:
+    """script_review.latest reads only ctx.store."""
+    def __init__(self, store):
+        self.store = store

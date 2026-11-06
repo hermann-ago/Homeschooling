@@ -49,6 +49,12 @@ def statuses(learner:int, subject:int, topic_ids:list[int]=Query(max_length=200)
     return {'lessons':[service.snapshot(ctx,t,[j for j in jobs if j['topic_id']==t['id']],voice_jobs) for t in topics]}
 
 
+@router.get('/states')
+def lesson_states(topic_ids:list[int]=Query(max_length=400)):
+    """Readiness per lesson for the small status dots (done, ready, script, preparing, attention, none)."""
+    return {'states':{str(k):v for k,v in service.lesson_states(context().store,topic_ids).items()}}
+
+
 @router.post('/estimate')
 def estimate(body:PreparationRequest):
     try:return service.estimate(context(),**body.model_dump(exclude={'topic'}),topic_id=body.topic)
