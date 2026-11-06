@@ -95,9 +95,27 @@ class Script(Content):
         return cls.provider_json_schema()
 
 
+# A teacher sentence may also open with a quotation mark or bracket.
+OPENING_MARKS = "\"'“‘¿¡(["
+
+
+def check_complete_text(script):
+    """Teacher text must not be a cut-off fragment (": cost, choice…"); the
+    reply is malformed and can be replaced, not approved and narrated."""
+    from .guide import GuideError
+    spoken = [('welcome', script.welcome), ('closing', script.closing)]
+    spoken += [(f'teaching step {i + 1}', t.text) for i, t in enumerate(script.turns) if isinstance(t, Say)]
+    spoken += [(f'question {i + 1}', t.prompt) for i, t in enumerate(script.turns) if isinstance(t, Ask)]
+    for name, text in spoken:
+        start = (text or '').strip()[:1]
+        if not start or not (start.isalnum() or start in OPENING_MARKS):
+            raise GuideError(f'The {name} looks cut off ("{(text or "").strip()[:40]}"). Replace this reply.', invalid_response=True)
+
+
 def compile_script(value, passage, context, language):
     from .guide import GuidePlan
     script = Script.model_validate(value)
+    check_complete_text(script)
     if book_questions.read_along(context):
         last_read = max((i for i, t in enumerate(script.turns) if isinstance(t, Read)), default=-1)
         quiz = book_questions.end_quiz(context)

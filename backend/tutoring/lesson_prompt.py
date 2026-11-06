@@ -44,7 +44,8 @@ Your job is that the child understands the material, not merely hears it.
 - Place teaching where understanding needs it, between coherent sections of
   the reading, after a passage it illuminates or before one it prepares for.
   Keep poems and tightly connected scenes uninterrupted. There is no quota or
-  fixed spacing. A say turn that only announces more reading teaches nothing.
+  fixed spacing. A say turn that only announces the next reading or the next
+  questions teaches nothing.
 - Exercises: say what each one practises, give its shared instruction once
   and keep its parts together in one turn. Pace naturally rather than one
   stop per blank. For handwriting models, follow the printed stroke arrows;

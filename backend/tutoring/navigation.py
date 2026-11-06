@@ -268,6 +268,19 @@ def checked_selections(db, topic, rows):
     return result
 
 
+def infer_printed_pages(pages):
+    """A linked page with no visible number (a chapter's first page) takes it from the
+    other linked pages of the same book, when they all agree on one PDF offset."""
+    for document_id in {p['document_id'] for p in pages if p.get('role') != 'assigned_reading'}:
+        same = [p for p in pages if p['document_id'] == document_id and p.get('role') != 'assigned_reading']
+        offsets = {p['page'] - p['printed_page'] for p in same if p.get('printed_page')}
+        if len(offsets) == 1:
+            offset = offsets.pop()
+            for p in same:
+                if not p.get('printed_page') and p['page'] - offset >= 1:
+                    p['printed_page'] = p['page'] - offset
+
+
 def attach(ctx, topic, pdf, metadata):
     import copy
     from .visual_source import _append, _bytes
@@ -287,6 +300,7 @@ def attach(ctx, topic, pdf, metadata):
         validate_source_references(ctx, topic['subject_id'], [{'document_id': doc['id'], 'page': p}
             for p in range(s['page_start'], s['page_end']+1)])
         _append(ctx, writer, public['pages'], doc, range(s['page_start'], s['page_end']+1), s['role'])
+    infer_printed_pages(public['pages'])
     planner = _bytes(writer)
     import hashlib
     public['attachment_sha256'] = hashlib.sha256(planner).hexdigest()

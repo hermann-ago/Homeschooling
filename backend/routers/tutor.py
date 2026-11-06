@@ -903,6 +903,8 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
             learner_context['teaching_script']={'version':teaching_script.VERSION,'script':copy.deepcopy(plan)}
             try:
                 plan=teaching_script.compile_script(plan,package,learner_context,language)
+            except guide_mod.GuideError:
+                raise
             except ValueError as exc:
                 raise guide_mod.GuideError(str(exc)) from exc
         from tutoring import lesson_quality
