@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlightItemIndices, locateSentences, partForSentence, sentenceAt } from './readAlong';
+import { highlightItemIndices, locateSentences, locateText, partForSentence, sentenceAt } from './readAlong';
 
 describe('read-along alignment', () => {
   const pages = [
@@ -38,5 +38,20 @@ describe('read-along alignment', () => {
     expect(sentenceAt(parts[1], 4.8)).toBe(4);
     expect(partForSentence(parts, 3)).toBe(1);
     expect(partForSentence(parts, 9)).toBe(-1);
+  });
+});
+
+describe('transcribed readings against garbled text layers', () => {
+  const items = [{ str: 'T he Black Death raged for years. when the' }, { str: 'plague finally ended, a very differ-' }, { str: 'ent world was left.' },
+    { str: '232 The Story of the World: Volume 2' }];
+  it('matches by letters, despite split words, lost capitals and line-end hyphens', () => {
+    expect([...highlightItemIndices(items, 'The Black Death raged for years.')]).toEqual([0]);
+    expect([...highlightItemIndices(items, 'When the plague finally ended, a very different world was left.')]).toEqual([0, 1, 2]);
+  });
+  it('finds the page of a spoken sentence and ignores very short ones', () => {
+    const pages = [{ page: 246, text: 'A New Way of Living T he Black Death raged' }, { page: 247, text: 'noblemen who had to pay them grew poorer' }];
+    expect(locateText(pages, 'The noblemen who had to pay them grew poorer;')).toBeNull();
+    expect(locateText(pages, 'noblemen who had to pay them grew poorer; because')?.page).toBe(247);
+    expect(locateText(pages, 'Yes.')).toBeNull();
   });
 });

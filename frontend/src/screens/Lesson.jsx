@@ -25,7 +25,7 @@ import { keys, useInserts, useSetLessonDone } from '../api/queries';
 import { useLearner } from '../app/learnerContext';
 import { Button, IconButton, SegmentedControl, useConfirm, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
-import { locateSentences } from '../utils/readAlong';
+import { locateSentences, locateText } from '../utils/readAlong';
 
 async function pageTexts(documentId, start, end) {
   // The same range as the page viewer's, so the two share one download.
@@ -181,6 +181,7 @@ export default function Lesson() {
   const [guideIndex, setGuideIndex] = useState(null);
   const [readMode, setReadMode] = useState(null);
   const [sentencePages, setSentencePages] = useState([]);
+  const [bookTexts, setBookTexts] = useState([]);
   const [closed, setClosed] = useState(false);
   const [tab, setTab] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -221,8 +222,8 @@ export default function Lesson() {
   useEffect(() => {
     if (!passage?.document_id || passage.hide_pdf || !passage.sentences?.length) return;
     pageTexts(passage.document_id, passage.pdf_pages.start, passage.pdf_pages.end)
-      .then((texts) => setSentencePages(locateSentences(texts, passage.sentences)))
-      .catch(() => setSentencePages([]));
+      .then((texts) => { setBookTexts(texts); setSentencePages(locateSentences(texts, passage.sentences)); })
+      .catch(() => { setBookTexts([]); setSentencePages([]); });
   }, [passage]);
 
   const slot = useMemo(() => passage && ({
@@ -258,7 +259,11 @@ export default function Lesson() {
   const sourceIndex = mode === 'guide'
     ? (guideIndex !== null ? guide?.sentences[guideIndex]?.source ?? null : null)
     : activeIndex;
-  const highlight = sourceIndex !== null ? passage.sentences[sourceIndex]?.text : null;
+  // A transcribed reading has no link to the page's text layer: follow the spoken book sentence itself.
+  const spoken = mode === 'guide' && guideIndex !== null && sourceIndex === null && guide?.sentences[guideIndex]?.kind === 'book'
+    ? guide.sentences[guideIndex].text : null;
+  const highlight = sourceIndex !== null ? passage.sentences[sourceIndex]?.text : spoken;
+  const spokenPage = spoken ? locateText(bookTexts, spoken)?.page ?? null : null;
   const pages = passage.printed_pages.start === passage.printed_pages.end
     ? `page ${passage.printed_pages.start}` : `pages ${passage.printed_pages.start}–${passage.printed_pages.end}`;
 
@@ -329,7 +334,7 @@ export default function Lesson() {
           {viewerSlot?.document_id ? (
             <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
               highlightSentence={!viewing && hasText && !passageVoice ? highlight : null}
-              requestedPage={!viewing && sourceIndex !== null ? sentencePages[sourceIndex] : null} />
+              requestedPage={viewing ? null : sourceIndex !== null ? sentencePages[sourceIndex] : spokenPage} />
           ) : (
             <div className="h-full grid place-items-center p-8 text-center">
               <div className="flex flex-col items-center gap-3 max-w-sm">

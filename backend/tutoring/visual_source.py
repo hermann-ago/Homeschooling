@@ -67,6 +67,12 @@ def prepare(ctx, topic, package, skill_content):
     for page in range(first, last + 1):
         if blank_page(reader.pages[page - 1]):
             pages[page - first]['blank'] = True
+        if not topic.get('pdf_page_offset'):
+            # No recorded offset: use the number printed on the page itself, when one is visible.
+            from .exercise_assignment import printed_page
+            printed = printed_page(reader.pages[page - 1], page)
+            if printed:
+                pages[page - first]['printed_page'] = printed
         writer.add_page(reader.pages[page - 1])
     # Only selected pages and their referenced resources go to the provider.
     writer.remove_links()

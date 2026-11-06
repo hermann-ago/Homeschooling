@@ -16,21 +16,43 @@ export function normalise(text) {
     .toLowerCase();
 }
 
-function probe(sentence) {
-  const text = normalise(sentence);
-  return text.length <= 40 ? text : text.slice(0, 40);
+/**
+ * Letters and digits only. PDF text layers split words ("T he"), drop capitals,
+ * hyphenate at line ends and mix in quotes and spaces; a transcription of the
+ * same page does not. Comparing only letters and digits survives all of that.
+ */
+export function compact(text) {
+  return normalise(text).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+const PROBE = 32;
+const MIN_PROBE = 6;
+
+function probe(text) {
+  const letters = compact(text);
+  return letters.slice(0, PROBE);
+}
+
+/** Page (PDF) where text is found, searching forward from fromIndex; null when absent. */
+export function locateText(pageTexts, text, fromIndex = 0) {
+  const needle = probe(text);
+  if (needle.length < MIN_PROBE) return null;
+  for (let i = Math.max(0, fromIndex); i < pageTexts.length; i += 1) {
+    if (compact(pageTexts[i].text).includes(needle)) return { index: i, page: pageTexts[i].page };
+  }
+  return null;
 }
 
 /** Page number (PDF) for each sentence, following reading order. */
 export function locateSentences(pageTexts, sentences) {
-  const pages = pageTexts.map(({ page, text }) => ({ page, text: normalise(text) }));
+  const pages = pageTexts.map(({ page, text }) => ({ page, text: compact(text) }));
   const result = [];
   let pageIndex = 0;
   let offset = 0;
   sentences.forEach((sentence) => {
     const needle = probe(sentence.text);
     let found = null;
-    for (let i = pageIndex; i < pages.length && found === null; i += 1) {
+    for (let i = pageIndex; needle.length >= MIN_PROBE && i < pages.length && found === null; i += 1) {
       const position = pages[i].text.indexOf(needle, i === pageIndex ? offset : 0);
       if (position >= 0) found = { index: i, position };
     }
@@ -51,14 +73,15 @@ export function highlightItemIndices(items, sentence) {
   const ranges = [];
   let joined = '';
   items.forEach((item, index) => {
-    const text = normalise(item.str);
+    const text = compact(item.str);
     if (!text) return;
-    if (joined) joined += ' ';
     ranges.push({ index, start: joined.length, end: joined.length + text.length });
     joined += text;
   });
-  const full = normalise(sentence);
-  let start = joined.indexOf(probe(sentence));
+  const full = compact(sentence);
+  const needle = full.slice(0, PROBE);
+  if (needle.length < MIN_PROBE) return new Set();
+  let start = joined.indexOf(needle);
   let end;
   if (start >= 0) {
     end = start + full.length;
