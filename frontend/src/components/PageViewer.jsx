@@ -136,7 +136,8 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
     if (!requestedPage || requestedPage === page || !pdfData) return;
     if (requestedPage < physicalStart || requestedPage > physicalEnd) return;
     annotation.flush().then(() => setPage(requestedPage));
-  }, [requestedPage]);
+    // Also once the pages have loaded: a sentence spoken before that still turns the page.
+  }, [requestedPage, pdfData]);
 
   const pdfFile = useMemo(
     () => (pdfData ? { data: pdfData.slice() } : null),
