@@ -159,7 +159,6 @@ export function GuidePanel({ guide, learner, topic, session, pinned, slotId, clo
   </div>;
   return <div className="guide-chat-panel" data-in-session={Boolean(session)}>
     {preparation}
-    {!guide.current && !pinned && <p className="px-4 py-2 text-sm bg-attention-soft">Update available · the teaching instructions or book pages have changed.</p>}
     <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson} earlierVersion={earlierVersion} newerVersion={newerVersion} warmUp={warmUp}
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} closed={closed} language={language} onStarted={onStarted} onFinished={onFinished}
       onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} bookOnPage={bookOnPage} lessonOptions={<>

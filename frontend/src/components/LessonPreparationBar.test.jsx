@@ -81,3 +81,11 @@ it('opens narrator samples directly from the lesson preparation bar without star
   expect(screen.getByRole('link', { name: 'Family & child narrators' }).getAttribute('href')).toMatch(/^\/settings\?app_mode=.*#narrator-voices$/);
   expect(screen.queryByText('Preparing audio')).toBeNull();
 });
+
+it('offers the update beside the notice when a saved script is outdated', async () => {
+  show({ guide_id: 'g1', script_status: 'outdated', audio: { status: 'ready' } }, { guide: { guide_id: 'g1', current: false, audio: [] } });
+  expect(await screen.findByText(/changed since this lesson was prepared/)).toBeTruthy();
+  expect(screen.getByRole('region', { name: 'Lesson preparation' }).dataset.update).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'Update lesson & voice' }));
+  expect(screen.getByText('Preparing both')).toBeTruthy();
+});

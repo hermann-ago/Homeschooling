@@ -38,18 +38,21 @@ export default function LessonPreparationBar({ learner, topic, guide, pinned, on
   const voiced = status.audio?.status === 'ready';
   const audioBusy = ['queued', 'running', 'aligning'].includes(status.audio?.status) || busy && status.job?.phase === 'audio';
   const olderVersion = pinned && data?.guide_id && data.guide_id !== guide?.guide_id;
+  // The saved script still works, but its instructions or pages changed: offer the update here.
+  const update = status.script_status === 'outdated' && !pinned && !busy;
   const label = busy ? status.job?.phase === 'review' ? 'Reviewing lesson…' : status.job?.phase === 'audio' || status.audio?.status === 'running' ? 'Preparing voice…' : 'Preparing lesson…'
-    : !ready ? 'Prepare lesson & voice' : !voiced ? 'Prepare voice' : 'Lesson & voice';
-  return <section aria-label="Lesson preparation" className="lesson-preparation-bar">
+    : update ? 'Update lesson & voice' : !ready ? 'Prepare lesson & voice' : !voiced ? 'Prepare voice' : 'Lesson & voice';
+  return <section aria-label="Lesson preparation" className="lesson-preparation-bar" data-update={update || undefined}>
     <div className="min-w-0 text-xs text-muted" role="status">
       <p className="font-semibold text-ink">Lesson preparation</p>
       <p>Guide {ready ? 'ready' : status.script_status === 'outdated' ? 'update available' : 'not prepared'}{ORIGIN[status.origin || guide?.origin] ? ` · ${ORIGIN[status.origin || guide?.origin]}` : ''} · Voice {voiced ? 'ready' : audioBusy ? 'preparing' : busy ? 'waiting for the script' : 'not prepared'}</p>
+      {update && <p className="text-attention">The teaching instructions or book pages changed since this lesson was prepared.</p>}
       {status.job?.error && !busy && !reviewRecovered(status) && <p className="text-attention">Preparation needs attention</p>}
     </div>
     <div className="flex flex-wrap items-center gap-2">
       <Button size="sm" disabled={busy} onClick={() => setNarratorsOpen(true)}>Narrator &amp; samples</Button>
       {olderVersion ? <Button as="a" size="sm" href={modeHref(`/lesson?learner=${learner}&topic=${topic}`)}>Prepare current version</Button>
-        : <Button size="sm" variant={ready ? 'secondary' : 'primary'} icon={busy ? LoaderCircle : WandSparkles} onClick={() => setOpen(true)}>{label}</Button>}
+        : <Button size="sm" variant={ready && !update ? 'secondary' : 'primary'} icon={busy ? LoaderCircle : WandSparkles} onClick={() => setOpen(true)}>{label}</Button>}
     </div>
     {(busy || data?.job?.status === 'paused') && <div className="basis-full"><PreparationProgress status={status}/></div>}
     {error && <div className="basis-full text-xs"><p role="alert">Could not refresh preparation status. The home computer may still be working.</p><button className="text-action underline" onClick={() => refetch()}>Refresh preparation status</button></div>}

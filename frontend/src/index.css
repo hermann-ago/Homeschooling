@@ -259,7 +259,7 @@
   .lesson-preparation-bar > .app-button { min-width: 0; max-width: 55%; white-space: normal; height: auto; min-height: 2.75rem; }
   .tutor-thread-content { padding: .75rem; }
   /* During a lesson the parent preparation tools give the reading area their room. */
-  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar { display: none; }
+  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar:not([data-update]) { display: none; }
   .lesson-workspace-switch { padding-top: .3rem; padding-bottom: .3rem; }
   .tutor-chat-header { padding: .35rem .75rem; grid-template-columns: minmax(0, 1fr) auto; column-gap: .35rem; }
   /* One header row on phones: voice controls beside Take a break and the menu. */
@@ -332,7 +332,7 @@
    takes one row, and Continue shares a row with the voice button. */
 @media (min-width: 1024px) and (max-height: 860px) {
   .lesson-header { min-height: 2.75rem; padding-top: .25rem; padding-bottom: .25rem; }
-  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar { display: none; }
+  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar:not([data-update]) { display: none; }
   .tutor-chat-header { padding: .35rem .75rem; grid-template-columns: minmax(0, 1fr) auto; column-gap: .35rem; gap: .35rem; }
   .tutor-chat-header > .tutor-header-top { grid-column: 2; grid-row: 1; }
   .tutor-chat-header > .tutor-header-top > p:first-child { display: none; }
