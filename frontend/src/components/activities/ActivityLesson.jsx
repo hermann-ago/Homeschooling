@@ -13,6 +13,7 @@ import { AttemptNavigation, CatchUpNotice, ClosingSummary, LessonPosition } from
 import { Celebration } from './Progress';
 import LessonOptions from './LessonOptions';
 import PageWorkCapture from './PageWorkCapture';
+import BookCheck from './BookCheck';
 import { focusLessonControl } from '../../utils/lessonFocus';
 
 const responseText = (response) => response.confirmed_text || (typeof response.original === 'string' ? response.original : response.original?.text) || response.text || '';
@@ -48,7 +49,7 @@ function ActivityHistory({ activity, activities, language, onSource, expanded, f
   if (ancestors.includes(activity.id)) return null;
   const children = activities.filter((item) => item.parent_activity_id === activity.id);
   return <details open={expanded || undefined} className="rounded-xl border border-line bg-paper/40 p-3">
-    <summary className="font-semibold text-sm cursor-pointer">{activityDefinition(activity).label} · {activity.status === 'skipped' ? 'To revisit' : activity.status === 'pending' ? finished ? 'Saved · Not completed' : 'In progress' : 'Completed'}</summary>
+    <summary className="font-semibold text-sm cursor-pointer">{activityDefinition(activity).label} · {activity.status === 'skipped' ? 'To revisit' : activity.status === 'in_book' ? 'Done in the book' : activity.status === 'pending' ? finished ? 'Saved · Not completed' : 'In progress' : 'Completed'}</summary>
     <div className="mt-3 flex flex-col gap-3"><ActivityCard activity={activity} language={language} onSource={onSource} readOnly /><SavedThread activity={activity} renderFeedback={renderFeedback} />
       {children.map((child) => <ActivityHistory key={child.id} activity={child} activities={activities} language={language} onSource={onSource} expanded={expanded} finished={finished} ancestors={[...ancestors, activity.id]} renderFeedback={renderFeedback} />)}
     </div>
@@ -257,7 +258,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const workedReady = activity?.kind !== 'worked_example' || ['practice', 'complete'].includes(stage);
   const directCapture = activity?.direct_capture ?? (activity?.content?.evidence_requirement === 'spelling' && activity.content.response_modes?.includes('text'));
   const physicalReady = directCapture || activity?.kind !== 'request_book_work' || ['capture', 'response', 'awaiting_confirmation', 'ready_to_assess', 'completed'].includes(String(stage)) || activity.physical_complete;
-  const captures = activity && needsResponse(activity) && activity.status === 'pending' && (!status || ['awaiting_input', 'awaiting_followup'].includes(status) || directCapture && status === 'awaiting_work') && !awaitingConfirmation && !awaitingAssessment && !parentReview && !awaitingReveal && workedReady && physicalReady;
+  const paced = Boolean(activity?.paced);
+  const captures = !paced && activity && needsResponse(activity) && activity.status === 'pending' && (!status || ['awaiting_input', 'awaiting_followup'].includes(status) || directCapture && status === 'awaiting_work') && !awaitingConfirmation && !awaitingAssessment && !parentReview && !awaitingReveal && workedReady && physicalReady;
   const currentMessages = activity?.interaction?.is_replay || activity?.interaction?.replay_of
     ? (activity.messages || []).filter((item) => item.sequence > activity.interaction.dialogue_start_sequence)
     : activity?.messages || [];
@@ -276,7 +278,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const activityPlace = `${activity?.id || 'summary'}.${activity?.interaction?.id || ''}.${Boolean(state.on_break)}`;
   const minimized = minimizedActivity === activityPlace;
   // Hands-on book work: a grown-up looks at the book and confirms, instead of Continue.
-  const parentCheck = activity?.kind === 'explain_or_observe' && activity.content?.parent_check && activity.status === 'pending';
+  const parentCheck = !paced && activity?.kind === 'explain_or_observe' && activity.content?.parent_check && activity.status === 'pending';
   const canContinue = activity && (activity.can_continue_discussion || activity.status !== 'pending' || status === 'ready_to_continue' && !needsResponse(activity) && workedReady) && (activity.kind !== 'read_source' || activity.status !== 'pending');
   const unfinished = state.activities?.filter((item) => item.status === 'skipped').length || 0;
   const history = visibleActivities(state);
@@ -340,6 +342,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       <div ref={workbox} hidden={minimized} id="current-activity-content" className="tutor-workbox-content custom-scrollbar">
       {state.on_break ? <section aria-label="Lesson break" className="flex flex-col gap-3"><h2 className="font-semibold">Your place is saved</h2><p className="text-sm">Take your break. Your pending activity and original answers will be here when you return.</p></section> : <>
         <CatchUpNotice state={state} busy={busy || Boolean(pending)} onFocus={() => event('focus_unfinished')} />
+        {activity?.kind === 'close_lesson' && activity.status === 'pending' && state.book_check?.count > 0 && <BookCheck check={state.book_check} sessionId={sessionId} onUpload={upload} onEvent={event} busy={busy || Boolean(pending)} />}
         <ClosingSummary state={state} busy={busy || Boolean(pending)} onRepeat={onRepeat} onRevisit={(activityId) => event('revisit_activity', { activity_id: activityId })} />
             {workGroup ? <PageWorkCapture key={workGroup.id || activity.id} group={workGroup} sessionId={sessionId} draftIdentity={`${activity.id}.${activity.interaction?.id}`} onUpload={upload} onEvent={async (type, payload) => { if(type === 'close_page_work') setSingleItemExercise(activity.id); return event(type, payload); }} onSingleItem={() => setSingleItemExercise(activity.id)} busy={busy || Boolean(pending)} draftEvidence={(state.draft_evidence || []).filter(file => file.action_id === activity?.id)} /> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current flex flex-col gap-4">
               {activity.practice_section && <div aria-label="Practice section progress"><progress className="w-full h-1 accent-[var(--color-action)]" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} /><p className="text-xs text-muted">One item at a time. Your answers stay saved together in this practice section.</p></div>}
@@ -361,7 +364,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
       {!state.on_break && !workGroup && <>{state.orientation && <div className="flex flex-col gap-2" role="status"><p className="text-sm">{typeof state.orientation === 'string' ? state.orientation : state.orientation.text || 'Welcome back. Return to the activity where you paused.'}</p><Button size="sm" disabled={busy || Boolean(pending)} onClick={() => event('acknowledge_return')}>Continue with this activity</Button></div>}{activity && !definition.internal && <>
         {state.page_work?.available_count > 1 && <div className="rounded-xl bg-action-soft p-3 flex flex-col gap-2"><p className="text-sm">You can photograph these {state.page_work.available_count} book questions together.</p><Button disabled={busy || Boolean(pending)} onClick={() => event('open_page_work')}>Send this page together</Button></div>}
-        {activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
+        {paced && <p role="status" className="text-sm rounded-xl bg-action-soft p-3">Do this in your book, then press <strong>Done</strong>. A grown-up checks the book later.</p>}
+        {!paced && activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
         {captures && <ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={busy || Boolean(pending)} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)} />}
         {awaitingConfirmation && response && <ConfirmResponse key={response.id} sessionId={sessionId} language={language} response={response} busy={busy || Boolean(pending)} checkOnConfirm={activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection'} onConfirm={(text) => event('confirm_response', { response_id: response.id, text, ...((activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection') ? { assess_after_confirm: true } : {}) })} />}
         {awaitingConfirmation && response?.transcription_status === 'failed' && <Button size="sm" disabled={busy || Boolean(pending)} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
@@ -384,17 +388,17 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           {/* After a miss, the teaching set aside by "Let me try first" is one tap away. */}
           {activity.teaching_available && (activity.responses?.length > 0 || activity.parent_activity_id) && <Button disabled={busy || Boolean(pending)} onClick={() => event('show_teaching')}>Show me how</Button>}
           {/* Two equal choices; everything else waits inside Help, in one style. */}
-          <div className={needsResponse(activity) || activity.can_try_first ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
+          <div className={needsResponse(activity) && !paced || activity.can_try_first ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
             <Button aria-expanded={helpOpen} aria-controls={`help-${activity.id}`} disabled={busy || Boolean(pending)} onClick={() => setHelpOpen((open) => !open)}>{helpOpen ? 'Close help' : 'Help'}</Button>
-            {needsResponse(activity) && <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>}
+            {needsResponse(activity) && !paced && <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>}
             {!needsResponse(activity) && activity.can_try_first && <Button disabled={busy || Boolean(pending)} onClick={() => event('try_first')}>Let me try first</Button>}
           </div>
           {helpOpen && <div id={`help-${activity.id}`} role="group" aria-label="Help choices" className="rounded-xl border border-line bg-paper/40 p-2 flex flex-col gap-1">
             {activity.teaching_available && !activity.responses?.length && !activity.parent_activity_id && <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending)} onClick={() => { setHelpOpen(false); event('show_teaching'); }}>Show me the lesson first</Button>}
-            {(needsResponse(activity) || activity.kind === 'read_source') && [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']].map(([kind, label]) =>
+            {(needsResponse(activity) && !paced || activity.kind === 'read_source') && [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']].map(([kind, label]) =>
               <Button key={kind} variant="quiet" className="justify-start" disabled={busy || Boolean(pending) || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)}
                 onClick={() => { setHelpOpen(false); event('request_hint', { kind }); }}>{label}</Button>)}
-            {activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id &&
+            {!paced && activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id &&
               <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending)} onClick={() => { setHelpOpen(false); event('parent_check', { result: 'checked' }); }}>A grown-up checked this in the book</Button>}
             <label className="text-sm font-semibold flex flex-col gap-1 p-2">Ask your teacher a question<textarea rows={2} value={question} maxLength={2000} className={`${inputClasses} h-auto py-2 font-normal`} disabled={busy} onChange={(event) => setQuestion(event.target.value)} /></label>
             <Button variant="quiet" className="justify-start" disabled={busy || Boolean(pending) || !question.trim()} onClick={async () => { const next = await event('request_followup', { prompt: question }); if (next) { setQuestion(''); setHelpOpen(false); } }}>Ask</Button>
@@ -404,11 +408,16 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       </div>
       {/* Continue and the voice button share one footer; short screens set them in one row. */}
       <div className="tutor-composer-footer">
-      {(state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending' || canContinue && definition.family !== 'unsupported' && definition.family !== 'break') && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
+      {!(paced && !state.on_break) && (state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending' || canContinue && definition.family !== 'unsupported' && definition.family !== 'break') && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
         {activity?.can_continue_discussion && <p className="text-sm text-muted">You can continue with this explanation, or add more to your answer if you want.</p>}
         {activity?.kind === 'close_lesson' && !state.on_break && <p role="status" className="text-sm text-muted">Your work is saved. Choose Finish lesson to mark this chapter complete in Curriculum. Any work left to revisit stays in your record.</p>}
           <Button variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event(state.on_break ? 'resume' : sourceIssue ? 'acknowledge_source_issue' : activity.kind === 'read_source' && activity.status === 'pending' ? 'reading_done' : activity.kind === 'close_lesson' ? 'finish' : 'continue', sourceIssue ? { response_id: response.id } : {})}>
           {state.on_break ? 'Return to lesson' : state.page_work?.status === 'completed' ? 'Continue lesson' : activity.kind === 'read_source' && activity.status === 'pending' ? 'I have finished this reading' : activity.kind === 'close_lesson' ? 'Finish lesson' : activity.practice_section?.item < activity.practice_section?.total ? activity.practice_section.kind==='spelling' ? 'Next word' : 'Next item' : 'Continue lesson'}
+        </Button>
+      </div>}
+      {paced && !state.on_break && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
+        <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('done_in_book')}>
+          {activity.practice_section?.total > 1 ? `Done · all ${activity.practice_section.total - activity.practice_section.item + 1} in my book` : 'Done in my book'}
         </Button>
       </div>}
       {parentCheck && !state.on_break && <div hidden={minimized} className="tutor-step-actions parent-check" aria-label="Grown-up check">

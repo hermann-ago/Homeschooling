@@ -121,7 +121,10 @@ context, plus the private bundle for disputes. Evidence type comes from the
 exercise's declared response format. Hands-on work judged by looking (lines,
 colouring, tracing) uses `parent_check`: the step waits until a grown-up taps
 **Looks good** (or **Let's try again**) and records no grade. A grown-up can
-also confirm any other unassigned book exercise from the lesson help. The family sees every recorded answer in
+also confirm any other unassigned book exercise from the lesson help. In a subject set to **Book exercises: Done in the book**, the
+child does each exercise in the book and moves on without sending answers;
+the closing step offers an optional photo check of the pages
+(ACTIVITY_ENGINE.md, "Book work done in the book"). The family sees every recorded answer in
 Curriculum → Prepare lesson → Script review → **Answer key (teacher only)**.
 
 ## After a lesson

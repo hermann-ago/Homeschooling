@@ -38,6 +38,19 @@
         "8765"
       ],
       "port": 8765
+    },
+    {
+      "name": "paced-demo",
+      "runtimeExecutable": "C:/CodingLocal/Homeschooling/backend/venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "C:/CodingLocal/Homeschooling/backend/dev/activity_demo.py",
+        "--aligned-voice",
+        "--practice-sections",
+        "--paced-book-work",
+        "--port",
+        "8766"
+      ],
+      "port": 8766
     }
   ]
 }

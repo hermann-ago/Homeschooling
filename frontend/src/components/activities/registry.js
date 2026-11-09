@@ -44,7 +44,7 @@ export function visibleActivities(state) {
   const activeId = state?.active_activity?.id;
   return (state?.activities || []).filter((activity) =>
     activity.status !== 'not_assigned' && !activityDefinition(activity).internal && activity.id !== activeId &&
-    (activity.status === 'answered' || activity.status === 'skipped' || activity.upcoming === false && activity.interaction));
+    (activity.status === 'answered' || activity.status === 'skipped' || activity.status === 'in_book' || activity.upcoming === false && activity.interaction));
 }
 
 export function practiceHistory(activities) {

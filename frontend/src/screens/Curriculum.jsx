@@ -105,6 +105,7 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
   const [form, setForm] = useState({
     name: subject.name, weight: subject.weight ?? 1, slot_type: subject.slot_type || 'A', end_date: subject.end_date || '',
     grade: subject.grade || 'N/A', weekdays: subject.weekdays ?? null, extra_questions: subject.extra_questions || 'open',
+    book_work: subject.book_work || 'tutor',
   });
   const toast = useToast();
   const change = useChange(subject.id, child.id);
@@ -179,6 +180,14 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
           <span className="text-[13px] text-subtle">{form.extra_questions === 'choice'
             ? 'Questions the tutor adds, and its follow-ups, are true/false or pick one. Book exercises stay as printed. Applies to lessons prepared from now on.'
             : 'The tutor may add typed questions and follow-ups, such as explaining a method.'}</span>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] font-semibold text-muted">Book exercises</span>
+          <SegmentedControl label="Book exercises" size="sm" value={form.book_work} onChange={(book_work) => set({ book_work })}
+            options={[{ value: 'tutor', label: 'Tutor checks answers' }, { value: 'paced', label: 'Done in the book' }]} />
+          <span className="text-[13px] text-subtle">{form.book_work === 'paced'
+            ? 'The tutor reads each exercise; the child does it in the book and moves on without sending answers. At the end, photos of the pages can be checked. Applies to lessons started from now on.'
+            : 'The child sends each answer and the tutor checks it.'}</span>
         </div>
         <SubjectVideos subject={subject} />
         <Field label="Finish by (optional)" type="date" value={form.end_date} onChange={(e) => set({ end_date: e.target.value })}

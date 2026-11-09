@@ -232,3 +232,28 @@ The dialog exposes that choice without changing family settings. Jobs retain it,
 including during restart recovery and progress reporting; omitted/configured
 selection preserves older request fingerprints. The nullable job column uses the
 normal storage upgrade and remains in ordinary backups and test-mode isolation.
+
+## Book work done in the book (paced subjects)
+
+A subject's `book_work` setting (Curriculum → subject → **Book exercises**) is
+`tutor` (default: the child sends answers and the tutor checks them) or `paced`.
+The mode is frozen into `lesson_playback.navigation_state.book_work` when a
+lesson's activities first start; saved guides, running lessons and earlier
+records are unchanged, and the same prepared lesson and voice work in either mode.
+
+In a paced lesson the tutor reads each exercise and the child presses **Done in
+my book** (`done_in_book`). The exercise, and the rest of its practice section
+(same page and format, for example all statements of a true/false exercise),
+become `in_book`: finished, not graded, never "to revisit", and never passed to a
+later lesson as pending work. No answer box, skip, hints for answers or page
+photos are offered for that step.
+
+At the closing step a grown-up can photograph the pages (`submit_book_check`,
+up to 8 photos attached to the closing step). `book_check.py` makes one AI
+request that reads the child's answers against the private keys and marks each
+`looks_right`, `check_again`, `not_found` or `unclear`, with a short note that
+does not give the answer. It is a note for the family: it creates no attempts or
+assessed responses. A failed check keeps its photos (`retry_book_check`). The
+completion summary records `book_work: {mode, in_book, check}`.
+
+Rehearse offline with `backend/dev/activity_demo.py --practice-sections --paced-book-work`.

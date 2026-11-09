@@ -26,6 +26,7 @@ def main():
     parser.add_argument("--aligned-voice", action="store_true", help="Rehearse aligned playback with synthetic audio/timings and no provider calls")
     parser.add_argument("--answer-controls", action="store_true", help="Rehearse true/false, one choice and select-all with invented records")
     parser.add_argument('--practice-sections',action='store_true',help='Rehearse grouped items, typed spelling and matching without family records')
+    parser.add_argument('--paced-book-work', action='store_true', help="Rehearse a subject whose book work is done in the book, with an offline end-of-lesson photo check")
     parser.add_argument('--teaching-script',action='store_true',help='Prepare an offline natural teaching script through the application compiler')
     args = parser.parse_args()
     import uvicorn
@@ -77,6 +78,9 @@ def main():
                 'prompt':'Match each animal to its habitat.','matching':{
                     'items':[{'id':'bird','label':'Bird'},{'id':'fish','label':'Fish'}],
                     'options':[{'id':'water','label':'Water'},{'id':'air','label':'Air'}]}}}]
+        if args.paced_book_work:
+            with ctx.store.transaction() as tx:
+                tx.update("subjects", seeded["history"]["id"], {"book_work": "paced"})
         subject = ctx.store.get("subjects", seeded["history"]["id"])
         if not args.teaching_script:
             with ctx.store.transaction() as tx:
@@ -123,6 +127,13 @@ def main():
                 return schema.model_validate({'feedback': 'Your page is checked.', 'items': [
                     {'item_id': r['item_id'], 'result': 'Correct', 'feedback': 'Your answer matches this book task.', 'ready_to_continue': True}
                     for r in job['input_snapshot']['confirmed']]}).model_dump()
+            if args.paced_book_work and schema and schema.__name__ == 'BookCheckReplyExact':
+                from dependencies import context
+                job = max((j for j in context().store.all('activity_jobs') if j['kind'] == 'book_check'), key=lambda j: j['updated_at'])
+                tasks = job['input_snapshot']['tasks']
+                return schema.model_validate({'summary': 'Offline check: one answer to look at again.', 'items': [
+                    {'item_id': t['item_id'], 'answer': 'True' if i else 'He fought them', 'result': 'looks_right' if i else 'check_again',
+                     'note': '' if i else 'Look again at what happened to the tribes.'} for i, t in enumerate(tasks)]}).model_dump()
             if schema and issubclass(schema,Review):return {'findings':[]}
             if schema and schema.__name__ == "HintReply":
                 if "Show a short worked analogy" in _prompt:

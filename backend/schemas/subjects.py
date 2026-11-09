@@ -5,6 +5,9 @@ from typing import Literal, Optional
 Weekdays = Optional[list[int]]
 # 'choice': the tutor's own added questions are true/false or single choice.
 ExtraQuestions = Literal['open', 'choice']
+# 'paced': the tutor reads each book exercise; the child does it in the book and
+# moves on; a grown-up checks the book (optionally from photos at the end).
+BookWork = Literal['tutor', 'paced']
 
 
 def _weekdays(v):
@@ -21,6 +24,7 @@ class SubjectBase(BaseModel):
     grade: Optional[str] = Field(None, max_length=20)  # this subject's grade; empty: no grade level
     weekdays: Weekdays = None
     extra_questions: Optional[ExtraQuestions] = None
+    book_work: Optional[BookWork] = None
 
     @field_validator('slot_type', mode='before')
     @classmethod
@@ -42,6 +46,7 @@ class SubjectUpdate(BaseModel):
     grade: Optional[str] = Field(None, max_length=20)
     weekdays: Weekdays = None
     extra_questions: Optional[ExtraQuestions] = None
+    book_work: Optional[BookWork] = None
 
     _check_weekdays = field_validator('weekdays')(_weekdays)
 

@@ -176,7 +176,7 @@ class TutorService:
             packet["available_exercises"] = self.ctx.books.eligible(topic, include_optional=True) if topic else []
             packet["pending_exercise_items"] = [{"id": i["id"], "exercise_id": i["exercise_id"], "version_id": i["version_id"],
                 "topic_id": i["topic_id"], "status": i["status"], **self.ctx.books.public(i["snapshot"])}
-                for i in self.store.find("assignment_items", child_id=child_id) if i["topic_id"] in subject_topics and i["status"] != "reviewed"]
+                for i in self.store.find("assignment_items", child_id=child_id) if i["topic_id"] in subject_topics and i["status"] not in ("reviewed", "in_book")]
         packet["learning_memory"] = self.ctx.learning_memory.packet(child_id, subject_id, topic["id"] if topic else None)
         from .source_annotations import packet as annotation_packet
         packet['source_annotations']=annotation_packet(self.store,topic) if topic else []

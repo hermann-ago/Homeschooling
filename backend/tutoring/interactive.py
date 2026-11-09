@@ -131,7 +131,7 @@ class InteractiveTutor:
                 "messages": [{k: m[k] for k in ("id", "action_id", "role", "text", "evidence_ids", "status")} for m in messages],
                 "summary": session["learner_explained"],
                 "can_finish": bool(playback and playback["reading_finished"] and not playback["action_id"]
-                                   and all(a["status"] in ("answered", "skipped", "not_assigned") for a in actions))}
+                                   and all(a["status"] in ("answered", "skipped", "not_assigned", "in_book") for a in actions))}
 
     def _add_action(self, tx, session, action_id, prompt, kind="answer", **extra):
         record_id = f"{session['id']}:{action_id}"
