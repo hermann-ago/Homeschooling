@@ -98,8 +98,9 @@ def toc_entries(text):
 
 def printed_number(line):
     """A page number at the start or end of an edge line; '1919' (text layers that
-    draw the number twice) reads as 19."""
-    match = re.match(r'^\s*(\d{1,4})(?=\s|Chapter|Capítulo|$)', line) or re.search(r'(\d{1,4})\s*$', line)
+    draw the number twice) reads as 19. A number printed against a running head
+    ('23Lições de…') counts too; '3rd' does not."""
+    match = re.match(r'^\s*(\d{1,4})(?=\s|[A-ZÀ-Þ]|$)', line) or re.search(r'(\d{1,4})\s*$', line)
     if not match:
         return None
     digits = match[1]

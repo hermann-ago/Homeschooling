@@ -39,3 +39,5 @@ def test_merged_file_bookmarks_and_doubled_page_numbers():
     assert navigation.FILE_BOOKMARK.search('covers') and not navigation.FILE_BOOKMARK.search('Covering Distance')
     assert navigation.printed_number('1919') == 19 and navigation.printed_number('44') == 4
     assert navigation.printed_number('123') == 123 and navigation.printed_number('© Jenny Phillips') is None
+    assert navigation.printed_number('23Lições de Língua Portuguesa | 3º ano') == 23
+    assert navigation.printed_number('3rd Grade Science') is None
