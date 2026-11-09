@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { addDays, format, isToday, parseISO } from 'date-fns';
-import { BookOpen, CheckCheck, ChevronDown, ChevronRight, Plus, Star, Trash2 } from 'lucide-react';
+import { BookOpen, CheckCheck, ChevronDown, ChevronRight, ListPlus, Plus, Star, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import ScreenHeader from '../app/ScreenHeader';
 import { useLearner } from '../app/learnerContext';
@@ -338,6 +338,13 @@ function SubjectDetail({ subject, child, onDeleted }) {
               {!b.core && b.name !== PRINTED && (
                 <IconButton icon={Star} size="sm" label={`Make ${b.label} the main book`}
                   onClick={() => change(() => subjectsApi.setMainBook(subject.id, b.name, b.document), `${b.title} is now the main book.`)} />
+              )}
+              {!b.core && b.name !== PRINTED && books.some((other) => other.core) && (
+                <Button size="sm" icon={ListPlus} aria-label={`Add ${b.label} to the course after the main book`}
+                  title="For a course split into parts: its lessons come after the main book's"
+                  onClick={() => change(() => subjectsApi.continueCourse(subject.id, b.name, b.document), `${b.title} now continues the course.`)}>
+                  Continues the course
+                </Button>
               )}
               {b.document && <Button size="sm" onClick={() => setDialog({ type: 'offset', book: b })}>Offset {b.offset}</Button>}
               {b.name !== PRINTED && (

@@ -25,6 +25,7 @@ export const subjectsApi = {
   deleteTopic: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}`, { method: 'DELETE' }),
   deleteSubject: (subjectId) => fetchApi(`/subjects/${subjectId}`, { method: 'DELETE' }),
   setMainBook: (subjectId, pdfFilename, document) => fetchApi(`/subjects/${subjectId}/books/set-main-book?pdf_filename=${encodeURIComponent(pdfFilename)}${documentQuery(document)}`, { method: 'PUT' }),
+  continueCourse: (subjectId, pdfFilename, document) => fetchApi(`/subjects/${subjectId}/books/set-main-book?pdf_filename=${encodeURIComponent(pdfFilename)}${documentQuery(document)}&continues=true`, { method: 'PUT' }),
   deleteBook: (subjectId, pdfFilename, document) => fetchApi(`/subjects/${subjectId}/books?pdf_filename=${encodeURIComponent(pdfFilename)}${documentQuery(document)}`, { method: 'DELETE' }),
   setBookOffset: (subjectId, pdfFilename, offset, document) => fetchApi(`/subjects/${subjectId}/books/set-book-offset?pdf_filename=${encodeURIComponent(pdfFilename)}&offset=${offset}${documentQuery(document)}`, { method: 'PUT' }),
   toggleTopicComplete: (subjectId, topicId) => fetchApi(`/subjects/${subjectId}/topics/${topicId}/toggle-complete`, { method: 'POST' }),
