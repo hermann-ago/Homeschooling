@@ -48,7 +48,10 @@ def _book_topics(db, subject_id, filename, document_id=None):
 # ─── Books Management ────────────────────────────────────────────────
 
 @router.put("/{subject_id}/books/set-main-book", response_model=dict, dependencies=[Depends(require_family)])
-def set_main_book(subject_id: int, pdf_filename: str, document_id: int | None = None):
+def set_main_book(subject_id: int, pdf_filename: str, document_id: int | None = None, continues: bool = False):
+    """Choose the book that drives the reading schedule. With continues, the book is
+    added after the current course books instead (a course split into Part 1 and
+    Part 2): its lessons join the course and are ordered after theirs."""
     _subject(subject_id)
     with write("books.set_main") as tx:
         selected = _book_topics(tx, subject_id, pdf_filename, document_id)
@@ -59,6 +62,13 @@ def set_main_book(subject_id: int, pdf_filename: str, document_id: int | None = 
                 if book["role"] in ("workbook", "test", "answer_key"):
                     raise HTTPException(400, "Choose a textbook to drive the reading schedule")
                 tx.update("subject_books", book["id"], {"role": "combined" if book["role"] == "combined" else "textbook"})
+        if continues:
+            earlier = [t for t in tx.find("topics", subject_id=subject_id)
+                       if t["is_core"] and not t.get("archived") and t["id"] not in selected_ids]
+            start = max((t["chapter_order"] or 0 for t in earlier), default=-1) + 1
+            for position, topic in enumerate(sorted(selected, key=lambda t: (t["chapter_order"] or 0, t["id"]))):
+                tx.update("topics", topic["id"], {"is_core": True, "chapter_order": start + position})
+            return {"message": "Book added to the course after the current books", "continues_from": start}
         for topic in tx.find("topics", subject_id=subject_id):
             tx.update("topics", topic["id"], {"is_core": topic['id'] in selected_ids})
     return {"message": "Main book updated"}

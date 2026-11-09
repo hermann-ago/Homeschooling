@@ -17,6 +17,10 @@ from .activities import Content
 VERSION = 'teaching-script-1'
 
 
+# Labels a writer may repeat for a true/false item; the app adds its own.
+TRUE_FALSE_LABELS={'true','false','verdadeiro','falso','v','f','t'}
+
+
 class Response(Content):
     format: Literal['text', 'spelling', 'true_false', 'single_choice', 'multiple_select',
                     'matching', 'reasoning', 'written_steps', 'handwriting', 'diagram', 'observe',
@@ -35,6 +39,8 @@ class Response(Content):
         if self.format=='blanks':
             if not self.blanks:raise ValueError('Blanks list each printed problem that gets its own answer box.')
         elif self.blanks:raise ValueError('Only blanks supply answer-box labels.')
+        if self.format=='true_false' and self.choices and {c.strip().strip('.').casefold() for c in self.choices} <= TRUE_FALSE_LABELS:
+            self.choices=[]  # the plain True/False pair; the app supplies these labels itself
         if self.format in ('single_choice','multiple_select'):
             if len(self.choices)<2:raise ValueError('A choice question needs its full options.')
         elif self.choices:raise ValueError('Only choice questions supply choices; true/false labels are supplied by the app.')

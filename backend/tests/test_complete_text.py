@@ -42,3 +42,11 @@ def test_a_page_without_a_visible_number_takes_its_books_offset():
 def test_a_book_record_without_its_pdf_has_no_chapter_map():
     assert navigation.saved(None, {'id': 1, 'sha256': None}) is None
     assert navigation.saved(None, None) is None
+
+
+def test_a_repeated_true_false_pair_is_dropped_but_other_choices_are_not():
+    from tutoring.teaching_script import Response
+    assert Response(format='true_false', choices=['True', 'False']).choices == []
+    assert Response(format='true_false', choices=['Verdadeiro', 'Falso']).choices == []
+    with pytest.raises(ValueError):
+        Response(format='true_false', choices=['Fact', 'Opinion'])

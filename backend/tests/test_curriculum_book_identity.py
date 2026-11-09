@@ -77,3 +77,16 @@ def test_create_lesson_from_collection_is_source_bound_and_does_not_generate(har
     assert h.call('POST',base,json=body,key='create-source-lesson').json()==result.json()
     assert len(h.ctx.store.all('topics'))==len(before)+1
     assert not h.ctx.store.all('tutor_sessions')
+
+
+def test_a_second_part_continues_the_course_after_the_first(harness):
+    h=harness;s,docs,topics=seed(h)
+    base=f"/api/subjects/{s['id']}/books/set-main-book"
+    # Part 1 (docs[0]) is the main book; Part 2 (docs[1]) continues it.
+    r=h.call('PUT',base,params={'pdf_filename':'Same book.pdf','document_id':docs[1]['id'],'continues':True})
+    assert r.status_code==200,r.text
+    rows=[h.ctx.store.get('topics',t['id']) for t in topics]
+    assert [r['is_core'] for r in rows]==[True,True,True,True]
+    assert [r['chapter_order'] for r in rows]==[0,1,2,3]
+    ordered=h.ctx.tutor._topics(s['id'])
+    assert [t['title'] for t in ordered]==['Lesson 1','Lesson 2','Lesson 61','Lesson 62']

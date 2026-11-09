@@ -106,7 +106,10 @@ def recalculate_schedule(child_id: int, tx, today: date | None = None, now: date
     for s in completed_slots:
         subject_completed_dates.setdefault(s["subject_id"], set()).add(s["date"])
     # A lesson finished in the app today also uses up that subject's day, even without a slot.
+    # Sessions closed because a grown-up marked lessons done by hand were not taught today.
     for session in tx.find("tutor_sessions", child_id=child_id, status="completed"):
+        if session.get("completion_source") == "manual":
+            continue
         if session.get("finished_at") and _local_date(session["finished_at"]) == today:
             subject_completed_dates.setdefault(session["subject_id"], set()).add(today)
 

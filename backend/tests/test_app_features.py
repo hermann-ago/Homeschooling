@@ -108,6 +108,12 @@ def test_replanning_after_a_lesson_finished_today_does_not_add_another_today(har
     with store.transaction() as tx:
         recalculate_schedule(child["id"], tx, today=today)
     assert {s["topic_id"]: s["date"] for s in store.all("scheduled_slots")} == {nxt["id"]: date(2026, 11, 5)}
+    # A session closed because lessons were marked done by hand was not taught today: the day stays free.
+    with store.transaction() as tx:
+        tx.update("tutor_sessions", "plague-session", {"completion_source": "manual"})
+    with store.transaction() as tx:
+        recalculate_schedule(child["id"], tx, today=today)
+    assert {s["topic_id"]: s["date"] for s in store.all("scheduled_slots")} == {nxt["id"]: today}
 
 
 def test_schedule_recalculation_is_one_atomic_operation(harness):
