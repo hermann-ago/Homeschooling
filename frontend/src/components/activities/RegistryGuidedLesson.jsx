@@ -21,7 +21,7 @@ import { operationId, readSaved, storageKey, writeSaved } from './durable';
 import { narrationPlace, narrationRange } from './narrationRange';
 
 function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, language,
-  onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed }) {
+  onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed, bookOnPage = false }) {
   const key = storageKey(state.session_id, `narration.${activity.id}.${activity.interaction?.id || 'legacy'}`);
   const start = activity.start_sentence ?? 0;
   const end = activity.end_sentence ?? guide.sentences.length - 1;
@@ -68,7 +68,7 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language}
       rangeStart={start} rangeEnd={end} visibleThrough={end} savedCursor={savedCursor}
       onCursorChange={changed} onPassageModeChange={onPassageModeChange}
-      settingsInHeader selectedSource={selectedSource} selectedSpeed={selectedSpeed}
+      settingsInHeader selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage}
       externalControls headless={headless} autoPlayRequest={autoPlayRequest} onTransport={transportChanged}
       disabled={state.on_break || activity.status !== 'pending'} onReadingEnd={complete} />
   </div>;
@@ -108,7 +108,7 @@ export function NewerVersionNotice({ newer, onSwitched }) {
 }
 
 export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, earlierVersion, newerVersion, warmUp,
-  activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt }) {
+  activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt, bookOnPage = false }) {
   const [startedSession, setStartedSession] = useState(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
@@ -204,8 +204,8 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language}
     onPassageModeChange={onPassageModeChange} complete={complete} onCursor={setCursor}
     onTransport={setTransport} autoPlayRequest={playRequest?.session === state.session_id && playRequest.place === narrationPlace(activity) ? playRequest.token : 0}
-    selectedSource={selectedSource} selectedSpeed={selectedSpeed} />,
-  [guide, activeIndex, onActiveIndex, language, onPassageModeChange, setCursor, playRequest, selectedSource, selectedSpeed]);
+    selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage} />,
+  [guide, activeIndex, onActiveIndex, language, onPassageModeChange, setCursor, playRequest, selectedSource, selectedSpeed, bookOnPage]);
   const sessionControls = ({ activity, state, busy }) => <SessionNarrationControls tracks={tracks} source={selectedSource} speed={selectedSpeed}
     onChange={changeSettings} onReplay={() => transport?.replay?.()}
     canReplay={Boolean(!busy && !state.on_break && transport?.place === narrationPlace(activity) && transport.available && transport.replay)}
@@ -305,7 +305,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
         : <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
-      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
+      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} readingOnPage={bookOnPage} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;

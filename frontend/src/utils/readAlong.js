@@ -43,6 +43,18 @@ export function locateText(pageTexts, text, fromIndex = 0) {
   return null;
 }
 
+/**
+ * True when the page's own text layer carries most of the passage, so the
+ * highlighted page can stand in for the text in the tutor panel. A scan
+ * without a text layer, or one that differs from the transcription, keeps it.
+ */
+export function passageOnPages(pageTexts, sentences, share = 0.6) {
+  const text = (pageTexts || []).map((page) => compact(page.text)).join('');
+  const probes = (sentences || []).map((sentence) => probe(sentence.text)).filter((needle) => needle.length >= MIN_PROBE);
+  if (!text || !probes.length) return false;
+  return probes.filter((needle) => text.includes(needle)).length >= probes.length * share;
+}
+
 /** Page number (PDF) for each sentence, following reading order. */
 export function locateSentences(pageTexts, sentences) {
   const pages = pageTexts.map(({ page, text }) => ({ page, text: compact(text) }));
@@ -116,4 +128,22 @@ export function sentenceAt(part, time) {
 export function partForSentence(parts, sentenceIndex) {
   return parts.findIndex((p) => sentenceIndex >= p.startSentence && sentenceIndex < p.startSentence +
     (p.timing === 'passage' || p.fallback ? p.sentenceCount : (p.sentenceStarts?.length || 0)));
+}
+
+/**
+ * Scroll offsets that bring the highlighted box into a zoomed page's view,
+ * or null when it already shows. A sentence lands a third of the way down and
+ * centred across; one larger than the view starts at its top-left corner.
+ */
+export function followScroll(view, box, scroll, margin = 32) {
+  let { top, left } = scroll;
+  if (box.top < view.top + margin || box.bottom > view.bottom - margin) {
+    top += box.top - view.top - Math.max(margin, (view.bottom - view.top - (box.bottom - box.top)) / 3);
+  }
+  if (box.left < view.left + margin || box.right > view.right - margin) {
+    left += box.left - view.left - Math.max(margin, (view.right - view.left - (box.right - box.left)) / 2);
+  }
+  top = Math.max(0, Math.round(top));
+  left = Math.max(0, Math.round(left));
+  return top === scroll.top && left === scroll.left ? null : { top, left };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlightItemIndices, locateSentences, locateText, partForSentence, sentenceAt } from './readAlong';
+import { followScroll, highlightItemIndices, locateSentences, locateText, partForSentence, passageOnPages, sentenceAt } from './readAlong';
 
 describe('read-along alignment', () => {
   const pages = [
@@ -53,5 +53,25 @@ describe('transcribed readings against garbled text layers', () => {
     expect(locateText(pages, 'The noblemen who had to pay them grew poorer;')).toBeNull();
     expect(locateText(pages, 'noblemen who had to pay them grew poorer; because')?.page).toBe(247);
     expect(locateText(pages, 'Yes.')).toBeNull();
+  });
+});
+
+describe('following the book page instead of the panel text', () => {
+  const sentences = [{ text: 'The Mongols came from the north.' }, { text: 'They lived in felt tents.' }, { text: 'Genghis Khan united the tribes.' }];
+  it('lets the page stand in for the text only when its text layer carries the passage', () => {
+    expect(passageOnPages([{ page: 3, text: 'T he Mongols came from the north. They lived in felt tents.' }, { page: 4, text: 'Genghis Khan united the tribes.' }], sentences)).toBe(true);
+    expect(passageOnPages([{ page: 3, text: '' }], sentences)).toBe(false);
+    expect(passageOnPages([{ page: 3, text: 'A different page entirely, about rivers and boats.' }], sentences)).toBe(false);
+    expect(passageOnPages([], sentences)).toBe(false);
+  });
+  it('scrolls a zoomed page only when the highlight is out of view', () => {
+    const view = { top: 100, bottom: 600, left: 0, right: 500 };
+    expect(followScroll(view, { top: 200, bottom: 240, left: 50, right: 450 }, { top: 0, left: 0 })).toBeNull();
+    // Below the view: brought a third of the way down, horizontal place kept.
+    expect(followScroll(view, { top: 700, bottom: 740, left: 50, right: 450 }, { top: 0, left: 0 })).toEqual({ top: 447, left: 0 });
+    // Off to the right on a zoomed landscape page: centred across.
+    expect(followScroll(view, { top: 200, bottom: 240, left: 900, right: 1100 }, { top: 0, left: 0 })).toEqual({ top: 0, left: 750 });
+    // Taller than the view: its top lands at the margin.
+    expect(followScroll(view, { top: 50, bottom: 900, left: 50, right: 450 }, { top: 300, left: 0 })).toEqual({ top: 218, left: 0 });
   });
 });

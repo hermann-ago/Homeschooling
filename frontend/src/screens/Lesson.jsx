@@ -25,7 +25,21 @@ import { keys, useInserts, useSetLessonDone } from '../api/queries';
 import { useLearner } from '../app/learnerContext';
 import { Button, IconButton, SegmentedControl, useConfirm, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
-import { locateSentences, locateText } from '../utils/readAlong';
+import { locateSentences, locateText, passageOnPages } from '../utils/readAlong';
+
+/** Book and tutor side by side (the workspace's lg layout); narrower screens show one at a time. */
+const SIDE_BY_SIDE = '(min-width: 1024px)';
+function useSideBySide() {
+  const [matches, setMatches] = useState(() => window.matchMedia?.(SIDE_BY_SIDE).matches ?? true);
+  useEffect(() => {
+    const list = window.matchMedia?.(SIDE_BY_SIDE);
+    if (!list) return undefined;
+    const change = () => setMatches(list.matches);
+    list.addEventListener?.('change', change);
+    return () => list.removeEventListener?.('change', change);
+  }, []);
+  return matches;
+}
 
 async function pageTexts(documentId, start, end) {
   // The same range as the page viewer's, so the two share one download.
@@ -134,7 +148,7 @@ export function LessonReadMode({ mode, onChange, resumePath }) {
 }
 
 /** The guided lesson: written once by the AI, then read like any passage. */
-export function GuidePanel({ guide, learner, topic, session, pinned, slotId, closed, resumeLesson, earlierVersion, newerVersion, warmUp, activeIndex, onActiveIndex, language, onChanged, onStarted, onFinished, onPassageModeChange, onSource }) {
+export function GuidePanel({ guide, learner, topic, session, pinned, slotId, closed, resumeLesson, earlierVersion, newerVersion, warmUp, activeIndex, onActiveIndex, language, onChanged, onStarted, onFinished, onPassageModeChange, onSource, bookOnPage = false }) {
   const preparation = <LessonPreparationBar learner={learner} topic={topic} guide={guide} pinned={pinned} onChanged={onChanged} />;
   if (!guide) return <div className="flex flex-col min-h-0">
     {preparation}
@@ -148,7 +162,7 @@ export function GuidePanel({ guide, learner, topic, session, pinned, slotId, clo
     {!guide.current && !pinned && <p className="px-4 py-2 text-sm bg-attention-soft">Update available · the teaching instructions or book pages have changed.</p>}
     <InteractiveGuidedLesson key={`guide-${guide.guide_id}`} guide={guide} learner={learner} topic={topic} session={session} slotId={slotId} resumeLesson={resumeLesson} earlierVersion={earlierVersion} newerVersion={newerVersion} warmUp={warmUp}
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} closed={closed} language={language} onStarted={onStarted} onFinished={onFinished}
-      onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} lessonOptions={<>
+      onPassageModeChange={onPassageModeChange} onSource={onSource} onVoiceBuilt={onChanged} bookOnPage={bookOnPage} lessonOptions={<>
         <LessonSourcePages topic={topic}/>
         <ExerciseAssignment topic={topic}/>
         <p className="text-xs text-muted">Prepared{guide.created_at ? ` on ${new Date(guide.created_at).toLocaleDateString()}` : ''}. Guide and voice generation are available above the lesson.</p>
@@ -186,6 +200,7 @@ export default function Lesson() {
   const [tab, setTab] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [sourcePage, setSourcePage] = useState(null);
+  const sideBySide = useSideBySide();
   const [done, setDone] = useSlotDone(slotId);
   const started = useCallback((id) => {
     setParams((previous) => { const next = new URLSearchParams(previous); next.set('session', id); return next; }, { replace: true });
@@ -238,6 +253,9 @@ export default function Lesson() {
   const child = findLearner(Number(learner));
   const tones = learnerTones(child?.color || '#2d5f54');
   const hasBook = Boolean(passage.document_id && !passage.hide_pdf);
+  // The book's words are followed on the highlighted page beside the tutor, so
+  // the tutor panel shows only the teacher's words. The script is unchanged.
+  const bookOnPage = hasBook && sideBySide && !viewing && !passageVoice && passageOnPages(bookTexts, passage.sentences);
   const hasText = passage.sentences.length > 0;
   const reviewed = passage.status === 'verified';
   const voiceReady = lesson.audio.some((t) => t.synchronized && (t.preferred ?? true));
@@ -357,7 +375,7 @@ export default function Lesson() {
               {activeTab === 'read' && mode === 'guide' && (
                 <GuidePanel guide={guide} learner={learner} topic={topic} session={session} pinned={lesson.interactive} slotId={slotId} closed={closed} resumeLesson={lesson.resume_lesson} earlierVersion={lesson.resume_current_lesson?.earlier_version ? lesson.resume_current_lesson : null} newerVersion={lesson.newer_version} warmUp={lesson.warm_up}
                   activeIndex={guideIndex} onActiveIndex={setGuideIndex} language={lesson.language} onChanged={load}
-                  onPassageModeChange={setPassageVoice}
+                  onPassageModeChange={setPassageVoice} bookOnPage={bookOnPage}
                   onSource={(source) => { pauseNarration(); setSourcePage(source); }}
                   onStarted={started} onFinished={() => { setClosed(true); setDone(true); load(); }} />
               )}

@@ -18,7 +18,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   onAction, onReadingEnd, pendingActions = [], renderAction, resumeToken = 0, maxSeekIndex, onPassageModeChange,
   rangeStart = 0, rangeEnd, visibleThrough, savedCursor, onCursorChange, voiceSetup,
   externalControls = false, headless = false, autoPlayRequest = 0, onTransport,
-  settingsInHeader = false, selectedSource, selectedSpeed }) {
+  settingsInHeader = false, selectedSource, selectedSpeed, bookOnPage = false }) {
   const sentences = passage?.sentences || [];
   const lastSentence = Math.min(rangeEnd ?? sentences.length - 1, sentences.length - 1);
   const resumableCursor = savedCursor && Number.isInteger(savedCursor.sentence_index) &&
@@ -33,6 +33,9 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const [playing, setPlaying] = useState(false);
   // The range was read to its end; the next step can take over.
   const [ended, setEnded] = useState(false);
+  // The book's own words are followed on the highlighted page; the panel keeps the teacher's.
+  const [showBookText, setShowBookText] = useState(false);
+  const followBook = bookOnPage && !showBookText;
   const preferredSource = usable.find((t) => t.preferred && t.synchronized)?.track_id;
   useEffect(() => {
     if (playing) playbackStarted.current = true;
@@ -459,7 +462,11 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
           <div><p className="font-semibold">No recorded audio for this passage</p>
             <p className="mt-0.5 text-muted">Read this part yourself, or use device voice.</p></div>
         </div>}
-        {runs.map((run) => (run.kind === 'teacher' ? (
+        {bookOnPage && runs.some((run) => run.kind === 'book') && <p className="book-follow-note">
+          <span>{followBook ? 'Follow the highlighted lines in the book.' : 'The book text is also highlighted on the page.'}</span>
+          <button type="button" onClick={() => setShowBookText((shown) => !shown)}>{followBook ? 'Show the text here' : 'Hide the text here'}</button>
+        </p>}
+        {runs.filter((run) => !(followBook && run.kind === 'book')).map((run) => (run.kind === 'teacher' ? (
           <div key={run.items[0]} className="teacher-note text-[16px]">
             <span className="teacher-note-label">Teacher</span>
             <p className="m-0">{run.items.map(flow)}</p>

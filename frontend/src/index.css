@@ -133,6 +133,8 @@
 .teacher-note-label { display: block; margin-bottom: .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8A6100; }
 /* The sentence being spoken inside a note, stronger than the note itself. */
 .teacher-note [aria-current="true"] { background: #F5C842; border-radius: 4px; box-shadow: 0 0 0 2px #F5C842; }
+.book-follow-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; margin: 0; font-size: .875rem; color: var(--color-muted); }
+.book-follow-note > button { color: var(--color-action); font-weight: 600; text-decoration: underline; min-height: 2.25rem; }
 
 /* Lesson workspace: the book and conversation own the available height. */
 .app-shell, .lesson-workspace { height: var(--app-height, 100dvh); }
@@ -193,6 +195,8 @@
 .tutor-workbox-content .response-composer { border: 0; border-radius: 0; border-top: 1px solid var(--color-line); padding: .85rem 0 0; background: transparent; }
 .tutor-history-placeholder { text-align: center; padding: 1rem 0; }
 .tutor-composer:empty { display: none; }
+.tutor-composer-footer { flex-shrink: 0; display: flex; flex-direction: column; }
+.tutor-composer-footer:empty { display: none; }
 .response-composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .55rem .65rem; padding: .8rem; border: 1px solid var(--color-line); border-radius: 1.25rem; background: var(--color-paper); }
 .response-composer > label, .response-composer > fieldset, .response-composer > p, .response-composer > input { grid-column: 1 / -1; }
 .response-composer > label:first-child { flex-direction: row; align-items: center; justify-content: space-between; font-size: .75rem; }
@@ -321,3 +325,34 @@
 .lesson-dot--preparing { background: var(--color-ready); animation: lesson-dot-pulse 1.4s ease-in-out infinite; }
 @keyframes lesson-dot-pulse { 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .lesson-dot--preparing { animation: none; opacity: .6; } }
+
+/* Landscape tablets and short laptop windows: the book and the tutor sit side by
+   side with little height, so the activity card keeps the room. The parent's
+   preparation tools wait outside the lesson (as on phones), the tutor header
+   takes one row, and Continue shares a row with the voice button. */
+@media (min-width: 1024px) and (max-height: 860px) {
+  .lesson-header { min-height: 2.75rem; padding-top: .25rem; padding-bottom: .25rem; }
+  .guide-chat-panel[data-in-session="true"] > .lesson-preparation-bar { display: none; }
+  .tutor-chat-header { padding: .35rem .75rem; grid-template-columns: minmax(0, 1fr) auto; column-gap: .35rem; gap: .35rem; }
+  .tutor-chat-header > .tutor-header-top { grid-column: 2; grid-row: 1; }
+  .tutor-chat-header > .tutor-header-top > p:first-child { display: none; }
+  .tutor-chat-header > .tutor-session-controls { grid-column: 1; grid-row: 1; }
+  .tutor-chat-header > :not(.tutor-header-top):not(.tutor-session-controls) { grid-column: 1 / -1; }
+  .tutor-chat-header .tutor-session-controls > .lesson-options { display: none; }
+  .tutor-chat-header .tutor-session-controls { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .tutor-chat-header .tutor-session-controls label:nth-child(2) select { width: 3.75rem; }
+  .tutor-composer { margin: 0 .5rem .5rem; max-height: 90%; }
+  .tutor-composer[data-expanded="true"] { height: 96%; max-height: 96%; }
+  .tutor-composer[data-minimized="true"] { height: auto; max-height: none; }
+  .tutor-workbox-header { padding: .1rem .75rem; }
+  .tutor-workbox-size, .tutor-session-controls .lesson-options > summary { min-height: 2.25rem; }
+  .tutor-workbox-content { padding: .75rem 1rem; gap: .65rem; }
+  .tutor-composer-footer { flex-direction: row; flex-wrap: wrap; align-items: center; border-top: 1px solid var(--color-line); }
+  .tutor-composer-footer > .tutor-step-actions { flex: 1 1 14rem; border-top: 0; padding: .5rem .75rem; }
+  .tutor-composer-footer > .parent-check { flex-basis: 100%; }
+  .tutor-composer-footer > .tutor-narration { flex: 0 1 auto; min-width: 0; margin-left: auto; border-top: 0; }
+  .tutor-composer-footer > .tutor-narration .tutor-narration-controls { padding: .4rem .75rem .4rem 0; }
+  .tutor-composer-footer > .tutor-narration .tutor-narration-controls > p:not(.sr-only) { max-width: 12rem; }
+  .tutor-composer-footer > .tutor-narration:only-child { flex: 1; }
+  .tutor-composer-footer > .tutor-narration:only-child .tutor-narration-controls { padding-left: 1rem; }
+}

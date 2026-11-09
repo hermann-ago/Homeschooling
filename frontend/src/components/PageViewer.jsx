@@ -8,7 +8,7 @@ import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
 import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
 import { toPhysicalPage } from './pdfAnnotations/annotationGeometry';
-import { highlightItemIndices } from '../utils/readAlong';
+import { followScroll, highlightItemIndices } from '../utils/readAlong';
 import { useConfirm } from '../ui/useFeedback';
 import { printLessonPages } from '../utils/printLessonPages';
 import { pauseNarration } from '../utils/narration';
@@ -57,6 +57,8 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
   const [textItems, setTextItems] = useState([]);
   const viewportRef = useRef(null);
   const pageSurfaceRef = useRef(null);
+  const touchedAt = useRef(0);
+  const followed = useRef('');
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -148,6 +150,41 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
   const boundedEnd = documentInfo
     ? Math.min(physicalEnd, documentInfo.page_count)
     : physicalEnd;
+
+  // Keep the sentence being read in view when the page is zoomed past the
+  // screen. The text layer draws its marks after rendering, so wait for them.
+  // A child who moves the page by hand keeps it for a few seconds.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const surface = pageSurfaceRef.current;
+    if (!viewport || !surface || !highlighted.size) return undefined;
+    const key = `${page}|${renderWidth}|${highlightSentence}`;
+    let frame = 0;
+    const follow = () => {
+      frame = 0;
+      if (followed.current === key || Date.now() - touchedAt.current < 4000) return;
+      const marks = [...surface.querySelectorAll('mark.readalong-mark')].map((mark) => mark.getBoundingClientRect()).filter((rect) => rect.width || rect.height);
+      if (!marks.length) return;
+      followed.current = key;
+      const box = { top: Math.min(...marks.map((r) => r.top)), bottom: Math.max(...marks.map((r) => r.bottom)),
+        left: Math.min(...marks.map((r) => r.left)), right: Math.max(...marks.map((r) => r.right)) };
+      const target = followScroll(viewport.getBoundingClientRect(), box, { top: viewport.scrollTop, left: viewport.scrollLeft });
+      if (target) viewport.scrollTo?.({ ...target, behavior: 'smooth' });
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(follow); };
+    const observer = new MutationObserver(schedule);
+    observer.observe(surface, { childList: true, subtree: true });
+    schedule();
+    return () => { observer.disconnect(); if (frame) window.cancelAnimationFrame(frame); };
+  }, [highlighted, page, renderWidth, highlightSentence]);
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const touched = () => { touchedAt.current = Date.now(); };
+    const events = ['pointerdown', 'wheel', 'touchstart', 'keydown'];
+    events.forEach((name) => viewport.addEventListener(name, touched, { passive: true }));
+    return () => events.forEach((name) => viewport.removeEventListener(name, touched));
+  }, []);
 
   if (!slot || !slot.document_id) return null;
 

@@ -77,7 +77,7 @@ function ParentReview({ response, busy, onEvent, sourceIssue = false }) {
 }
 
 /** Chronological, server-owned lesson. Upcoming activity content never enters the DOM. */
-export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderTeacherText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions }) {
+export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderTeacherText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions, readingOnPage = false }) {
   const [state, setState] = useState(null);
   const stateRef = useRef(null);
   const [problem, setProblem] = useState('');
@@ -272,7 +272,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const exercisePreview = !state.page_work?.id && state.page_work?.exercise && singleItemExercise !== activity?.id
     ? { ...state.page_work.exercise, status: 'ready' } : null;
   const workGroup = state.page_work?.id ? state.page_work : exercisePreview;
-  const expanded = expandedActivity && expandedActivity.id === sectionPlace ? expandedActivity.value : activity?.kind === 'read_source' || Boolean(workGroup);
+  const expanded = expandedActivity && expandedActivity.id === sectionPlace ? expandedActivity.value : (activity?.kind === 'read_source' && !readingOnPage) || Boolean(workGroup);
   const activityPlace = `${activity?.id || 'summary'}.${activity?.interaction?.id || ''}.${Boolean(state.on_break)}`;
   const minimized = minimizedActivity === activityPlace;
   // Hands-on book work: a grown-up looks at the book and confirms, instead of Continue.
@@ -402,6 +402,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         </div>}
       </>}</>}
       </div>
+      {/* Continue and the voice button share one footer; short screens set them in one row. */}
+      <div className="tutor-composer-footer">
       {(state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending' || canContinue && definition.family !== 'unsupported' && definition.family !== 'break') && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
         {activity?.can_continue_discussion && <p className="text-sm text-muted">You can continue with this explanation, or add more to your answer if you want.</p>}
         {activity?.kind === 'close_lesson' && !state.on_break && <p role="status" className="text-sm text-muted">Your work is saved. Choose Finish lesson to mark this chapter complete in Curriculum. Any work left to revisit stays in your record.</p>}
@@ -417,6 +419,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         </div>
       </div>}
       {renderNarration && <div hidden={minimized || state.on_break} className="tutor-narration">{renderNarration({ activity, state, busy: busy || Boolean(pending) })}</div>}
+      </div>
     </section>
   </section>;
 }

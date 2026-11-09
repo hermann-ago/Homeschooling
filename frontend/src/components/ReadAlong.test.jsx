@@ -17,6 +17,22 @@ function Harness({ tracks }) {
 }
 
 describe('ReadAlong', () => {
+  it('leaves the book text to the highlighted page and keeps the teacher talking in the panel', () => {
+    const lesson = { sentences: [
+      { text: 'Let us read about the tribes.', kind: 'teacher' },
+      { text: 'The Mongols came from the north.', kind: 'book' },
+      { text: 'They lived in felt tents.', kind: 'book' },
+    ] };
+    render(<ReadAlong passage={lesson} tracks={[]} activeIndex={1} onActiveIndex={() => {}} bookOnPage />);
+    expect(screen.getByText('Let us read about the tribes.')).toBeTruthy();
+    expect(screen.queryByText('The Mongols came from the north.')).toBeNull();
+    expect(screen.getByText('Follow the highlighted lines in the book.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show the text here' }));
+    expect(screen.getByText('The Mongols came from the north.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Hide the text here' }));
+    expect(screen.queryByText('They lived in felt tents.')).toBeNull();
+  });
+
   it('flows sentences inside their source paragraphs and keeps seeking keyboard accessible', () => {
     const changed = vi.fn();
     const source = { sentences: [
