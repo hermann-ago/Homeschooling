@@ -41,8 +41,10 @@ def _exercise(action):
 
 
 # Finished steps. "in_book": done in the book in a paced lesson; a grown-up
-# checks the book, so it is neither answered here nor owed later.
-DONE = ("answered", "skipped", "in_book")
+# checks the book, so it is neither answered here nor owed later. "checking":
+# a photo of the work is being checked in the background; "fix": that check
+# found something to look at again (photo_check.py).
+DONE = ("answered", "skipped", "in_book", "checking", "fix")
 
 
 def _paced(playback):
@@ -254,10 +256,14 @@ class ActivityEngine:
             **{k: action.get(k) for k in ("start_sentence", "end_sentence", "resume_index")}}
 
     def state(self, session_id):
+        from . import photo_check
         self.bootstrap(session_id)
+        # Waiting photo checks start here too, so they resume after a server restart.
+        photo_check.start(self, session_id)
         session = self._session(session_id)
         playback = self.db.get("lesson_playback", session_id)
         actions = sorted(self.db.find("lesson_actions", session_id=session_id), key=lambda a: (a.get("activity_order") or 0, a["created_at"], a["id"]))
+        checks = photo_check.overview(self.db, session_id)
         views = [self._view(a, a["action_id"] == playback["action_id"]) for a in actions]
         events = sorted(self.db.find("activity_events", session_id=session_id), key=lambda e: e["sequence"])
         jobs = {job["id"]: job for job in self.db.find("activity_jobs", session_id=session_id)}
@@ -298,6 +304,10 @@ class ActivityEngine:
             active["teaching_available"] = bool(exercise_row and self._skipped_teaching(actions, playback, exercise_row))
             active["review_after_video"] = self._review_after_video(actions, playback, active_row)
             active["paced"] = bool(_paced(playback) and _exercise(active_row) and active_row["status"] == "pending")
+            waiting = (active.get("interaction") or {}).get("status") in ("awaiting_work", "awaiting_input", "awaiting_followup")
+            active["snap"] = bool(not _paced(playback) and photo_check.snappable(active_row) and waiting)
+            if photo_check.fixing(active_row):
+                active["fix"] = {k: v for k, v in (checks.get(active_row["action_id"]) or {}).items() if k in ("read", "result", "feedback")}
         legacy = self.tutor.interactive.state(session_id)
         legacy["actions"] = [{k: a[k] for k in ("id", "action_id", "kind", "status", "prompt", "next_prompt", "help_given")}
             if a["action_id"] == playback["action_id"] or a["status"] != "pending" else
@@ -316,7 +326,8 @@ class ActivityEngine:
             "book_work": "paced" if paced else "tutor",
             "book_check": book_check.public(self, session, actions) if paced else None,
             "status": session["status"], "playback": safe_playback, "active_activity": active, "activities": views,
-            "progress": self._progress(actions, session_id),
+            "progress": self._progress(actions, session_id, checks, session["status"] == "completed"),
+            "checking": photo_check.running(self.db, session_id),
             "completion_summary": session.get("completion_summary"),
             "learning_summary": self._learning_summary(session, actions) if session["status"] == "completed" or active and active["kind"] == "close_lesson" else None,
             "catch_up": self._catch_up_info(session, actions),
@@ -736,7 +747,7 @@ class ActivityEngine:
             tx.insert("activity_drafts", {"id": interaction["id"], **row})
 
     def command(self, session_id, expected_revision, operation_id, activity_id, interaction_id, event_type, payload):
-        from . import page_work, book_check
+        from . import page_work, book_check, photo_check
         fingerprint = _hash([activity_id, interaction_id, event_type, payload])
         with self.lock(session_id):
             self.bootstrap(session_id)
@@ -888,11 +899,15 @@ class ActivityEngine:
                     self._done_in_book(tx, session, action, interaction)
                 elif event_type in book_check.EVENTS:
                     book_check.apply(self, tx, session, action, event_type, payload, operation_id)
+                elif event_type in photo_check.EVENTS:
+                    photo_check.apply(self, tx, session, action, interaction, event_type, payload, operation_id)
                 elif event_type == "finish":
                     if action["activity_kind"] != "close_lesson":
                         raise TutorError("Finish from the lesson's closing activity")
                     if any(a["status"] == "pending" and a["id"] != action["id"] for a in tx.find("lesson_actions", session_id=session_id)):
                         raise TutorConflict("Complete or skip unfinished activities before finishing")
+                    if photo_check.running(tx, session_id):
+                        raise TutorConflict("Your photos are still being checked. Finish in a moment")
                     tx.update("lesson_actions", action["id"], {"status": "answered"})
                     tx.update("activity_interactions", interaction["id"], {"status": "completed"})
                     tx.update("lesson_playback", session_id, {"action_id": None, "reading_finished": True})
@@ -1209,14 +1224,9 @@ class ActivityEngine:
         interaction = tx.update("activity_interactions", interaction["id"], {"status": "ready_to_continue"})
         self._continue(tx, session, action, interaction)
 
-    def _done_in_book(self, tx, session, action, interaction):
-        """Paced lessons: the child did this exercise in the book. It and the
-        rest of its practice section (same page and format) are done together;
-        nothing is graded and nothing is carried to a later lesson."""
-        if not _paced(tx.get("lesson_playback", session["id"])):
-            raise TutorError("This lesson checks answers here; send the answer or skip it")
-        if not _exercise(action) or action["status"] != "pending":
-            raise TutorConflict("This step is not book work waiting to be done")
+    def _section_group(self, tx, session, action):
+        """This exercise and the still-pending rest of its practice section
+        (same page and format): one press or one photo covers them together."""
         from .exercise_sections import sections
         actions = self._main_sequence(tx.find("lesson_actions", session_id=session["id"]))
         grouped = sections([{**a, "activity_content": capture_content(self.ctx, a)} for a in actions])
@@ -1228,7 +1238,17 @@ class ActivityEngine:
                 break
             if later["status"] == "pending":
                 group.append(later)
-        for item in group:
+        return group
+
+    def _done_in_book(self, tx, session, action, interaction):
+        """Paced lessons: the child did this exercise in the book. It and the
+        rest of its practice section (same page and format) are done together;
+        nothing is graded and nothing is carried to a later lesson."""
+        if not _paced(tx.get("lesson_playback", session["id"])):
+            raise TutorError("This lesson checks answers here; send the answer or skip it")
+        if not _exercise(action) or action["status"] != "pending":
+            raise TutorConflict("This step is not book work waiting to be done")
+        for item in self._section_group(tx, session, action):
             tx.update("lesson_actions", item["id"], {"status": "in_book"})
             if item.get("assignment_item_id"):
                 tx.update("assignment_items", item["assignment_item_id"], {"status": "in_book"})
@@ -1237,13 +1257,16 @@ class ActivityEngine:
                 tx.update("activity_interactions", current["id"], {"status": "completed"})
         self._continue(tx, session, self._action(tx, session["id"], action["action_id"]), interaction)
 
-    def _progress(self, actions, session_id):
+    def _progress(self, actions, session_id, checks=None, finished=False):
         """One entry per exercise, for the child's dots and end-of-lesson celebration.
 
         first_try: right on the first answer without help; again: right after
         another go or with help; practise: moved on without getting it right;
         done: checked by a grown-up or answered without a right/wrong verdict.
+        Photo answers add checking (being read), unchecked (the check failed)
+        and fix (something to look at again; "practise" once the lesson ends).
         """
+        checks = checks or {}
         said = {}
         for m in sorted(self.db.find("lesson_dialogue", session_id=session_id), key=lambda m: m["sequence"] or 0):
             if m["role"] == "student" and m["status"] == "assessed":
@@ -1253,17 +1276,22 @@ class ActivityEngine:
             if not _exercise(action) or action["status"] == "not_assigned":
                 continue
             results = said.get(action["action_id"], [])
+            check = checks.get(action["action_id"])
             outcome = ("skipped" if action["status"] == "skipped"
+                       else ("practise" if finished else "fix") if action["status"] == "fix"
+                       else ("unchecked" if finished or (check or {}).get("status") == "failed" else "checking") if action["status"] == "checking"
                        else "first_try" if results[:1] == ["Correct"] and not action.get("help_given")
                        else "again" if "Correct" in results
                        else "practise" if action["status"] == "answered" and results
                        else "done" if action["status"] in ("answered", "in_book")
                        else "pending")
-            items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt")})
-        graded = [i for i in items if i["outcome"] in ("first_try", "again", "practise")]
-        return {"items": [{k: i[k] for k in ("id", "outcome")} for i in items],
+            items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt"),
+                **({"check": {**{k: check.get(k) for k in ("read", "result", "feedback", "error") if check.get(k)},
+                              "prompt": action.get("prompt")}} if check and outcome in ("fix", "unchecked", "checking", "practise") else {})})
+        graded = [i for i in items if i["outcome"] in ("first_try", "again", "practise", "fix")]
+        return {"items": [{k: i[k] for k in ("id", "outcome", "check") if k in i} for i in items],
                 "first_try": sum(i["outcome"] == "first_try" for i in items), "graded": len(graded),
-                "practise": [i["prompt"] for i in items if i["outcome"] in ("again", "practise")][:6]}
+                "practise": [i["prompt"] for i in items if i["outcome"] in ("again", "practise", "fix")][:6]}
 
     # "Let me try first": a child who knows the material goes straight to the
     # next exercise. The teaching before it is set aside (not_assigned, so it is
@@ -1372,6 +1400,8 @@ class ActivityEngine:
         back = action.get("return_cursor") or {}
         if back.get("action_id"):
             tx.update("lesson_playback", session["id"], {k: back[k] for k in ("action_id", "sentence_index", "resume_index", "narration_cursor") if k in back})
+            if back.get("fix"):
+                tx.update("lesson_actions", action["id"], {"return_cursor": None})
             return
         pending = sorted((a for a in tx.find("lesson_actions", session_id=session["id"]) if a["status"] == "pending" and not a.get("parent_activity_id")),
                          key=lambda a: (a.get("activity_order") or 0, a["id"]))
@@ -1812,7 +1842,7 @@ class ActivityEngine:
         return {**state, **({"error": result["error"]} if failed else {})}
 
     def _finish(self, session_id):
-        from . import book_check
+        from . import book_check, photo_check
         session = self._session(session_id)
         if session["status"] == "completed":
             return self.state(session_id)
@@ -1841,7 +1871,9 @@ class ActivityEngine:
                 "attempt_ids": [a["id"] for a in tx.find("attempts", session_id=session_id)],
                 "pending_work": [{"activity_id": a["action_id"], "prompt": a["prompt"], "origin": a.get("origin"), "status": a["status"]}
                     for a in actions if a["status"] in ("pending", "skipped")],
-                **({"book_work": book_check.summary(tx, session_id, actions)} if _paced(tx.get("lesson_playback", session_id)) else {})}})
+                **({"book_work": book_check.summary(tx, session_id, actions)} if _paced(tx.get("lesson_playback", session_id)) else {}),
+                **({"photo_checks": photo_check.summary(tx, session_id, actions)}
+                   if any(a["status"] in ("fix", "checking") for a in actions) else {})}})
         self.tutor.close_reader(session_id)
         return self.state(session_id)
 

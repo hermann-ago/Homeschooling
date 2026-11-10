@@ -187,7 +187,7 @@ function EditSubjectDialog({ subject, child, onClose, onDeleted }) {
             options={[{ value: 'tutor', label: 'Tutor checks answers' }, { value: 'paced', label: 'Done in the book' }]} />
           <span className="text-[13px] text-subtle">{form.book_work === 'paced'
             ? 'The tutor reads each exercise; the child does it in the book and moves on without sending answers. At the end, photos of the pages can be checked. Applies to lessons started from now on.'
-            : 'The child sends each answer and the tutor checks it.'}</span>
+            : 'The child takes a photo of each exercise (or answers on screen). The tutor checks it while the lesson continues.'}</span>
         </div>
         <SubjectVideos subject={subject} />
         <Field label="Finish by (optional)" type="date" value={form.end_date} onChange={(e) => set({ end_date: e.target.value })}

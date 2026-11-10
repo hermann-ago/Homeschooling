@@ -306,6 +306,23 @@
 .progress-dot.is-current { outline: 2px solid var(--color-action); outline-offset: 2px; }
 .progress-dot.is-new { animation: dot-pop .5s ease-out; }
 @keyframes dot-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.6); } 100% { transform: scale(1); } }
+.progress-tracker { margin-top: .5rem; }
+.progress-tracker > .progress-dots { margin-top: 0; align-items: center; }
+.progress-dot > button { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; border-radius: 999px; font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer; color: inherit; }
+/* Photo answers: a chip the child can tap while its check runs or after it found something. */
+.progress-dot.is-checking, .progress-dot.is-fix, .progress-dot.is-unchecked { width: 1.5rem; height: 1.5rem; }
+.progress-dot.is-checking { border-color: var(--color-action); border-top-color: transparent; animation: dot-spin 1s linear infinite; }
+.progress-dot.is-fix { background: var(--color-attention-soft); border-color: var(--color-attention); color: var(--color-attention); }
+.progress-dot.is-unchecked { border-style: dashed; color: var(--color-muted); }
+@keyframes dot-spin { to { transform: rotate(360deg); } }
+.progress-status { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-top: .35rem; font-size: .75rem; }
+.progress-fix { border-radius: 999px; padding: .2rem .7rem; min-height: 1.75rem; border: 1px solid var(--color-attention); background: var(--color-attention-soft); color: var(--color-attention); font-weight: 700; cursor: pointer; }
+.snap-view { border-radius: .75rem; overflow: hidden; background: #000; }
+.snap-view > video, .snap-view > img { display: block; width: 100%; max-height: 38vh; object-fit: contain; }
+.snap-work > .app-button { width: 100%; }
+.tutor-step-actions > button.snap-alt { width: auto; margin-top: .4rem; font-size: .75rem; color: var(--color-action); text-decoration: underline; }
+@media (pointer: coarse) { .progress-fix { min-height: 2.25rem; padding: .3rem .9rem; } .tutor-step-actions > button.snap-alt { min-height: 2rem; } }
+@media (prefers-reduced-motion: reduce) { .progress-dot.is-checking { animation: none; border-top-color: var(--color-action); border-style: dotted; } }
 .celebration-stars { display: flex; justify-content: center; gap: .4rem; font-size: 1.6rem; color: #d9a21b; }
 .celebration-stars span { display: inline-block; animation: star-rise .9s ease-out both; animation-delay: calc(var(--i) * 90ms); }
 @keyframes star-rise { 0% { opacity: 0; transform: translateY(.8rem) scale(.4) rotate(-30deg); } 70% { opacity: 1; transform: translateY(-.25rem) scale(1.2) rotate(8deg); } 100% { transform: none; } }

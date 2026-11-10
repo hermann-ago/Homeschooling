@@ -10,7 +10,8 @@ import { activityDefinition, needsResponse, responseStage, visibleActivities, pr
 import { operationCommitted, operationId, readSaved, storageKey, writeSaved } from './durable';
 import { learningLabel } from '../../utils/learningLabels';
 import { AttemptNavigation, CatchUpNotice, ClosingSummary, LessonPosition } from './LessonOverview';
-import { Celebration } from './Progress';
+import { Celebration, ToFix } from './Progress';
+import SnapWork from './SnapWork';
 import LessonOptions from './LessonOptions';
 import PageWorkCapture from './PageWorkCapture';
 import BookCheck from './BookCheck';
@@ -78,6 +79,9 @@ function ParentReview({ response, busy, onEvent, sourceIssue = false }) {
 }
 
 /** Chronological, server-owned lesson. Upcoming activity content never enters the DOM. */
+// Steps that carry no typed answer: safe to send again on the refreshed lesson.
+const SAFE_AGAIN = ['continue', 'reading_done', 'done_in_book', 'snap_work', 'fix_work', 'fix_later', 'retry_photo_check'];
+
 export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderTeacherText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions, readingOnPage = false }) {
   const [state, setState] = useState(null);
   const stateRef = useRef(null);
@@ -92,6 +96,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const [triedAgain, setTriedAgain] = useState(null); // interaction where the grown-up asked for another go
   const [minimizedActivity, setMinimizedActivity] = useState(null);
   const [singleItemExercise, setSingleItemExercise] = useState(null);
+  const [typing, setTyping] = useState(null); // the exercise answered here instead of with a photo
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(true);
   const threadScroll = useRef(null);
@@ -131,12 +136,15 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const queue = useRef(Promise.resolve());
   const sending = useRef(false);
   const pendingKey = storageKey(sessionId, 'pending');
-  const update = useCallback((next) => {
+  const update = useCallback((next, background = false) => {
     if (!next) return;
+    const before = stateRef.current;
+    const samePlace = background && before && before.active_activity?.id === next.active_activity?.id
+      && before.active_activity?.interaction?.id === next.active_activity?.interaction?.id && Boolean(before.on_break) === Boolean(next.on_break);
     stateRef.current = next; setState(next);
     if (next.error) setProblem(next.error);
     callbacks.current.onState?.(next);
-    if (next.on_break || next.active_activity && next.active_activity.kind !== 'read_source') callbacks.current.onPauseNarration?.();
+    if (!samePlace && (next.on_break || next.active_activity && next.active_activity.kind !== 'read_source')) callbacks.current.onPauseNarration?.();
     const saved = readSaved(pendingKey);
     if (operationCommitted(next, saved)) { writeSaved(pendingKey, null); setPending(null); }
   }, [pendingKey]);
@@ -156,19 +164,22 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         }
         if (!cancelled && (!stateRef.current || next.revision !== stateRef.current.revision || next.event_cursor !== stateRef.current.event_cursor ||
             next.tutor_activity_access !== stateRef.current.tutor_activity_access ||
-            JSON.stringify(next.attempt_navigation) !== JSON.stringify(stateRef.current.attempt_navigation))) update(next);
+            JSON.stringify(next.attempt_navigation) !== JSON.stringify(stateRef.current.attempt_navigation))) update(next, true);
       } catch (error) { if (!cancelled) { failedLoad = clean(error); setProblem(failedLoad); } }
       finally { loading = false; }
     };
     stateRef.current = null; setState(null); setPending(readSaved(pendingKey));
     load(); const timer = window.setInterval(load, 4000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    // While a photo is being checked, look for its result more often.
+    const quick = window.setInterval(() => { if (stateRef.current?.checking) load(); }, 1500);
+    return () => { cancelled = true; window.clearInterval(timer); window.clearInterval(quick); };
   }, [sessionId, pendingKey, update]);
 
   const execute = useCallback((command) => {
     if (sending.current) return Promise.resolve(null);
     sending.current = true;
-    const work = async () => {
+    const fixing = Boolean(stateRef.current?.active_activity?.fix);
+    const work = async (retry = true) => {
       setBusy(true); setProblem(''); callbacks.current.onPauseNarration?.();
       // Persist the exact operation before transport. A retry replays this object.
       writeSaved(pendingKey, command); setPending(command);
@@ -178,13 +189,20 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         if (command.type === 'request_hint' && next.error) {
           writeSaved(pendingKey, command); setPending(command);
         }
-        if (['continue', 'acknowledge_source_issue', 'advance_stage', 'acknowledge_return', 'reveal', 'go_back', 'restart_lesson'].includes(command.type)
+        if (['continue', 'acknowledge_source_issue', 'advance_stage', 'acknowledge_return', 'reveal', 'go_back', 'restart_lesson', 'done_in_book'].includes(command.type)
+            || command.type === 'snap_work' && !fixing
             || command.type === 'parent_check' && command.payload?.result === 'checked') callbacks.current.onContinue?.(next);
         return next;
       } catch (error) {
         setProblem(clean(error));
         const next = await activitiesApi.state(sessionId).catch(() => null);
         if (next) update(next);
+        if (error.status === 409 && retry && next && !operationCommitted(next, command) && SAFE_AGAIN.includes(command.type)
+            && next.active_activity?.id === command.activity_id && (next.active_activity?.interaction?.id || null) === (command.interaction_id || null)) {
+          // Only the revision moved (a photo check finished): the same step, sent once more.
+          command = { ...command, expected_revision: next.revision };
+          return work(false);
+        }
         if (error.status === 409 && !operationCommitted(next, command)) {
           // A rejected revision did not run. Keep the answer draft and ask the
           // child to retry on the refreshed activity, never silently resubmit it.
@@ -196,7 +214,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         return null;
       } finally { sending.current = false; setBusy(false); }
     };
-    const result = queue.current.catch(() => {}).then(work); queue.current = result; return result;
+    const result = queue.current.catch(() => {}).then(() => work()); queue.current = result; return result;
   }, [pendingKey, sessionId, update]);
   const event = useCallback((type, payload = {}) => {
     if (readSaved(pendingKey)) { setProblem('Recover the saved action below before starting another action.'); return Promise.resolve(null); }
@@ -239,6 +257,19 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
     } catch (error) { setProblem(clean(error)); throw error; }
     finally { setBusy(false); }
   };
+  const snap = async (file) => {
+    callbacks.current.onPauseNarration?.();
+    try {
+      const attach = () => tutorApi.attachWork(sessionId, stateRef.current.revision, file, stateRef.current.active_activity.id);
+      let saved;
+      try { saved = await attach(); } catch (error) {
+        if (error.status !== 409 || !await refresh()) throw error;
+        saved = await attach();
+      }
+      await refresh();
+      return Boolean(await event('snap_work', { evidence_ids: [saved.evidence_id || saved.id] }));
+    } catch (error) { setProblem(clean(error)); return false; }
+  };
   if (!state) return <section className="p-4" aria-label="Tutor activities">{problem ? <><p role="alert" className="text-problem">{problem}</p><Button size="sm" onClick={refresh}>Try opening the lesson again</Button></> : <p role="status">Opening your saved lesson…</p>}</section>;
   const activity = state.active_activity;
   const helpKey = activity ? `${activity.id}.${activity.interaction?.id || ''}` : null;
@@ -259,7 +290,10 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const directCapture = activity?.direct_capture ?? (activity?.content?.evidence_requirement === 'spelling' && activity.content.response_modes?.includes('text'));
   const physicalReady = directCapture || activity?.kind !== 'request_book_work' || ['capture', 'response', 'awaiting_confirmation', 'ready_to_assess', 'completed'].includes(String(stage)) || activity.physical_complete;
   const paced = Boolean(activity?.paced);
-  const captures = !paced && activity && needsResponse(activity) && activity.status === 'pending' && (!status || ['awaiting_input', 'awaiting_followup'].includes(status) || directCapture && status === 'awaiting_work') && !awaitingConfirmation && !awaitingAssessment && !parentReview && !awaitingReveal && workedReady && physicalReady;
+  const snapKey = activity ? `${activity.id}.${activity.interaction?.id || ''}` : null;
+  // Book work is answered with a photo unless the child chooses to answer here.
+  const snapMode = Boolean(activity?.snap) && typing !== snapKey && !state.page_work?.id && !state.on_break;
+  const captures = !paced && !snapMode && activity && needsResponse(activity) && activity.status === 'pending' && (!status || ['awaiting_input', 'awaiting_followup'].includes(status) || directCapture && status === 'awaiting_work') && !awaitingConfirmation && !awaitingAssessment && !parentReview && !awaitingReveal && workedReady && physicalReady;
   const currentMessages = activity?.interaction?.is_replay || activity?.interaction?.replay_of
     ? (activity.messages || []).filter((item) => item.sequence > activity.interaction.dialogue_start_sequence)
     : activity?.messages || [];
@@ -273,7 +307,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const sectionPlace=activity?.practice_section?.id || activity?.id;
   const exercisePreview = !state.page_work?.id && state.page_work?.exercise && singleItemExercise !== activity?.id
     ? { ...state.page_work.exercise, status: 'ready' } : null;
-  const workGroup = state.page_work?.id ? state.page_work : exercisePreview;
+  const workGroup = snapMode ? null : state.page_work?.id ? state.page_work : exercisePreview;
   const expanded = expandedActivity && expandedActivity.id === sectionPlace ? expandedActivity.value : (activity?.kind === 'read_source' && !readingOnPage) || Boolean(workGroup);
   const activityPlace = `${activity?.id || 'summary'}.${activity?.interaction?.id || ''}.${Boolean(state.on_break)}`;
   const minimized = minimizedActivity === activityPlace;
@@ -307,7 +341,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       </div>
       </div>
       {renderSessionControls?.({ activity, state, busy: busy || Boolean(pending) })}
-      <LessonPosition state={state} header />
+      <LessonPosition state={state} header busy={busy || Boolean(pending)} canFix={Boolean(activity) && !activity.fix && !state.on_break && state.status !== 'completed'}
+        onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} />
     </header>
     {sessionNotice}
     <div className="tutor-thread-wrap">
@@ -342,10 +377,12 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       <div ref={workbox} hidden={minimized} id="current-activity-content" className="tutor-workbox-content custom-scrollbar">
       {state.on_break ? <section aria-label="Lesson break" className="flex flex-col gap-3"><h2 className="font-semibold">Your place is saved</h2><p className="text-sm">Take your break. Your pending activity and original answers will be here when you return.</p></section> : <>
         <CatchUpNotice state={state} busy={busy || Boolean(pending)} onFocus={() => event('focus_unfinished')} />
+        {activity?.kind === 'close_lesson' && activity.status === 'pending' && <ToFix progress={state.progress} checking={Boolean(state.checking)} busy={busy || Boolean(pending)}
+          onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} />}
         {activity?.kind === 'close_lesson' && activity.status === 'pending' && state.book_check?.count > 0 && <BookCheck check={state.book_check} sessionId={sessionId} onUpload={upload} onEvent={event} busy={busy || Boolean(pending)} />}
         <ClosingSummary state={state} busy={busy || Boolean(pending)} onRepeat={onRepeat} onRevisit={(activityId) => event('revisit_activity', { activity_id: activityId })} />
             {workGroup ? <PageWorkCapture key={workGroup.id || activity.id} group={workGroup} sessionId={sessionId} draftIdentity={`${activity.id}.${activity.interaction?.id}`} onUpload={upload} onEvent={async (type, payload) => { if(type === 'close_page_work') setSingleItemExercise(activity.id); return event(type, payload); }} onSingleItem={() => setSingleItemExercise(activity.id)} busy={busy || Boolean(pending)} draftEvidence={(state.draft_evidence || []).filter(file => file.action_id === activity?.id)} /> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current flex flex-col gap-4">
-              {activity.practice_section && <div aria-label="Practice section progress"><progress className="w-full h-1 accent-[var(--color-action)]" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} /><p className="text-xs text-muted">One item at a time. Your answers stay saved together in this practice section.</p></div>}
+              {activity.practice_section && !snapMode && <div aria-label="Practice section progress"><progress className="w-full h-1 accent-[var(--color-action)]" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} /><p className="text-xs text-muted">One item at a time. Your answers stay saved together in this practice section.</p></div>}
               <div className="flex flex-wrap items-center gap-2"><h2 ref={activeHeading} tabIndex={-1} className="font-semibold focus-visible:outline-action">{activity.content?.video ? 'Video lesson' : definition.label}</h2><span className="text-xs rounded-full bg-paper px-2 py-1">{['required_book', 'required', 'book'].includes(activity.origin) ? 'Required book work' : activity.origin === 'review' ? 'Review' : needsResponse(activity) ? 'Extra practice' : 'Lesson guidance'}</span></div>
               <ActivityCard activity={activity} state={state} language={language} busy={busy || Boolean(pending)} onEvent={event} onSource={onSource} renderReading={renderReading} renderTeacherText={renderTeacherText} docked />
               {activity.review_after_video && activity.status === 'pending' && <div className="rounded-xl bg-action-soft p-3 flex flex-col gap-2">
@@ -363,9 +400,15 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {state.notice && <p role="status" className="text-sm text-attention">{state.notice}</p>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
       {!state.on_break && !workGroup && <>{state.orientation && <div className="flex flex-col gap-2" role="status"><p className="text-sm">{typeof state.orientation === 'string' ? state.orientation : state.orientation.text || 'Welcome back. Return to the activity where you paused.'}</p><Button size="sm" disabled={busy || Boolean(pending)} onClick={() => event('acknowledge_return')}>Continue with this activity</Button></div>}{activity && !definition.internal && <>
-        {state.page_work?.available_count > 1 && <div className="rounded-xl bg-action-soft p-3 flex flex-col gap-2"><p className="text-sm">You can photograph these {state.page_work.available_count} book questions together.</p><Button disabled={busy || Boolean(pending)} onClick={() => event('open_page_work')}>Send this page together</Button></div>}
+        {activity.fix && activity.status === 'pending' && <div role="status" className="rounded-xl border border-attention bg-attention-soft p-3 text-sm flex flex-col gap-1">
+          <p className="font-semibold">Let’s look at this one again</p>
+          {activity.fix.read && <p>I read in your photo: {activity.fix.read}</p>}
+          {activity.fix.feedback && <p className="whitespace-pre-wrap">{activity.fix.feedback}</p>}
+        </div>}
+        {snapMode && <p role="status" className="text-sm rounded-xl bg-action-soft p-3">{activity.fix ? 'Fix it in your book, then take a new photo.' : 'Do this in your book, then take a photo. It is checked while you keep going.'}</p>}
+        {!snapMode && state.page_work?.available_count > 1 && <div className="rounded-xl bg-action-soft p-3 flex flex-col gap-2"><p className="text-sm">You can photograph these {state.page_work.available_count} book questions together.</p><Button disabled={busy || Boolean(pending)} onClick={() => event('open_page_work')}>Send this page together</Button></div>}
         {paced && <p role="status" className="text-sm rounded-xl bg-action-soft p-3">Do this in your book, then press <strong>Done</strong>. A grown-up checks the book later.</p>}
-        {!paced && activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
+        {!paced && !snapMode && activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
         {captures && <ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={busy || Boolean(pending)} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)} />}
         {awaitingConfirmation && response && <ConfirmResponse key={response.id} sessionId={sessionId} language={language} response={response} busy={busy || Boolean(pending)} checkOnConfirm={activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection'} onConfirm={(text) => event('confirm_response', { response_id: response.id, text, ...((activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection') ? { assess_after_confirm: true } : {}) })} />}
         {awaitingConfirmation && response?.transcription_status === 'failed' && <Button size="sm" disabled={busy || Boolean(pending)} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
@@ -390,7 +433,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           {/* Two equal choices; everything else waits inside Help, in one style. */}
           <div className={needsResponse(activity) && !paced || activity.can_try_first ? 'grid grid-cols-2 gap-2' : 'grid gap-2'}>
             <Button aria-expanded={helpOpen} aria-controls={`help-${activity.id}`} disabled={busy || Boolean(pending)} onClick={() => setHelpOpen((open) => !open)}>{helpOpen ? 'Close help' : 'Help'}</Button>
-            {needsResponse(activity) && !paced && <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>}
+            {needsResponse(activity) && !paced && (activity.fix
+              ? <Button disabled={busy || Boolean(pending)} onClick={() => event('fix_later')}>Back to the lesson</Button>
+              : <Button disabled={busy || Boolean(pending)} onClick={() => event('skip')}>Skip for now</Button>)}
             {!needsResponse(activity) && activity.can_try_first && <Button disabled={busy || Boolean(pending)} onClick={() => event('try_first')}>Let me try first</Button>}
           </div>
           {helpOpen && <div id={`help-${activity.id}`} role="group" aria-label="Help choices" className="rounded-xl border border-line bg-paper/40 p-2 flex flex-col gap-1">
@@ -411,9 +456,17 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {!(paced && !state.on_break) && (state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending' || canContinue && definition.family !== 'unsupported' && definition.family !== 'break') && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
         {activity?.can_continue_discussion && <p className="text-sm text-muted">You can continue with this explanation, or add more to your answer if you want.</p>}
         {activity?.kind === 'close_lesson' && !state.on_break && <p role="status" className="text-sm text-muted">Your work is saved. Choose Finish lesson to mark this chapter complete in Curriculum. Any work left to revisit stays in your record.</p>}
-          <Button variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event(state.on_break ? 'resume' : sourceIssue ? 'acknowledge_source_issue' : activity.kind === 'read_source' && activity.status === 'pending' ? 'reading_done' : activity.kind === 'close_lesson' ? 'finish' : 'continue', sourceIssue ? { response_id: response.id } : {})}>
-          {state.on_break ? 'Return to lesson' : state.page_work?.status === 'completed' ? 'Continue lesson' : activity.kind === 'read_source' && activity.status === 'pending' ? 'I have finished this reading' : activity.kind === 'close_lesson' ? 'Finish lesson' : activity.practice_section?.item < activity.practice_section?.total ? activity.practice_section.kind==='spelling' ? 'Next word' : 'Next item' : 'Continue lesson'}
+          <Button variant="primary" disabled={busy || Boolean(pending) || activity?.kind === 'close_lesson' && Boolean(state.checking) && !state.on_break} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event(state.on_break ? 'resume' : sourceIssue ? 'acknowledge_source_issue' : activity.kind === 'read_source' && activity.status === 'pending' ? 'reading_done' : activity.kind === 'close_lesson' ? 'finish' : 'continue', sourceIssue ? { response_id: response.id } : {})}>
+          {state.on_break ? 'Return to lesson' : state.page_work?.status === 'completed' ? 'Continue lesson' : activity.kind === 'read_source' && activity.status === 'pending' ? 'I have finished this reading' : activity.kind === 'close_lesson' ? state.checking ? 'Checking your photos…' : 'Finish lesson' : activity.fix ? 'Back to the lesson' : activity.practice_section?.item < activity.practice_section?.total ? activity.practice_section.kind==='spelling' ? 'Next word' : 'Next item' : 'Continue lesson'}
         </Button>
+      </div>}
+      {snapMode && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
+        <SnapWork key={snapKey} busy={busy || Boolean(pending)} onSnap={snap}
+          label={activity.fix ? 'New photo of my work' : activity.practice_section?.total > 1 ? `Photo of all ${activity.practice_section.total - activity.practice_section.item + 1} answers` : 'Photo of my work'} />
+        <button type="button" className="snap-alt" disabled={busy || Boolean(pending)} onClick={() => setTyping(snapKey)}>Answer here instead</button>
+      </div>}
+      {Boolean(activity?.snap) && !snapMode && !state.on_break && !state.page_work?.id && <div hidden={minimized} className="tutor-step-actions">
+        <button type="button" className="snap-alt" disabled={busy || Boolean(pending)} onClick={() => setTyping(null)}>Take a photo instead</button>
       </div>}
       {paced && !state.on_break && <div hidden={minimized} className="tutor-step-actions" aria-label="Lesson step controls">
         <Button data-lesson-primary variant="primary" disabled={busy || Boolean(pending)} onKeyDown={(event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); }} onClick={() => event('done_in_book')}>

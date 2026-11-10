@@ -257,3 +257,35 @@ assessed responses. A failed check keeps its photos (`retry_book_check`). The
 completion summary records `book_work: {mode, in_book, check}`.
 
 Rehearse offline with `backend/dev/activity_demo.py --practice-sections --paced-book-work`.
+
+## Book work answered with a photo (the default)
+
+In a subject whose book exercises are checked by the tutor, a required book
+exercise shows one main button, **Photo of my work** (`active_activity.snap`).
+The camera opens in the card, Space takes the picture and it is sent after a
+moment (`snap_work`, 1–3 photos attached to that exercise). The exercise, and
+the still-pending rest of its practice section, become `checking` and the
+lesson moves on at once. **Answer here instead** keeps the typed/choice flow.
+
+`photo_check.py` runs one AI request per photo on a background thread (inline
+when `engine.background_checks` is false, as in tests): it copies the child's
+answer and assesses it against the private key. Results are saved through the
+ordinary path (`activity_responses`, `lesson_dialogue`, `interactive._apply`,
+attempts and reviews), so progress and learning records are real. A right answer
+is `answered`; anything else is `fix`. An unsure reading is `Unreadable`, never
+wrong; a reviewed true/false key decides a clear reading. A result that arrives
+after the child went back to the exercise, restarted or finished is kept on the
+job and not applied. Waiting checks restart from `state()` after a server restart;
+a failed one keeps its photo (`retry_photo_check`).
+
+`progress.items[].outcome` adds `checking`, `fix` and `unchecked`, each with a
+`check` (prompt, what was read, feedback). The tracker chips open it; **Fix it
+now** (`fix_work`) reopens that exercise with a return cursor, and a new photo, an
+on-screen answer or **Back to the lesson** (`fix_later`) returns to the step the
+child was on. Finish waits for running checks. Anything still `fix` at the end is
+recorded as "to practise" (`completion_summary.photo_checks`) and is not carried
+into later lessons as pending work.
+
+Rehearse offline with `backend/dev/activity_demo.py --practice-sections` (the
+`photo-demo` launch configuration): the mocked check takes five seconds and
+returns one answer to fix.

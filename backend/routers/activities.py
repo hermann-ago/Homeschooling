@@ -45,7 +45,8 @@ class ActivityEvent(StrictRequest):
         "save_cursor", "save_draft", "checkpoint", "reading_done", "request_followup", "finish",
         "retry_transcription", "request_parent_review", "revisit_activity", "recheck_key", "go_back", "restart_lesson", "acknowledge_source_issue", "focus_unfinished",
         "open_page_work", "submit_page_work", "confirm_page_work", "retry_page_work", "close_page_work", "submit_exercise_answers",
-        "parent_check", "try_first", "show_teaching", "video_watched", "done_in_book", "submit_book_check", "retry_book_check"]
+        "parent_check", "try_first", "show_teaching", "video_watched", "done_in_book", "submit_book_check", "retry_book_check",
+        "snap_work", "retry_photo_check", "fix_work", "fix_later"]
     payload: dict = Field(default_factory=dict)
 
 

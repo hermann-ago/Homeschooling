@@ -113,6 +113,8 @@ def main():
             return {"feedback": "Look again at the sentence about the tribes.", "result": "Not yet",
                     "follow_up": "What changed for the tribes?", "ready_to_continue": False}
 
+        photo_seen = set()
+
         def generated(_prompt, *, schema=None, **_kwargs):
             from tutoring.script_review import Review
             if args.practice_sections and schema and schema.__name__ in ('TranscribedPageExact', 'WorkbookAssessmentExact'):
@@ -134,6 +136,21 @@ def main():
                 return schema.model_validate({'summary': 'Offline check: one answer to look at again.', 'items': [
                     {'item_id': t['item_id'], 'answer': 'True' if i else 'He fought them', 'result': 'looks_right' if i else 'check_again',
                      'note': '' if i else 'Look again at what happened to the tribes.'} for i, t in enumerate(tasks)]}).model_dump()
+            if schema and schema.__name__ == 'PhotoCheckReplyExact':
+                # A background photo check: slow enough to see the chip spin; the first photo of
+                # the first exercise comes back with something to fix, later ones are right.
+                import json, time
+                time.sleep(5)
+                tasks = json.loads(_prompt[_prompt.index('['):])
+                reply = []
+                for task in tasks:
+                    again = task['item_id'] in photo_seen
+                    wrong = not again and not photo_seen
+                    photo_seen.add(task['item_id'])
+                    reply.append({'item_id': task['item_id'], 'answer': 'False' if wrong else 'True', 'uncertain': False,
+                        'result': 'Not yet' if wrong else 'Correct',
+                        'feedback': 'Read the whole sentence again and look at what happened to the tribes.' if wrong else 'Yes, that is right.'})
+                return schema.model_validate({'items': reply}).model_dump()
             if schema and issubclass(schema,Review):return {'findings':[]}
             if schema and schema.__name__ == "HintReply":
                 if "Show a short worked analogy" in _prompt:
