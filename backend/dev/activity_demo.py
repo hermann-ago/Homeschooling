@@ -140,8 +140,9 @@ def main():
                 # A background photo check: slow enough to see the chip spin; the first photo of
                 # the first exercise comes back with something to fix, later ones are right.
                 import json, time
+                from tutoring.photo_check import TASKS
                 time.sleep(5)
-                tasks = json.loads(_prompt[_prompt.index('['):])
+                tasks = json.loads(_prompt.split(TASKS)[1])
                 reply = []
                 for task in tasks:
                     again = task['item_id'] in photo_seen

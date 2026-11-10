@@ -103,20 +103,24 @@ def _task(engine, tx, action):
         'teacher_key': _key(engine, tx, action)}
 
 
-def _prompt(tx, session, tasks):
-    topic = tx.get('topics', session['topic_id']) or {}
-    subject = tx.get('subjects', session['subject_id']) or {}
-    return ('A child did this book work on paper during a lesson and photographed it. '
-        f'Subject: {subject.get("name")}, grade {subject.get("grade") or "not given"}. Lesson: {topic.get("title")}. '
+TASKS = 'Tasks (teacher_key is private):\n'
+
+
+def _prompt(engine, job):
+    """The lesson's ordinary grading context (family style, subject notes, source, assessment
+    policy), then what is particular to a photo: copy first, never guess, one entry per task."""
+    snapshot = job['input_snapshot']
+    session = engine._session(job['session_id'])
+    action = engine._action(engine.db, session['id'], snapshot['items'][0])
+    context, _, _ = engine.tutor.interactive._prompt(session, action,
+        {'id': 'photo-' + job['id'], 'text': '', 'evidence_ids': snapshot['evidence_ids']})
+    return (context + '\nThe child did this book work on paper and photographed it. Assess each task below separately. '
         'For each task: answer = the child\'s visible answer copied exactly as written, mistakes included (empty when '
-        'none is visible); uncertain = true when you cannot read it with confidence. Then assess it against the '
-        'teacher-only key when one is given, otherwise from the task itself. result: Correct; Partly correct; '
-        'Not yet; Unanswered (nothing written for this task); Unreadable (cannot read it). For evidence "spelling" '
-        'check the exact letters and accents; otherwise do not penalise spelling or handwriting. feedback: one or two '
-        'warm sentences to the child. When it is not Correct, say what to look at again without giving the answer. '
-        f'Write feedback in the lesson language ({topic.get("language") or "en-US"}). '
-        'Return every item_id exactly once. Tasks (teacher_key is private):\n'
-        + json.dumps(tasks, ensure_ascii=False, default=str))
+        'none is visible); uncertain = true when you cannot read it with confidence. result: Correct; Partly correct; '
+        'Not yet; Unanswered (nothing written for this task); Unreadable (cannot read it). feedback: one or two warm '
+        'sentences to the child; when it is not Correct, say what to look at again without giving the answer. '
+        'Keep feedback brief and do not request new activities. Return every item_id exactly once. '
+        + TASKS + json.dumps(snapshot['tasks'], ensure_ascii=False, default=str))
 
 
 def apply(engine, tx, session, action, interaction, event, payload, operation_id):
@@ -155,8 +159,7 @@ def apply(engine, tx, session, action, interaction, event, payload, operation_id
             'activity_id': action['action_id'], 'interaction_id': interaction['id'], 'kind': 'photo_check', 'status': 'queued',
             'input_snapshot': json.loads(json.dumps({'order': len(_jobs(tx, session['id'])) + 1,
                 'items': [a['action_id'] for a in group], 'interactions': interactions,
-                'evidence_ids': ids, 'images': images, 'tasks': tasks, 'prompt': _prompt(tx, session, tasks),
-                'provider': provider, 'model': model}, default=str))})
+                'evidence_ids': ids, 'images': images, 'tasks': tasks, 'provider': provider, 'model': model}, default=str))})
         engine._continue(tx, session, engine._action(tx, session['id'], action['action_id']),
                          tx.get('activity_interactions', interaction['id']))
         return
@@ -222,8 +225,11 @@ def run(engine, job_id):
         return
     snapshot, session_id = job['input_snapshot'], job['session_id']
     try:
+        if not snapshot.get('prompt'):  # Frozen once, so a retry sends the identical request.
+            snapshot = {**snapshot, 'prompt': _prompt(engine, job)}
         with engine.db.transaction(kind='activity.photo_check_claim') as tx:
-            tx.update('activity_jobs', job_id, {'status': 'checking'})
+            tx.update('activity_jobs', job_id, {'status': 'checking', 'input_snapshot': snapshot})
+        job = {**job, 'input_snapshot': snapshot}
         images = [(engine.ctx.file_bytes(i['file_path'], i['sha256']), i['mime_type']) for i in snapshot['images']]
         playback = engine.db.get('lesson_playback', session_id)
         scope = engine.ctx.ai.scoped(playback['generation_scope_id']) if playback.get('generation_scope_id') else nullcontext()

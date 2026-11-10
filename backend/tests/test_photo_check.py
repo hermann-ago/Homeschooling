@@ -32,7 +32,7 @@ def reader(result='Correct', answer='He united the tribes', uncertain=False, fee
     def read(prompt, **kwargs):
         assert 'teacher_key' in prompt and kwargs['images']
         import json
-        tasks = json.loads(prompt[prompt.index('['):])
+        tasks = json.loads(prompt.split(photo_check.TASKS)[1])
         return {'items': [{'item_id': t['item_id'], 'answer': answer, 'uncertain': uncertain, 'result': result, 'feedback': feedback} for t in tasks]}
     return read
 
