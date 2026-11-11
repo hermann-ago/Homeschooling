@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUp, Camera, Coffee, MessageCircleQuestion, PencilLine } from 'lucide-react';
 import { activitiesApi } from '../../api/activities';
 import { tutorApi } from '../../api/tutor';
@@ -28,13 +28,20 @@ function SavedThread({ activity, excludeMessageId, showInitialPrompt = false,ren
       order: (response.support_snapshot?.dialogue_sequence ?? activity.messages?.find((message) => message.id === response.message_id)?.sequence ?? index) + 0.25 + index / 1000 })),
     ...(activity.messages || []).filter((message) => message.id !== excludeMessageId && (message.role !== 'student' || !linkedMessages.has(message.id))).map((message, index) => ({ type: 'message', value: message, order: message.sequence ?? 1000 + index })),
   ].sort((a, b) => a.order - b.order);
+  // The question an answer replies to is the teacher's: it stands on the tutor side, once per change.
+  const prompts = entries.filter((entry) => entry.type === 'response').map(({ value: response }) => {
+    const interaction = activity.interactions?.find((item) => item.id === response.interaction_id);
+    return [response.id, interaction?.sequence > 1 || showInitialPrompt ? interaction?.prompt || activity.content?.prompt : null];
+  });
+  const shownPrompts = new Map(prompts.map(([id, prompt], index) => [id, prompt && prompt !== prompts[index - 1]?.[1] ? prompt : null]));
+  const promptFor = (response) => shownPrompts.get(response.id);
   return <div aria-live="polite" className="flex flex-col gap-2">
-    {entries.map(({ type, value: response }) => type === 'message' ? <article key={response.id} className={`tutor-message is-${response.role === 'student' ? 'child' : 'tutor'} text-sm`}><p className="sr-only">{response.role === 'student' ? 'You' : 'Teacher'}</p><p className="whitespace-pre-wrap">{response.text}</p>{response.role==='teacher' && renderFeedback?.({message:response,history:true})}{response.evidence_ids?.map((id, index) => <a key={id} className="block text-action underline" href={modeHref(`/api/student-work/${encodeURIComponent(id)}`)} target="_blank" rel="noreferrer">Open original work photo {index + 1}</a>)}</article> : <article key={response.id} className="tutor-message is-child is-answer text-sm">
+    {entries.map(({ type, value: response }) => type === 'message' ? <article key={response.id} className={`tutor-message is-${response.role === 'student' ? 'child' : 'tutor'} text-sm`}><p className="sr-only">{response.role === 'student' ? 'You' : 'Teacher'}</p><p className="whitespace-pre-wrap">{response.text}</p>{response.role==='teacher' && renderFeedback?.({message:response,history:true})}{response.evidence_ids?.map((id, index) => <a key={id} className="block text-action underline" href={modeHref(`/api/student-work/${encodeURIComponent(id)}`)} target="_blank" rel="noreferrer">Open original work photo {index + 1}</a>)}</article> : <Fragment key={response.id}>
       {(() => {
-        const interaction = activity.interactions?.find((item) => item.id === response.interaction_id);
-        const prompt = interaction?.sequence > 1 || showInitialPrompt ? interaction?.prompt || activity.content?.prompt : null;
-        return prompt ? <p className="font-semibold mb-2">Teacher: {prompt}</p> : null;
+        const prompt = promptFor(response);
+        return prompt ? <article className="tutor-message is-tutor text-sm"><p className="sr-only">Teacher</p><p className="whitespace-pre-wrap">{prompt}</p></article> : null;
       })()}
+      <article className="tutor-message is-child is-answer text-sm">
       <p className="text-xs font-bold text-muted">Your {response.method === 'dictation' ? 'spoken answer' : response.method === 'written_steps' ? 'written steps' : 'answer'}</p>
       <p className="whitespace-pre-wrap mt-1">{responseText(response) || (response.evidence_ids?.length ? 'Photo answer' : 'Awaiting a readable answer')}</p>
       {response.confirmed_text && response.original?.text && response.confirmed_text !== response.original.text && <details className="mt-2"><summary className="text-xs cursor-pointer font-semibold">Original capture</summary><p className="mt-1 whitespace-pre-wrap">{response.original.text}</p></details>}
@@ -43,7 +50,7 @@ function SavedThread({ activity, excludeMessageId, showInitialPrompt = false,ren
       {response.evidence_ids?.map((id, index) => <a key={id} className="block mt-1 text-action underline text-xs" href={modeHref(`/api/student-work/${encodeURIComponent(id)}`)} target="_blank" rel="noreferrer">Open original work photo {index + 1}</a>)}
       <p className="text-xs text-muted mt-2">{response.source_disputed ? response.source_issue_acknowledged ? 'Source note saved · Not graded' : 'Source note · Not graded' : learningLabel(response.status)}{response.result ? ` · ${learningLabel(response.result)}` : ''}</p>
       {response.feedback && <p className="mt-2 whitespace-pre-wrap">{response.feedback}</p>}
-    </article>)}
+    </article></Fragment>)}
   </div>;
 }
 

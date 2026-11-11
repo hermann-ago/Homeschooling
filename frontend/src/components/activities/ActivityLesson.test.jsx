@@ -478,7 +478,7 @@ describe('Shared activity lesson', () => {
     await screen.findByText('Why was water important?');
     const history = screen.getByRole('region', { name: 'Earlier exchanges in this activity' });
     const box = screen.getByRole('region', { name: 'Current lesson action' });
-    expect(within(history).getByText('Teacher: Why did the travelers stop?')).toBeTruthy();
+    expect(within(history).getByText('Why did the travelers stop?')).toBeTruthy();
     expect(within(history).getByText('They stopped for water.')).toBeTruthy();
     expect(within(history).queryByText('Why was water important?')).toBeNull();
     expect(within(box).getByText('Why was water important?')).toBeTruthy();
@@ -731,6 +731,25 @@ describe('Shared activity lesson', () => {
 });
 
 describe('Allowlisted visual and rich cards', () => {
+  it('shows a follow-up question once on the tutor side and only the answers on the child side', async () => {
+    const ask = 'What digit belongs in the ones place?';
+    const completed = makeActivity({ status: 'answered', content: { prompt: 'Subtract.' },
+      interactions: [{ id: 'i1', sequence: 1, prompt: 'Subtract.' }, { id: 'i2', sequence: 2, prompt: ask }, { id: 'i3', sequence: 3, prompt: ask }],
+      responses: [{ id: 'r2', interaction_id: 'i2', original: { text: '3' }, status: 'assessed', support_snapshot: { dialogue_sequence: 1 } },
+        { id: 'r3', interaction_id: 'i3', original: { text: '2' }, status: 'assessed', support_snapshot: { dialogue_sequence: 3 } }],
+      messages: [{ id: 'hint', role: 'teacher', sequence: 2, text: 'Look at the ones column again.' }] });
+    api.state.mockResolvedValue(makeState(null, { status: 'completed', activities: [completed] }));
+    const { container } = show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Collapse lesson thread' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show full lesson thread' }));
+    const question = screen.getByText(ask).closest('article');
+    expect(question.classList.contains('is-tutor')).toBe(true);
+    expect(screen.getAllByText(ask)).toHaveLength(1);
+    const answers = [...container.querySelectorAll('article.is-answer')];
+    expect(answers).toHaveLength(2);
+    expect(answers.some((answer) => answer.textContent.includes(ask))).toBe(false);
+  });
+
   it('opens the full saved thread including initial prompts, follow-ups and legacy learner messages', async () => {
     const completed = makeActivity({ status: 'answered', content: { prompt: 'Original prompt' },
       interaction: { id: 'i2', prompt: 'Follow-up prompt' }, interactions: [{ id: 'i1', sequence: 1, prompt: 'Original prompt' }, { id: 'i2', sequence: 2, prompt: 'Follow-up prompt' }],
@@ -741,7 +760,7 @@ describe('Allowlisted visual and rich cards', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Collapse lesson thread' }));
     fireEvent.click(screen.getByRole('button', { name: 'Show full lesson thread' }));
     expect(screen.getByText('Original prompt')).toBeTruthy();
-    expect(screen.getByText('Teacher: Follow-up prompt')).toBeTruthy();
+    expect(screen.getByText('Follow-up prompt')).toBeTruthy();
     expect(screen.getByText('My earlier question')).toBeTruthy();
     expect(screen.getAllByText('First words')).toHaveLength(1);
     expect(screen.getAllByText('Answer checked')).toHaveLength(2);
