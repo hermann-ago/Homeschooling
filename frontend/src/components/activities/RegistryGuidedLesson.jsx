@@ -63,7 +63,8 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
     document.addEventListener('visibilitychange', hide);
     return () => { window.clearTimeout(timer.current); document.removeEventListener('visibilitychange', hide); };
   }, [save]);
-  return <div className="-mx-3">
+  // A hidden narration player takes no room: its wrapper must not shift the play button beside it.
+  return <div className={headless ? 'contents' : '-mx-3'}>
     <ReadAlong passage={guide} tracks={(guide.audio || []).filter((track) => track.synchronized)}
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language}
       rangeStart={start} rangeEnd={end} visibleThrough={end} savedCursor={savedCursor}

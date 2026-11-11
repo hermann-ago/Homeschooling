@@ -51,15 +51,35 @@ function SavedThread({ activity, excludeMessageId, showInitialPrompt = false,ren
 const isOwnQuestion = (activity) => Boolean(activity?.parent_activity_id && activity.origin === 'adaptive'
   && activity.kind === 'explain_or_observe' && activity.content?.title === 'Your question');
 
+/** A tutor message from an earlier step: a long one shows its start and opens on request. */
+function PastBubble({ children }) {
+  const box = useRef(null);
+  const [long, setLong] = useState(false);
+  const [open, setOpen] = useState(false);
+  useLayoutEffect(() => { if (box.current) setLong(box.current.scrollHeight > 260); }, []);
+  return <div className="tutor-bubble">
+    <div ref={box} className={long && !open ? 'tutor-bubble-clamp' : undefined}>{children}</div>
+    {long && <button type="button" className="tutor-bubble-more" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? 'Show less' : 'Show more'}</button>}
+  </div>;
+}
+
+/** A finished step, as in a chat: the tutor's message on the left, the child's replies on the right.
+ *  Collapsed (the thread toggle), each step is one quiet line that opens on request. */
 function ActivityHistory({ activity, activities, language, onSource, expanded, finished = false, ancestors = [],renderFeedback }) {
   if (ancestors.includes(activity.id)) return null;
   const children = activities.filter((item) => item.parent_activity_id === activity.id);
   const question = isOwnQuestion(activity);
-  return <details open={expanded || undefined} className="tutor-past-step">
-    <summary>{question ? 'Your question' : activityDefinition(activity).label} · {activity.status === 'skipped' ? 'To revisit' : activity.status === 'in_book' ? 'Done in the book' : activity.status === 'pending' ? finished ? 'Saved · Not completed' : 'In progress' : 'Completed'}</summary>
-    <div className="tutor-past-step-body">{!question && <ActivityCard activity={activity} language={language} onSource={onSource} readOnly />}<SavedThread activity={activity} renderFeedback={renderFeedback} />
-      {children.map((child) => <ActivityHistory key={child.id} activity={child} activities={activities} language={language} onSource={onSource} expanded={expanded} finished={finished} ancestors={[...ancestors, activity.id]} renderFeedback={renderFeedback} />)}
-    </div>
+  const label = question ? 'Your question' : activityDefinition(activity).label;
+  const result = activity.status === 'skipped' ? 'To revisit' : activity.status === 'in_book' ? 'Done in the book' : activity.status === 'pending' ? finished ? 'Saved · Not completed' : 'In progress' : 'Completed';
+  const body = <>{!question && <PastBubble><ActivityCard activity={activity} language={language} onSource={onSource} readOnly /></PastBubble>}<SavedThread activity={activity} renderFeedback={renderFeedback} />
+    {children.map((child) => <ActivityHistory key={child.id} activity={child} activities={activities} language={language} onSource={onSource} expanded={expanded} finished={finished} ancestors={[...ancestors, activity.id]} renderFeedback={renderFeedback} />)}</>;
+  if (expanded) return <div className="tutor-past">
+    {!question && <p className="tutor-step-label">{label}{result !== 'Completed' && <span> · {result}</span>}</p>}
+    {body}
+  </div>;
+  return <details className="tutor-past-step">
+    <summary>{label} · {result}</summary>
+    <div className="tutor-past-step-body">{body}</div>
   </details>;
 }
 
@@ -308,7 +328,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
     ? (activity.messages || []).filter((item) => item.sequence > activity.interaction.dialogue_start_sequence)
     : activity?.messages || [];
   const latestFeedback = [...currentMessages].reverse().find((item) => item.role === 'teacher');
-  const archivedResponses = responses.filter((item) => item.status === 'assessed' || item.interaction_id && item.interaction_id !== activity?.interaction?.id);
+  // As in a chat, answers to the question on screen follow it (checked or not); only answers
+  // to an earlier question of this step stand above it.
+  const archivedResponses = responses.filter((item) => item.interaction_id && activity?.interaction?.id && item.interaction_id !== activity.interaction.id);
   const archivedResponseIds = new Set(archivedResponses.map((item) => item.id));
   const linkedStudentIds = new Set(responses.map((item) => item.message_id));
   const archivedMessages = (activity?.messages || []).filter((item) => item.id !== latestFeedback?.id && !(item.role === 'student' && linkedStudentIds.has(item.id)));
@@ -341,6 +363,20 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const blockRepeat = (keyEvent) => { if (keyEvent.repeat && ['Enter', ' '].includes(keyEvent.key)) keyEvent.preventDefault(); };
   const mainStep = !paced && !snapMode && !parentCheck && (state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending'
     || canContinue && definition.family !== 'unsupported' && definition.family !== 'break');
+  // What the child answers with sits in the dock, above the text box (as a question
+  // card does in a chat app); the tutor's words stay in the conversation.
+  const pageWorkInDock = Boolean(workGroup && ['ready', 'capture', 'confirmation'].includes(workGroup.status));
+  const pageWork = workGroup && <PageWorkCapture inConversation={pageWorkInDock} key={workGroup.id || activity.id} group={workGroup} sessionId={sessionId} draftIdentity={`${activity.id}.${activity.interaction?.id}`} onUpload={upload} onEvent={async (type, payload) => { if(type === 'close_page_work') setSingleItemExercise(activity.id); return event(type, payload); }} onSingleItem={() => setSingleItemExercise(activity.id)} busy={working} draftEvidence={(state.draft_evidence || []).filter(file => file.action_id === activity?.id)} />;
+  const checkOnConfirm = activity?.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection';
+  const answerPanel = state.on_break ? null : pageWorkInDock ? pageWork
+    : !workGroup && captures && !plainAnswer ? <ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={working} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)} />
+    : !workGroup && awaitingConfirmation && response ? <>
+      <ConfirmResponse key={response.id} sessionId={sessionId} language={language} response={response} busy={working} checkOnConfirm={checkOnConfirm} onConfirm={(text) => event('confirm_response', { response_id: response.id, text, ...(checkOnConfirm ? { assess_after_confirm: true } : {}) })} />
+      {response.transcription_status === 'failed' && <Button size="sm" disabled={working} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
+      {response.evidence_ids?.length > 0 && <Button size="sm" variant="quiet" disabled={working} onClick={() => event('request_parent_review', { response_id: response.id })}>Ask a parent to inspect this photo</Button>}
+    </> : null;
+  const composer = state.status !== 'completed' && state.status !== 'superseded' && <TutorComposer sessionId={sessionId} language={language} canAsk={canAsk} busy={working} onPauseNarration={onPauseNarration}
+    onAsk={(text) => event('request_followup', { prompt: text })} />;
   return <section ref={lessonPanel} aria-label="Tutor activities" className="tutor-chat">
     <header className="tutor-chat-header">
       <LessonPosition state={state} header busy={working} canFix={Boolean(activity) && !activity.fix && !state.on_break && state.status !== 'completed'}
@@ -389,10 +425,11 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} />}
         {activity?.kind === 'close_lesson' && activity.status === 'pending' && state.book_check?.count > 0 && <BookCheck check={state.book_check} sessionId={sessionId} onUpload={upload} onEvent={event} busy={working} />}
         <ClosingSummary state={state} busy={working} onRepeat={onRepeat} onRevisit={(activityId) => event('revisit_activity', { activity_id: activityId })} />
-            {workGroup ? <><p className="tutor-step-label">{workGroup.scope === 'exercise' ? `Exercise · ${workGroup.items.length} parts together` : state.page_work?.id ? `Book page ${state.page_work.items[0]?.page} · ${state.page_work.items.length} answers together` : 'Book work together'}</p><PageWorkCapture key={workGroup.id || activity.id} group={workGroup} sessionId={sessionId} draftIdentity={`${activity.id}.${activity.interaction?.id}`} onUpload={upload} onEvent={async (type, payload) => { if(type === 'close_page_work') setSingleItemExercise(activity.id); return event(type, payload); }} onSingleItem={() => setSingleItemExercise(activity.id)} busy={working} draftEvidence={(state.draft_evidence || []).filter(file => file.action_id === activity?.id)} /></> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current flex flex-col gap-3">
+            {workGroup ? <><p className="tutor-step-label">{workGroup.scope === 'exercise' ? `Exercise · ${workGroup.items.length} parts together` : state.page_work?.id ? `Book page ${state.page_work.items[0]?.page} · ${state.page_work.items.length} answers together` : 'Book work together'}</p>
+              {pageWorkInDock ? <div className="tutor-bubble">{workGroup.instruction && <p className="font-semibold whitespace-pre-wrap">{workGroup.instruction}</p>}<p className={workGroup.instruction ? 'mt-2 text-sm' : undefined}>Answer {workGroup.items.length === 1 ? 'it' : `all ${workGroup.items.length} parts`} in the box below.</p></div> : pageWork}</> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current">
               {activity.practice_section && !snapMode && <progress className="tutor-step-progress" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} />}
               {!ownQuestion && <p className="tutor-step-label"><span ref={activeHeading} tabIndex={-1} className="focus-visible:outline-action">{activity.content?.video ? 'Video lesson' : definition.label}</span>{activity.practice_section && <span> · {activity.practice_section.title} {activity.practice_section.item} of {activity.practice_section.total}</span>}{needsResponse(activity) && !['required_book', 'required', 'book'].includes(activity.origin) && <span> · {activity.origin === 'review' ? 'Review' : 'Extra practice'}</span>}</p>}
-              {!ownQuestion && <ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderTeacherText={renderTeacherText} docked />}
+              {!ownQuestion && <div className="tutor-bubble"><ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderTeacherText={renderTeacherText} docked /></div>}
               {activity.review_after_video && activity.status === 'pending' && <div className="tutor-note flex flex-col gap-2">
                 <p className="text-sm">You watched the video. This is the book's mini lesson on the same idea: read it as a quick review, or skip ahead.</p>
                 <Button size="sm" className="self-start" disabled={working} onClick={() => event('reading_done')}>Skip the review</Button>
@@ -413,11 +450,6 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {!snapMode && state.page_work?.available_count > 1 && <div className="tutor-note flex flex-col gap-2"><p className="text-sm">You can photograph these {state.page_work.available_count} book questions together.</p><Button disabled={working} onClick={() => event('open_page_work')}>Send this page together</Button></div>}
         {paced && <p role="status" className="tutor-hint">Do this in your book, then press <strong>Done</strong>. A grown-up checks the book later.</p>}
         {!paced && !snapMode && activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={working} onKeyDown={blockRepeat} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
-        {captures && !plainAnswer && <ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={working} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)} />}
-        {plainAnswer && !askInstead && <p className="tutor-hint">Write your answer in the box below.</p>}
-        {awaitingConfirmation && response && <ConfirmResponse key={response.id} sessionId={sessionId} language={language} response={response} busy={working} checkOnConfirm={activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection'} onConfirm={(text) => event('confirm_response', { response_id: response.id, text, ...((activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection') ? { assess_after_confirm: true } : {}) })} />}
-        {awaitingConfirmation && response?.transcription_status === 'failed' && <Button size="sm" disabled={working} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
-        {awaitingConfirmation && response?.evidence_ids?.length > 0 && <Button size="sm" variant="quiet" disabled={working} onClick={() => event('request_parent_review', { response_id: response.id })}>Ask a parent to inspect this photo</Button>}
         {awaitingAssessment && response && <div className="flex flex-col gap-2">
           <p className="text-sm text-muted">{response.feedback_failure === 'invalid_reply'
             ? response.feedback_replacement_used ? 'The replacement reply could not be checked. Your answer stays saved. Leave this activity to revisit; it is not marked wrong.' : 'The AI reply could not be checked. Request one replacement with its provider cost tracked; your saved answer and any help stay unchanged.'
@@ -466,8 +498,10 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {state.notice && <p role="status" className="tutor-dock-status text-attention">{state.notice}</p>}
       {problem && <p role="alert" className="tutor-dock-status text-problem">{problem}</p>}
       {plainAnswer && !askInstead && !state.on_break ? <div className="tutor-dock-answer"><ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={working} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)} /></div>
-        : state.status !== 'completed' && state.status !== 'superseded' && <TutorComposer sessionId={sessionId} language={language} canAsk={canAsk} busy={working} onPauseNarration={onPauseNarration}
-          onAsk={(text) => event('request_followup', { prompt: text })} />}
+        : answerPanel ? <div className="tutor-dock-card">
+          <div className="tutor-dock-panel custom-scrollbar" role="region" aria-label="Your answer to this step">{answerPanel}</div>
+          {composer}
+        </div> : composer}
       <div className="tutor-controls">
         {renderNarration && !state.on_break && <div className="tutor-narration">{renderNarration({ activity, state, busy: working })}</div>}
         {plainAnswer && canAsk && <button type="button" className="tutor-icon-button" aria-pressed={askInstead} disabled={working}

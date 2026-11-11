@@ -106,11 +106,12 @@ function ConfirmPage({ group, sessionId, onEvent, busy }) {
   </div>;
 }
 
-export default function PageWorkCapture({ group, sessionId, draftIdentity, onUpload, onEvent, onSingleItem, busy, draftEvidence = [] }) {
+/** inConversation: the heading and instruction already stand in the tutor's message above. */
+export default function PageWorkCapture({ group, sessionId, draftIdentity, onUpload, onEvent, onSingleItem, busy, draftEvidence = [], inConversation = false }) {
   const working = ['transcription_queued', 'transcribing', 'assessment_queued', 'assessing'].includes(group.status);
   return <section aria-label="Page answers together" className="flex flex-col gap-4">
-    <div><h2 className="font-semibold">{group.scope === 'exercise' ? 'One exercise · All parts together' : 'Send this book work together'}</h2><p className="text-xs text-muted">{group.scope === 'exercise' ? `${group.items.length} parts · One submission` : `Book page ${group.items[0]?.page} · ${group.items.length} questions · Each answer keeps its own record`}</p></div>
-    {group.instruction && <p className="font-semibold whitespace-pre-wrap">{group.instruction}</p>}
+    {!inConversation && <div><h2 className="font-semibold">{group.scope === 'exercise' ? 'One exercise · All parts together' : 'Send this book work together'}</h2><p className="text-xs text-muted">{group.scope === 'exercise' ? `${group.items.length} parts · One submission` : `Book page ${group.items[0]?.page} · ${group.items.length} questions · Each answer keeps its own record`}</p></div>}
+    {group.instruction && !inConversation && <p className="font-semibold whitespace-pre-wrap">{group.instruction}</p>}
     {group.status === 'ready' && (group.can_type ? <ExerciseAnswers key={draftIdentity || group.items[0].activity_id} group={group} sessionId={sessionId} draftIdentity={draftIdentity} onEvent={onEvent} onSingleItem={onSingleItem} busy={busy} /> : <>
       <ol className="flex flex-col gap-2 text-sm">{group.items.map(item => <li key={item.activity_id}><strong>{item.label}) </strong>{item.prompt}</li>)}</ol>
       <p className="text-sm text-muted">Complete these parts in your book. Then send one photo of your answers together.</p>

@@ -99,7 +99,7 @@ export default function ActivityCard({ activity, language, busy, onEvent, onSour
     }
     if (stem) prompt = stem;
   }
-  return <div className="flex flex-col gap-3">
+  return <div className="activity-card flex flex-col gap-3">
     {content.title && <h3 className="font-semibold text-lg">{content.title}</h3>}
     {teacherWords(activity) && content.text
       ? <div className={clsx('teacher-note', activity.kind === 'introduce' && 'activity-introduction')}>

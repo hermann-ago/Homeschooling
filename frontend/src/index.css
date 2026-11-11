@@ -182,11 +182,24 @@
 .tutor-thread { position: relative; height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; overflow-anchor: none; }
 .tutor-thread-content { min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; gap: 1.25rem; padding: 1rem 1.25rem 1.25rem; }
 .tutor-thread article { overflow-wrap: anywhere; }
-/* Messages: the child's on the right in a soft bubble, the tutor's as plain text. */
+/* Messages, as in a chat: the tutor's on the left, the child's on the right. */
 .tutor-message { max-width: 100%; }
-.tutor-message.is-tutor { line-height: 1.6; }
-.tutor-message.is-child { align-self: flex-end; max-width: 85%; padding: .6rem .9rem; border-radius: 1.1rem 1.1rem .3rem 1.1rem; background: var(--color-paper); }
+.tutor-bubble, .tutor-message.is-tutor, .tutor-reply { align-self: flex-start; width: fit-content; max-width: 92%; min-width: 0; padding: .7rem .95rem; border-radius: .35rem 1.15rem 1.15rem 1.15rem; background: var(--color-paper); line-height: 1.6; }
+.tutor-message.is-child { align-self: flex-end; width: fit-content; max-width: 85%; padding: .6rem .9rem; border-radius: 1.15rem .35rem 1.15rem 1.15rem; background: var(--color-action-soft); }
 .tutor-message.is-answer > .text-xs.font-bold { display: none; }
+/* Inside a tutor bubble the bubble itself says who speaks: the note box and label step aside. */
+.tutor-bubble .activity-card > .teacher-note { background: none; border: 0; border-radius: 0; padding: 0; }
+.tutor-bubble .activity-card > .teacher-note > .teacher-note-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tutor-bubble .bg-paper, .tutor-bubble .bg-paper\/40, .tutor-bubble .bg-paper\/50 { background: var(--color-surface); }
+.tutor-bubble:has(> .activity-card:empty) { display: none; }
+/* A reading inside a bubble: the bubble's padding is enough. */
+.tutor-bubble .activity-card > .-mx-3 { margin-inline: 0; }
+.tutor-bubble [aria-label="Passage"] { padding: 0; }
+.tutor-bubble-clamp { max-height: 12rem; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.tutor-bubble-more { margin-top: .35rem; font-size: .75rem; font-weight: 600; color: var(--color-action); min-height: 1.75rem; }
+.tutor-past, .tutor-current { display: flex; flex-direction: column; gap: .6rem; }
+.tutor-past > .tutor-step-label, .tutor-current > .tutor-step-label { margin-bottom: -.3rem; }
+.tutor-past > .tutor-step-label { color: var(--color-subtle); }
 /* A finished step: a quiet title line that opens to show what was said and done. */
 .tutor-past-step > summary { display: flex; align-items: center; gap: .4rem; font-size: .72rem; font-weight: 600; color: var(--color-subtle); cursor: pointer; list-style: none; }
 .tutor-past-step > summary::-webkit-details-marker { display: none; }
@@ -200,14 +213,17 @@
 /* The current step: the newest entry of the conversation, without a frame of its own. */
 .tutor-current-step { display: flex; flex-direction: column; gap: .85rem; }
 .tutor-current-step > *, .tutor-current > * { overflow-wrap: anywhere; }
-.tutor-current { border: 0; }
-.tutor-step-progress { width: 100%; height: 3px; accent-color: var(--color-action); }
-.tutor-step-label { margin: 0; font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-action); }
-.tutor-reply { padding-left: .85rem; border-left: 3px solid var(--color-action); }
-.tutor-hint { margin: 0; font-size: .85rem; color: var(--color-muted); }
-.tutor-note { padding: .75rem .9rem; border-radius: .9rem; background: var(--color-action-soft); }
+/* Progress through a practice set: a short soft pill above the step label, not a divider. */
+.tutor-step-progress { -webkit-appearance: none; appearance: none; align-self: flex-start; width: 4.5rem; height: 4px; margin-left: .2rem; border: 0; border-radius: 4px; background: var(--color-line); overflow: hidden; }
+.tutor-step-progress::-webkit-progress-bar { background: var(--color-line); border-radius: 4px; }
+.tutor-step-progress::-webkit-progress-value { background: var(--color-action); border-radius: 4px; }
+.tutor-step-progress::-moz-progress-bar { background: var(--color-action); border-radius: 4px; }
+.tutor-current > .tutor-step-progress { margin-bottom: -.25rem; }
+.tutor-step-label { margin: 0; padding-left: .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--color-action); }
+.tutor-hint { margin: 0; padding-left: .2rem; font-size: .8rem; color: var(--color-muted); }
+.tutor-note { align-self: flex-start; max-width: 92%; padding: .7rem .95rem; border-radius: .35rem 1.15rem 1.15rem 1.15rem; background: var(--color-action-soft); }
 .tutor-note.is-attention { background: var(--color-attention-soft); }
-.tutor-current-step .response-composer { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.tutor-dock > .tutor-note { align-self: stretch; max-width: none; border-radius: .9rem; }
 .lesson-help { display: flex; flex-wrap: wrap; gap: .4rem; }
 .tutor-help-choices { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .4rem; }
 .tutor-chip { min-height: 2.25rem; padding: .35rem .85rem; border-radius: 2rem; border: 1px solid var(--color-line); background: var(--color-surface); font-size: .8rem; font-weight: 600; color: var(--color-ink); }
@@ -223,11 +239,20 @@
 .tutor-snap-slot:empty { display: none; }
 .tutor-composer-box { display: flex; align-items: flex-end; gap: .35rem; padding: .35rem .35rem .35rem .85rem; border: 1px solid var(--color-line); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); }
 .tutor-composer-box:focus-within { border-color: var(--color-action); }
+/* The answer card: the step's own answer controls grow the text box upward, in one frame. */
+.tutor-dock-card { display: flex; flex-direction: column; border: 1px solid var(--color-line); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); overflow: hidden; }
+.tutor-dock-card:focus-within { border-color: var(--color-action); }
+.tutor-dock-panel { max-height: min(46vh, 26rem); overflow-y: auto; overscroll-behavior: contain; padding: .8rem .9rem; display: flex; flex-direction: column; gap: .6rem; }
+.tutor-dock-panel .response-composer { border: 0; border-radius: 0; padding: 0; background: transparent; }
+.tutor-dock-card > .tutor-composer-box { border: 0; border-top: 1px solid var(--color-line); border-radius: 0; box-shadow: none; }
 .tutor-composer-box:has(> .tutor-composer-mode) { padding-left: .35rem; }
 /* A written answer in the dock: the same answer box, shaped like the chat box. */
 .tutor-dock-answer > .response-composer { gap: .25rem .4rem; padding: .35rem .35rem .35rem .85rem; border: 1px solid var(--color-action); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); grid-auto-flow: row dense; }
 .tutor-dock-answer > .response-composer > label:has(textarea) { grid-column: 1; grid-row: 2; font-size: 0; gap: 0; }
 .tutor-dock-answer > .response-composer textarea { min-height: 2.5rem; max-height: 8.5rem; resize: none; font-size: .95rem; padding: .45rem 0; }
+/* The rounded frame shows the focus, as the chat box does; no second ring inside it. */
+.tutor-dock-answer > .response-composer textarea:focus { outline: none; }
+.tutor-dock-answer > .response-composer:focus-within { box-shadow: 0 0 0 1px var(--color-action), var(--shadow-soft); }
 .tutor-dock-answer > .response-composer > button:last-child { grid-column: 2; grid-row: 2; align-self: end; min-height: 2.25rem; padding: .35rem .9rem; border-radius: 1.2rem; font-size: .8rem; }
 .tutor-dock-answer > .response-composer > label:first-child:has(select) { font-size: .7rem; color: var(--color-muted); }
 .tutor-dock-answer > .response-composer > p { font-size: .7rem; margin: 0; }

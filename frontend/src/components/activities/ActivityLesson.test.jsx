@@ -66,9 +66,12 @@ describe('Shared activity lesson', () => {
     api.state.mockResolvedValue(makeState(makeActivity({kind:'request_book_work',interaction:{id:'i1',status:'awaiting_work'}}),{page_work:{available_count:8,exercise}}));
     api.event.mockResolvedValue(makeState(makeActivity(),{revision:2,page_work:{...exercise,id:'exercise-job',status:'capture'}}));
     show();
-    expect(await screen.findByText('One exercise · All parts together')).toBeTruthy();
-    expect(within(screen.getByRole('region',{name:'Page answers together'})).getAllByRole('listitem')).toHaveLength(6);
-    expect(screen.getByText('Fill in the blanks:')).toBeTruthy();
+    // The instruction is the tutor's message in the conversation; the parts to answer sit in the answer card below.
+    expect(await screen.findByText('Exercise · 6 parts together')).toBeTruthy();
+    const card = screen.getByRole('region',{name:'Your answer to this step'});
+    expect(within(card).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(screen.getByRole('region',{name:'Current lesson action'})).getByText('Fill in the blanks:')).toBeTruthy();
+    expect(within(card).queryByText('Fill in the blanks:')).toBeNull();
     expect(screen.queryByRole('button',{name:'I have finished writing in my book'})).toBeNull();
     expect(screen.queryByRole('button',{name:'Send this page together'})).toBeNull();
     fireEvent.click(screen.getByRole('button',{name:'I have finished these answers'}));
