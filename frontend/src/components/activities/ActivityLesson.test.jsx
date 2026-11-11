@@ -90,7 +90,6 @@ describe('Shared activity lesson', () => {
     show();fireEvent.click(await screen.findByRole('button',{name:'Send this page together'}));
     expect(await screen.findByRole('region',{name:'Page answers together'})).toBeTruthy();
     expect(api.event.mock.calls[0][1]).toMatchObject({type:'open_page_work',activity_id:'a1',interaction_id:'i1'});
-    expect(screen.getByRole('region',{name:'Current lesson action'}).dataset.expanded).toBe('true');
     expect(screen.getByText('Book page 10 · 3 answers together')).toBeTruthy();
     expect(screen.queryByLabelText('Your answer')).toBeNull();
   });
@@ -130,7 +129,7 @@ describe('Shared activity lesson', () => {
     api.state.mockResolvedValue(makeState(makeActivity({practice_section:section})));
     api.event.mockResolvedValue(makeState(makeActivity({practice_section:{...section,completed:2},status:'answered',interaction:{id:'i1',status:'completed'}}),{revision:2}));
     show();
-    expect(await screen.findByText('Spelling practice · 2 of 9')).toBeTruthy();
+    expect(await screen.findByText(/Spelling practice 2 of 9/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Your answer'),{target:{value:'A word'}});
     fireEvent.keyDown(screen.getByLabelText('Your answer'),{key:'Enter'});
     await waitFor(()=>expect(document.activeElement).toBe(screen.getByRole('button',{name:'Next word'})));
@@ -370,13 +369,14 @@ describe('Shared activity lesson', () => {
     expect(screen.getAllByRole('article', { name: 'Current tutor activity' })).toHaveLength(1);
     expect(container.querySelector('details').open).toBe(false);
     expect(screen.getByText('Earlier answer')).toBeTruthy();
+    // As in a chat: the current question is the newest entry of the conversation, the answer box stays at the bottom.
     const conversation = screen.getByRole('generic', { name: 'Lesson conversation' });
-    const composer = screen.getByRole('region', { name: 'Current lesson action' });
-    expect(within(composer).getByLabelText('Your answer')).toBeTruthy();
-    expect(within(composer).getByText('Why did the travelers stop?')).toBeTruthy();
-    expect(within(conversation).queryByText('Why did the travelers stop?')).toBeNull();
+    const current = screen.getByRole('region', { name: 'Current lesson action' });
+    expect(conversation.contains(current)).toBe(true);
+    expect(within(current).getByText('Why did the travelers stop?')).toBeTruthy();
     expect(within(conversation).getByText('Earlier answer')).toBeTruthy();
-    expect(conversation.contains(composer)).toBe(false);
+    expect(conversation.contains(screen.getByLabelText('Your answer'))).toBe(false);
+    expect(screen.getByLabelText('Your answer').closest('footer')).toBeTruthy();
     expect(screen.getByText('Earlier answer').compareDocumentPosition(screen.getByText('Why did the travelers stop?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -388,52 +388,52 @@ describe('Shared activity lesson', () => {
     expect(api.event).not.toHaveBeenCalled();
   });
 
-  it('keeps session controls in the top bar when the current activity is minimized', async () => {
-    show({ renderSessionControls: () => <div role="group" aria-label="Session narration settings"><button>Session voice</button></div> });
-    const controls = await screen.findByRole('group', { name: 'Session narration settings' });
-    expect(controls.closest('header')).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'Current lesson action' }).contains(controls)).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Minimize activity' }));
-    expect(screen.getByRole('button', { name: 'Session voice' })).toBeTruthy();
+  it('keeps voice and speed in the lesson menu, out of the conversation', async () => {
+    const controls = vi.fn(({ inMenu }) => <div role="group" aria-label="Session narration settings" data-in-menu={inMenu}><button>Session voice</button></div>);
+    show({ renderSessionControls: controls });
+    const group = await screen.findByRole('group', { name: 'Session narration settings', hidden: true });
+    expect(group.closest('details')).toBeTruthy();
+    expect(group.closest('header')).toBeTruthy();
+    expect(group.dataset.inMenu).toBe('true');
+    expect(screen.getByRole('region', { name: 'Current lesson action' }).contains(group)).toBe(false);
     expect(api.event).not.toHaveBeenCalled();
   });
-  it('keeps reading and its controls in an expandable current activity box', async () => {
+  it('shows the reading in the conversation and its step button in the control row', async () => {
     api.state.mockResolvedValue(makeState(makeActivity({ kind: 'read_source', content: { text: 'A short assigned passage.' }, interaction: { id: 'reading', status: 'ready_to_continue' } })));
-    show({ renderReading: () => <p>The current reading goes here.</p> });
+    show({ renderReading: () => <p>The current reading goes here.</p>, renderNarration: () => <button>Play narration</button> });
     const box = await screen.findByRole('region', { name: 'Current lesson action' });
     expect(within(box).getByText('The current reading goes here.')).toBeTruthy();
-    expect(within(box).getByRole('button', { name: 'I have finished this reading' })).toBeTruthy();
-    expect(within(box).getByRole('button', { name: 'I have finished this reading' }).closest('.tutor-workbox-content')).toBeNull();
-    expect(within(box).getByRole('button', { name: 'I have finished this reading' }).closest('[aria-label="Lesson step controls"]')).toBeTruthy();
-    expect(within(screen.getByLabelText('Lesson conversation')).queryByText('The current reading goes here.')).toBeNull();
-    const toggle = within(box).getByRole('button', { name: 'Minimize activity' });
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    const reading = within(box).getByText('The current reading goes here.');
-    fireEvent.click(toggle);
-    expect(within(box).getByRole('button', { name: 'Show activity' }).getAttribute('aria-expanded')).toBe('false');
-    expect(reading.closest('[hidden]')).toBeTruthy();
-    fireEvent.click(within(box).getByRole('button', { name: 'Show activity' }));
-    expect(within(box).getByText('The current reading goes here.')).toBe(reading);
-    expect(reading.closest('[hidden]')).toBeNull();
+    const done = screen.getByRole('button', { name: 'I have finished this reading' });
+    expect(box.contains(done)).toBe(false);
+    expect(done.closest('[aria-label="Lesson step controls"]')).toBeTruthy();
+    // Play and the step button share one row under the text box.
+    const row = done.closest('.tutor-controls');
+    expect(within(row).getByRole('button', { name: 'Play narration' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Ask your tutor' }).compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(api.event).not.toHaveBeenCalled();
   });
 
-  it('minimizes to a bottom bar without losing the draft or advancing work', async () => {
-    const pause = vi.fn();
-    show({ onPauseNarration: pause });
-    const answer = await screen.findByLabelText('Your answer');
-    fireEvent.change(answer, { target: { value: 'An unfinished answer' } });
-    const before = pause.mock.calls.length;
-    fireEvent.click(screen.getByRole('button', { name: 'Minimize activity' }));
-    const box = screen.getByRole('region', { name: 'Current lesson action' });
-    expect(box.dataset.minimized).toBe('true');
-    expect(screen.queryByRole('textbox', { name: 'Your answer' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Check my answer' })).toBeNull();
-    expect(pause.mock.calls.length).toBe(before + 1);
+  it('lets the child ask the tutor a question from the text box at any step', async () => {
+    api.state.mockResolvedValue(makeState(makeActivity({ kind: 'introduce', content: { text: 'Welcome.' }, interaction: { id: 'i1', status: 'ready_to_continue' } })));
+    api.event.mockResolvedValue(makeState(makeActivity({ kind: 'introduce', content: { text: 'Welcome.' } }), { revision: 2 }));
+    show();
+    const box = await screen.findByRole('textbox', { name: 'Ask your tutor' });
+    fireEvent.change(box, { target: { value: 'Why do tribes join?' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    await waitFor(() => expect(api.event).toHaveBeenCalledTimes(1));
+    expect(api.event.mock.calls[0][1]).toMatchObject({ type: 'request_followup', payload: { prompt: 'Why do tribes join?' } });
+    await waitFor(() => expect(box.value).toBe(''));
+  });
+
+  it('switches the answer box to a question and back without losing the answer', async () => {
+    show();
+    fireEvent.change(await screen.findByLabelText('Your answer'), { target: { value: 'An unfinished answer' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask the tutor a question instead' }));
+    expect(screen.queryByLabelText('Your answer')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Ask your tutor' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Write my answer instead' }));
+    expect((await screen.findByLabelText('Your answer')).value).toBe('An unfinished answer');
     expect(api.event).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Show activity' }));
-    expect(screen.getByLabelText('Your answer')).toBe(answer);
-    expect(answer.value).toBe('An unfinished answer');
   });
 
   it('archives the processed exchange while keeping the new follow-up and feedback in the box', async () => {
@@ -445,14 +445,14 @@ describe('Shared activity lesson', () => {
     fireEvent.change(await screen.findByLabelText('Your answer'), { target: { value: 'They stopped for water.' } });
     fireEvent.keyDown(screen.getByLabelText('Your answer'), { key: 'Enter' });
     await screen.findByText('Why was water important?');
-    const history = screen.getByLabelText('Lesson conversation');
+    const history = screen.getByRole('region', { name: 'Earlier exchanges in this activity' });
     const box = screen.getByRole('region', { name: 'Current lesson action' });
     expect(within(history).getByText('Teacher: Why did the travelers stop?')).toBeTruthy();
     expect(within(history).getByText('They stopped for water.')).toBeTruthy();
     expect(within(history).queryByText('Why was water important?')).toBeNull();
     expect(within(box).getByText('Why was water important?')).toBeTruthy();
     expect(within(box).getByText('Think about their long journey.')).toBeTruthy();
-    expect(within(box).getByLabelText('Your answer').value).toBe('');
+    expect(screen.getByLabelText('Your answer').value).toBe('');
   });
   it('keeps the earlier scroll position when a teacher reply arrives and offers a return to latest', async () => {
     show();

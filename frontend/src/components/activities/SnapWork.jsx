@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Camera, ImagePlus, Keyboard } from 'lucide-react';
 import { Button } from '../../ui';
 
 const SEND_AFTER = 1200;
@@ -11,7 +12,7 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  * Without a live camera (plain HTTP, no webcam) the device's own camera or
  * photo picker stands in.
  */
-export default function SnapWork({ onSnap, busy, label = 'Photo of my work' }) {
+export default function SnapWork({ onSnap, busy, label = 'Photo of my work', viewSlot = null, onType }) {
   const [stage, setStage] = useState('idle'); // idle | camera | taken | sending
   const [preview, setPreview] = useState(null);
   const [ready, setReady] = useState(false);
@@ -75,25 +76,32 @@ export default function SnapWork({ onSnap, busy, label = 'Photo of my work' }) {
   };
   const repeat = (event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); };
 
-  return <div className="snap-work flex flex-col gap-2">
-    <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" aria-label="Photo of my work"
-      onChange={(event) => { chosen(event.target.files?.[0]); event.target.value = ''; }} />
+  // The preview and any problem open above the text box; the buttons stay in the control row.
+  const above = <>
     {cameraOn && <div className="snap-view">
       {stage === 'taken' && preview ? <img src={preview} alt="The photo you took" /> :
         <video ref={video} autoPlay muted playsInline aria-label="Camera" onLoadedData={() => setReady(true)} />}
     </div>}
     {error && <p role="alert" className="text-sm text-problem">{error}</p>}
-    {stage === 'idle' && <Button ref={main} data-lesson-primary variant="primary" icon={Camera} disabled={busy} onKeyDown={repeat}
-      onClick={() => { setError(''); if (live) setStage('camera'); else picker.current?.click(); }}>{label}</Button>}
-    {stage === 'camera' && <div className="flex gap-2">
-      <Button ref={main} data-lesson-primary variant="primary" className="flex-1" disabled={!ready} onKeyDown={repeat} onClick={take}>{ready ? 'Take the photo' : 'Opening the camera…'}</Button>
+  </>;
+  return <div className="snap-work">
+    {viewSlot ? createPortal(above, viewSlot) : above}
+    <input ref={picker} type="file" accept="image/jpeg,image/png,image/webp" capture="environment" className="hidden" aria-label="Photo of my work"
+      onChange={(event) => { chosen(event.target.files?.[0]); event.target.value = ''; }} />
+    {stage === 'idle' && <>
+      <Button ref={main} data-lesson-primary variant="primary" icon={Camera} disabled={busy} onKeyDown={repeat}
+        onClick={() => { setError(''); if (live) setStage('camera'); else picker.current?.click(); }}>{label}</Button>
+      {live && <button type="button" className="tutor-icon-button snap-extra" aria-label="Choose a saved photo" title="Choose a saved photo" disabled={busy} onClick={() => picker.current?.click()}><ImagePlus size={18} aria-hidden="true" /></button>}
+      {onType && <button type="button" className="tutor-icon-button snap-extra" aria-label="Answer here instead" title="Answer here instead" disabled={busy} onClick={onType}><Keyboard size={18} aria-hidden="true" /></button>}
+    </>}
+    {stage === 'camera' && <>
       <Button onClick={() => setStage('idle')}>Cancel</Button>
-    </div>}
-    {stage === 'taken' && <div className="flex items-center gap-2">
-      <p role="status" className="flex-1 text-sm font-semibold text-action">Sending…</p>
+      <Button ref={main} data-lesson-primary variant="primary" disabled={!ready} onKeyDown={repeat} onClick={take}>{ready ? 'Take the photo' : 'Opening the camera…'}</Button>
+    </>}
+    {stage === 'taken' && <>
+      <p role="status" className="text-sm font-semibold text-action">Sending…</p>
       <Button onClick={() => { file.current = null; setStage('camera'); }}>Retake</Button>
-    </div>}
+    </>}
     {stage === 'sending' && <p role="status" className="text-sm font-semibold text-action">Sending your photo…</p>}
-    {stage === 'idle' && live && <button type="button" className="self-start text-xs text-action underline" disabled={busy} onClick={() => picker.current?.click()}>Choose a saved photo</button>}
   </div>;
 }

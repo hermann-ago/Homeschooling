@@ -66,7 +66,7 @@ it('shows the earlier reading while fixing and offers the way back', async () =>
   api.event.mockResolvedValue(state(next(), { revision: 2 }));
   render(<ActivityLesson sessionId="s1" />);
   expect(await screen.findByText('I read in your photo: Asinatura')).toBeTruthy();
-  expect(screen.getByRole('button', { name: /New photo of my work/ })).toBeTruthy();
+  expect(screen.getByRole('button', { name: /New photo/ })).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Skip for now' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Back to the lesson' }));
   await waitFor(() => expect(api.event.mock.calls[0][1]).toMatchObject({ type: 'fix_later' }));

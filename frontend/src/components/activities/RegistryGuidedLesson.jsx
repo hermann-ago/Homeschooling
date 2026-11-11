@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Pause, Play } from 'lucide-react';
+import { Pause, Play, RotateCcw } from 'lucide-react';
 import { activitiesApi } from '../../api/activities';
 import { tutorApi } from '../../api/tutor';
 import { modeHref } from '../../api/mode';
@@ -206,7 +206,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     onTransport={setTransport} autoPlayRequest={playRequest?.session === state.session_id && playRequest.place === narrationPlace(activity) ? playRequest.token : 0}
     selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage} />,
   [guide, activeIndex, onActiveIndex, language, onPassageModeChange, setCursor, playRequest, selectedSource, selectedSpeed, bookOnPage]);
-  const sessionControls = ({ activity, state, busy }) => <SessionNarrationControls tracks={tracks} source={selectedSource} speed={selectedSpeed}
+  const sessionControls = ({ activity, state, busy, inMenu = false }) => <SessionNarrationControls inMenu={inMenu} tracks={tracks} source={selectedSource} speed={selectedSpeed}
     onChange={changeSettings} onReplay={() => transport?.replay?.()}
     canReplay={Boolean(!busy && !state.on_break && transport?.place === narrationPlace(activity) && transport.available && transport.replay)}
     error={transport?.place === narrationPlace(activity) ? transport.error : null} />;
@@ -257,6 +257,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
         onTransport={setTransport} autoPlayRequest={playRequest?.session === state.session_id && playRequest.place === narrationPlace(activity) ? playRequest.token : 0} />}
       <p className={routine ? 'sr-only' : 'text-xs text-muted'}>{voiceLabel}</p>
       <button type="button" className={unrecorded && !playing ? 'tutor-device-passage-button' : 'tutor-narration-button'} aria-label={playing ? 'Pause narration' : unrecorded ? 'Use device voice for this passage' : 'Play narration'} disabled={!available || state.on_break} onClick={() => transport?.toggle()}>{playing ? <Pause aria-hidden="true" size={20} fill="currentColor" /> : unrecorded ? 'Use device voice' : <Play aria-hidden="true" size={20} fill="currentColor" />}</button>
+      {range && transport?.replay && <button type="button" className="tutor-icon-button" aria-label="Replay current passage" title="Replay current passage" disabled={!available || state.on_break} onClick={() => transport.replay()}><RotateCcw size={17} aria-hidden="true" /></button>}
     </div>;
   };
   const start = async () => {
@@ -305,7 +306,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
         : <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
-      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} readingOnPage={bookOnPage} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
+      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderTeacherText={teacherText} renderNarration={narration} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;
