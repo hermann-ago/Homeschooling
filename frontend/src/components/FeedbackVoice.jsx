@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { tutorApi } from '../api/tutor';
+import { Volume2 } from 'lucide-react';
 import { Button } from '../ui';
 import { beginNarration, isNarrating, registerNarrator } from '../utils/narration';
 
@@ -53,9 +54,11 @@ export default function FeedbackVoice({ session, message, language, action = fal
     // neither repurchase nor restart it. Changing the selected voice is explicit.
   }, [autoPlay, message.id, trackId]);
   useEffect(() => () => { requestVersion.current += 1; audio.current?.pause(); }, []);
-  return <div className="mt-2 flex flex-col gap-1">
-    <Button size="sm" variant="quiet" disabled={busy} onClick={read}>{busy ? 'Preparing voice…' : 'Read aloud'}</Button>
-    {urls.length > 0 && <><span className="text-xs text-muted">AI-generated voice · {action ? 'saved task' : 'saved feedback'}</span><audio ref={audio} src={urls[index]} controls autoPlay onPlay={() => beginNarration(narratorId.current)} onEnded={() => { if (index + 1 < urls.length) setIndex(index + 1); }} /></>}
+  // The tutor's reply is simply heard; a small speaker repeats it.
+  return <div className="feedback-voice">
+    <button type="button" className="feedback-voice-button" data-busy={busy || undefined} disabled={busy} onClick={read}
+      aria-label={busy ? 'Preparing voice…' : 'Read aloud'} title={busy ? 'Preparing voice…' : 'Read aloud (AI-generated voice)'}><Volume2 size={15} aria-hidden="true" /></button>
+    {urls.length > 0 && <audio ref={audio} src={urls[index]} autoPlay onPlay={() => beginNarration(narratorId.current)} onEnded={() => { if (index + 1 < urls.length) setIndex(index + 1); }} />}
     {notice && <p className="text-xs text-muted">{notice}</p>}
     {deviceAvailable && <Button size="sm" variant="quiet" onClick={() => {
       beginNarration(narratorId.current);

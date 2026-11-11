@@ -284,6 +284,11 @@
 .tutor-narration-button svg { width: 15px; height: 15px; }
 .tutor-narration-controls > .tutor-icon-button { width: 2.1rem; height: 2.1rem; border-radius: 50%; }
 .tutor-narration-button:disabled { opacity: .4; cursor: default; }
+.feedback-voice { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .3rem; }
+.feedback-voice-button { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 50%; color: var(--color-muted); }
+.feedback-voice-button:hover:not(:disabled) { background: var(--color-surface); color: var(--color-action); }
+.feedback-voice-button[data-busy] { color: var(--color-action); animation: feedback-voice-wait 1s ease-in-out infinite; }
+@keyframes feedback-voice-wait { 50% { opacity: .35; } }
 .tutor-device-passage-button { flex-shrink: 0; padding: .65rem .85rem; border-radius: .75rem; background: var(--color-action); color: white; font-size: .8rem; font-weight: 600; }
 .tutor-device-passage-button:disabled { opacity: .4; cursor: default; }
 .snap-work { display: flex; align-items: center; justify-content: flex-end; gap: .4rem; min-width: 0; }

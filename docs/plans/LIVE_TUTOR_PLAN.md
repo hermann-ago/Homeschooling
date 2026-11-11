@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Step 0 done (2026-11-11)**; Step 1 is next. Created 2026-11-11.
+Status: **Steps 0–1 done (2026-11-11)**; Step 2 is next. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -95,7 +95,7 @@ measurements below written into the progress log, commit and push.
   one Math lesson with Lucas and one Português lesson with Mila.
   *Done when* a lesson's live waits can be listed in seconds.
 
-- [ ] **Step 1 — The live tutor speaks.**
+- [x] **Step 1 — The live tutor speaks.** (done 2026-11-11)
   Let the screen voice live replies with the lesson's own narrator (F2), played
   automatically like prepared lines, and never talking over the recorded voice
   or the video. Check the cap and the cost per reply.
@@ -207,3 +207,18 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     first sentence as soon as it exists. Where the app already knows the
     result at once (F6), the spoken line can be requested without waiting for
     any grading.
+- 2026-11-11 — **Step 1 done.**
+  - Live replies are spoken with the lesson's own narrator on Inworld too (the
+    screen had allowed only three other providers), played automatically, and
+    stopped by the same rule that keeps the recorded voice and the video from
+    talking over each other. The control is one small speaker icon that repeats
+    the reply; the full audio player and its caption are gone.
+  - Tried in test mode on Lucas's Lesson 20: a typed question was answered and
+    the answer was heard in Brian's voice (15 s of speech) without any tap.
+    Real records were checked untouched.
+  - Measured for that reply: the AI took 9.8 s to write it (today's large live
+    call, F7) and the narrator 1.6 s to voice it, so about 11.5 s from sending
+    the question to the first spoken word. Four spoken replies cost 0.1–0.3
+    cents each. A repeated line reuses its recording at no cost.
+  - The voice adds 1–2 s; the wait is almost all in the AI call. Step 2 has to
+    bring that call under about 2 s to meet the 3-second aim.
