@@ -64,6 +64,8 @@ class TextContent(Content):
     source_refs: list[SourceRef] = Field(default_factory=list, max_length=20)
     # Hands-on book work (lines, colouring, tracing): a grown-up looks and confirms.
     parent_check: bool = False
+    # The writer's mark: the book's video lesson plays in this step (see videos.AUTHORING).
+    video_here: bool = False
 
 
 class ReviewContent(Content):
@@ -180,6 +182,7 @@ class BookWorkContent(QuestionContent):
     exercise_reference: str | None = Field(None, max_length=300)
     exercise_id: str | None = Field(None, max_length=300)
     work_location: Literal["physical_book"] = "physical_book"
+    video_here: bool = False
 
 
 class CaptureContent(QuestionContent):

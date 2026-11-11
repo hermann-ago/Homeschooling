@@ -65,6 +65,8 @@ class BookWork(Content):
     # Teacher-only, for blanks no key covers: the writer's expected answer per
     # box. Never used for checking until a grown-up approves it.
     proposed_answers: list[str] = Field(default_factory=list, max_length=30)
+    # The turn where the book asks the child to watch its video lesson; the app plays it here.
+    video: bool = False
 
     @model_validator(mode='after')
     def answers_match_blanks(self):
@@ -127,6 +129,8 @@ def compile_script(value, passage, context, language):
     pages = {(p['document_id'], p['page']): p for p in (context.get('visual_source') or {}).get('pages', [])}
     segments = [{'type': 'intro', 'text': script.welcome}]
     referenced = -1
+    if sum(isinstance(t, BookWork) and t.video for t in script.turns) > 1:
+        raise ValueError('Only one book_work turn plays the video lesson: the one where the book asks to watch it.')
     for turn in script.turns:
         if isinstance(turn, Say):
             segments.append({'type': 'explain', 'text': turn.text})
@@ -179,6 +183,8 @@ def compile_script(value, passage, context, language):
             # Book and page labels are server-bound; answers stay private.
             if not observation:
                 content['book_name'] = page.get('book_name') or 'Your book'
+            if turn.video and context.get('lesson_video'):
+                content['video_here'] = True
             segments.append({'type': 'activity', 'activity_kind': 'explain_or_observe' if observation else 'request_book_work',
                 'content': content, 'origin': 'required_book',
                 'source_refs': [{'document_id': turn.document_id, 'page': turn.page}]})

@@ -138,7 +138,7 @@ def test_a_lesson_without_a_video_has_no_video_step(harness, monkeypatch):
     legacy = start(harness, seeded, guide)
     state = service(harness.ctx).state(legacy['session_id'])
     assert all(a['id'] != VIDEO_STEP for a in state['activities'])
-    assert 'video' not in str(state['active_activity']['content'])
+    assert not state['active_activity']['content'].get('video')
 
 
 class FakeWebNoTitle:
@@ -160,3 +160,31 @@ def test_the_writer_hears_about_a_video_only_when_the_lesson_has_one(harness):
     told = writer_prompt(passage, subject='Math', learner='Lucas', grade='4', language='en-US', learner_context=videos.context_for(db, with_video))
     plain = writer_prompt(passage, subject='Math', learner='Lucas', grade='4', language='en-US', learner_context={})
     assert 'VIDEO LESSON' in told and 'VIDEO LESSON' not in plain
+
+
+def test_the_video_plays_in_the_book_step_that_asks_for_it(harness):
+    from tutoring import page_script
+    context = {'visual_source': {'pages': [{'document_id': 5, 'page': 61, 'printed_page': 61, 'role': 'assigned_reading'}]}}
+    work = {'type': 'book_work', 'document_id': 5, 'page': 61, 'prompt': 'Enter the difference for each video problem.',
+            'response': {'format': 'text'}, 'video': True}
+    passage = {'title': 'Lesson 20', 'sentences': []}
+    script = {'welcome': 'Hi.', 'turns': [work], 'closing': 'Bye.'}
+    marked = lambda ctx: [s for s in page_script.compile_script(script, passage, ctx, 'en-US')['segments'] if s['type'] == 'activity']
+    assert marked({**context, 'lesson_video': {'title': 'Lesson 20'}})[0]['content']['video_here'] is True
+    assert not marked(context)[0]['content'].get('video_here')  # no video for this lesson: the mark is ignored
+    with pytest.raises(ValueError, match='Only one book_work turn'):
+        page_script.compile_script({**script, 'turns': [work, work]}, passage, context, 'en-US')
+
+    db = harness.ctx.store
+    with db.transaction() as tx:
+        child = tx.insert('children', {'name': 'Test'})['id']
+        subject = tx.insert('subjects', {'child_id': child, 'name': 'Math'})['id']
+    topic, = topics(db, subject, 'Lesson 20: Subtracting Across Zeros')
+    videos.set_for_topic(db, topic, 'https://vimeo.com/578451099', http=FakeWebNoTitle())
+    planned = [{'id': 'segment-1', 'kind': 'introduce', 'content': {'text': 'Hi.'}},
+               {'id': 'activity-2', 'kind': 'request_book_work', 'content': {'prompt': 'Watch, then subtract.', 'video_here': True}}]
+    steps = service(harness.ctx)._with_video({'topic_id': topic, 'status': 'active'}, planned)
+    assert [s['id'] for s in steps] == ['segment-1', 'activity-2']
+    assert steps[1]['content']['video']['embed_url'].startswith('https://player.vimeo.com/video/578451099')
+    unmarked = service(harness.ctx)._with_video({'topic_id': topic, 'status': 'active'}, planned[:1])
+    assert [s['id'] for s in unmarked] == ['segment-1', VIDEO_STEP]

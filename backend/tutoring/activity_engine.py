@@ -139,17 +139,20 @@ class ActivityEngine:
         """The first reading after a watched video is the book's own version of it."""
         if action.get("activity_kind") != "read_source" or not (playback.get("navigation_state") or {}).get("video_watched"):
             return False
-        video = next((a for a in actions if a["action_id"] == VIDEO_STEP), None)
+        video = next((a for a in actions if (a.get("activity_content") or {}).get("video")), None)
         later = sorted((a for a in actions if a.get("activity_kind") == "read_source" and video
                         and (a.get("activity_order") or 0) > (video.get("activity_order") or 0)), key=lambda a: a.get("activity_order") or 0)
         return bool(later) and later[0]["id"] == action["id"]
 
     def _with_video(self, session, planned):
-        """The book's video lesson, as a step right after the welcome."""
+        """The book's video lesson: inside the step where the book asks to watch it, or as a step
+        right after the welcome when the script marks no such step."""
         from . import videos
         video = videos.for_topic(self.db, session["topic_id"])
         if not video or session["status"] == "completed" or any(s["id"] == VIDEO_STEP for s in planned):
             return planned
+        if any(s["content"].get("video_here") for s in planned):
+            return [{**s, "content": {**s["content"], "video": video}} if s["content"].get("video_here") else s for s in planned]
         step = {"id": VIDEO_STEP, "kind": "explain_or_observe", "origin": "required_book",
             "content": {"title": "Watch the video lesson", "video": video,
                 "text": "This lesson has a video. Watch it, then continue. The book's mini lesson comes next as a quick review."}}
@@ -1887,7 +1890,7 @@ class ActivityEngine:
                     **({"set_aside_ids": sorted(a["action_id"] for a in readings if a["action_id"] in set_aside and a["status"] == "not_assigned")}
                        if set_aside else {})}, "exercises": exercises,
                 **({"video": {"watched": bool((tx.get("lesson_playback", session_id).get("navigation_state") or {}).get("video_watched"))}}
-                   if any(a["action_id"] == VIDEO_STEP for a in actions) else {}),
+                   if any((a.get("activity_content") or {}).get("video") for a in actions) else {}),
                 "understanding": tx.get("topics", session["topic_id"])["understanding"] or "Not assessed",
                 "attempt_ids": [a["id"] for a in tx.find("attempts", session_id=session_id)],
                 "pending_work": [{"activity_id": a["action_id"], "prompt": a["prompt"], "origin": a.get("origin"), "status": a["status"]}
