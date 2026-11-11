@@ -1,4 +1,5 @@
 import { focusLessonControl } from '../../utils/lessonFocus';
+import { fitToText } from '../../utils/growingTextBox';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Camera, Mic, UserCheck } from 'lucide-react';
@@ -80,8 +81,7 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
   useLayoutEffect(() => {
     const box = textInput.current;
     if (!textSlot || !box || box.tagName !== 'TEXTAREA') return;
-    box.style.height = 'auto';
-    box.style.height = `${Math.min(box.scrollHeight, 136)}px`;
+    fitToText(box);
   }, [textSlot, draft.text]);
   const change = (patch) => setDraft((previous) => ({ ...previous, ...patch }));
   const reasoningRequired = content.require_reasoning || content.evidence_requirement === 'reasoning' || ['explain_thinking', 'predict_then_check', 'find_and_fix_mistake'].includes(activity.kind);

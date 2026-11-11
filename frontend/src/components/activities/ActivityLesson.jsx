@@ -17,6 +17,7 @@ import LessonOptions from './LessonOptions';
 import PageWorkCapture from './PageWorkCapture';
 import BookCheck from './BookCheck';
 import { focusLessonControl } from '../../utils/lessonFocus';
+import { fitToText } from '../../utils/growingTextBox';
 
 const responseText = (response) => response.confirmed_text || (typeof response.original === 'string' ? response.original : response.original?.text) || response.text || '';
 const clean = (error) => (error?.message || String(error)).replace(/^\/[^:]+: /, '');
@@ -548,10 +549,7 @@ function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarrat
   const box = useRef(null);
   useEffect(() => { writeSaved(key, text ? { text } : null); }, [key, text]);
   useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 136)}px`;
+    fitToText(box.current);
   }, [text]);
   const send = async () => {
     const value = text.trim();
