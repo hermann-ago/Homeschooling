@@ -50,3 +50,11 @@ def test_a_repeated_true_false_pair_is_dropped_but_other_choices_are_not():
     assert Response(format='true_false', choices=['Verdadeiro', 'Falso']).choices == []
     with pytest.raises(ValueError):
         Response(format='true_false', choices=['Fact', 'Opinion'])
+
+
+def test_a_printed_problem_without_words_is_labelled_by_its_place():
+    from tutoring.teaching_script import Response
+    # "Write the mixed number for each picture": the problems are drawings, so the writer leaves the labels empty.
+    assert Response(format='blanks', blanks=['', ' ', '3 + 4 =']).blanks == ['1.', '2.', '3 + 4 =']
+    with pytest.raises(ValueError):
+        Response(format='single_choice', choices=['A', ''])

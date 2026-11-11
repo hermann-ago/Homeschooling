@@ -182,8 +182,15 @@ def start(config: HostConfig, port: int, open_browser: bool):
         # A console of its own without a window, not DETACHED_PROCESS: the venv's python.exe starts
         # the real interpreter as a child, which would otherwise open a new, closable console window.
         flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
-    process = subprocess.Popen(command, cwd=BACKEND, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
-                               creationflags=flags, start_new_session=os.name != "nt", env=environment)
+    def launch(extra=0):
+        return subprocess.Popen(command, cwd=BACKEND, stdout=log, stderr=log, stdin=subprocess.DEVNULL,
+                                creationflags=flags | extra, start_new_session=os.name != "nt", env=environment)
+    try:
+        # Started from a terminal or tool that closes its whole process tree when it ends (a Windows
+        # job), the server would stop with it. Leave that job when it allows; otherwise start normally.
+        process = launch(subprocess.CREATE_BREAKAWAY_FROM_JOB if os.name == "nt" else 0)
+    except OSError:
+        process = launch()
     for _ in range(120):
         time.sleep(0.5)
         if process.poll() is not None:

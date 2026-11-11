@@ -34,6 +34,9 @@ class Response(Content):
 
     @model_validator(mode='after')
     def complete_controls(self):
+        # A printed problem with no words of its own (a picture, a tick mark, a slot in a
+        # pattern) is labelled by its place in the exercise.
+        self.blanks=[value if value.strip() else f'{index}.' for index,value in enumerate(self.blanks,1)]
         if any(not value.strip() or len(value)>1000 for value in [*self.choices,*self.matching_items,*self.matching_options,*self.blanks]):
             raise ValueError('Answer labels must contain bounded plain text.')
         if self.format=='blanks':
