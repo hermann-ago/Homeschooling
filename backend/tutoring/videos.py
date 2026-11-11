@@ -79,9 +79,8 @@ def lesson_number(title):
 # What the writer is told when the lesson has a video step (see the activity engine).
 AUTHORING = """VIDEO LESSON: The app plays the book's own video lesson inside the lesson. Set video to true
 on the one book_work turn where the book asks the child to watch it (its video lesson section, with any
-problems worked during the video); the video plays at the top of that turn. The child needs no QR code or
-web address, so leave those directions out of that turn's prompt. If no turn is marked, the video plays
-right after your introduction. Never describe or summarise the video, which you cannot see. Teach the
+problems worked during the video); the video plays at the top of that turn. If no turn is marked, the
+video plays right after your introduction. Never describe or summarise the video, which you cannot see. Teach the
 book's mini lesson after it as a quick review of the same idea, keeping its reading, explanations and
 exercises as usual."""
 
