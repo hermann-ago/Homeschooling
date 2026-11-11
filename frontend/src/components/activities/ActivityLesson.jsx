@@ -122,8 +122,6 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(() => readSaved(storageKey(sessionId, 'pending')));
-  // Help belongs to one step: it closes when the lesson moves on.
-  const [helpFor, setHelpFor] = useState(null);
   const [fullThread, setFullThread] = useState(true);
   const [triedAgain, setTriedAgain] = useState(null); // interaction where the grown-up asked for another go
   const [snapSlot, setSnapSlot] = useState(null);
@@ -228,9 +226,6 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       try {
         const next = await activitiesApi.event(sessionId, command);
         writeSaved(pendingKey, null); setPending(null); update(next);
-        if (command.type === 'request_hint' && next.error) {
-          writeSaved(pendingKey, command); setPending(command);
-        }
         if (['continue', 'acknowledge_source_issue', 'advance_stage', 'acknowledge_return', 'reveal', 'go_back', 'restart_lesson', 'done_in_book'].includes(command.type)
             || command.type === 'snap_work' && !fixing
             || command.type === 'parent_check' && command.payload?.result === 'checked') callbacks.current.onContinue?.(next);
@@ -262,11 +257,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
     if (readSaved(pendingKey)) { setProblem('Recover the saved action below before starting another action.'); return Promise.resolve(null); }
     const current = stateRef.current; const activity = current?.active_activity;
     if (!current || !activity) return Promise.resolve(null);
-    if (type === 'request_hint') {
-      const saved = current.pending_support_commands?.find((command) => command.activity_id === activity.id && command.interaction_id === activity.interaction?.id && (command.payload.kind || 'hint') === (payload.kind || 'hint'));
-      if (saved) return execute({ ...saved, expected_revision: current.revision });
-    }
-    if (['take_break', 'request_followup', 'request_hint', 'go_back', 'restart_lesson'].includes(type)) {
+    if (['take_break', 'request_followup', 'go_back', 'restart_lesson'].includes(type)) {
       callbacks.current.onPauseNarration?.();
       const cursor = callbacks.current.getNarrationCursor?.();
       if (cursor) payload = { ...payload, cursor };
@@ -314,9 +305,6 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   };
   if (!state) return <section className="p-4" aria-label="Tutor activities">{problem ? <><p role="alert" className="text-problem">{problem}</p><Button size="sm" onClick={refresh}>Try opening the lesson again</Button></> : <p role="status">Opening your saved lesson…</p>}</section>;
   const activity = state.active_activity;
-  const helpKey = activity ? `${activity.id}.${activity.interaction?.id || ''}` : null;
-  const helpOpen = helpKey !== null && helpFor === helpKey;
-  const setHelpOpen = (next) => setHelpFor((typeof next === 'function' ? next(helpOpen) : next) ? helpKey : null);
   const definition = activityDefinition(activity);
   const status = activity?.interaction?.status;
   const stage = responseStage(activity);
@@ -374,6 +362,17 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const blockRepeat = (keyEvent) => { if (keyEvent.repeat && ['Enter', ' '].includes(keyEvent.key)) keyEvent.preventDefault(); };
   const mainStep = !paced && !snapMode && !parentCheck && (state.on_break || sourceIssue || activity?.kind === 'read_source' && activity.status === 'pending'
     || canContinue && definition.family !== 'unsupported' && definition.family !== 'break');
+  // The step's quieter choices, as text links beside the main button. The text box is the help.
+  const choicesShown = activity && !definition.internal && !state.on_break && !workGroup && activity.status === 'pending'
+    && !['close_lesson', 'take_break_and_return'].includes(activity.kind);
+  const stepChoices = choicesShown && <div className="tutor-step-choices" role="group" aria-label="Other choices for this step">
+    {/* After a miss, the teaching set aside by "Let me try first" is one tap away. */}
+    {activity.teaching_available && (activity.responses?.length > 0 || activity.parent_activity_id) && <button type="button" className="tutor-text-action" disabled={working} onClick={() => event('show_teaching')}>Show me how</button>}
+    {!needsResponse(activity) && activity.can_try_first && <button type="button" className="tutor-text-action" disabled={working} onClick={() => event('try_first')}>Let me try first</button>}
+    {needsResponse(activity) && !paced && (activity.fix
+      ? <button type="button" className="tutor-text-action" disabled={working} onClick={() => event('fix_later')}>Back to the lesson</button>
+      : <button type="button" className="tutor-text-action" disabled={working} onClick={() => event('skip')}>Skip for now</button>)}
+  </div>;
   // What the child answers with sits in the dock, above the text box (as a question
   // card does in a chat app); the tutor's words stay in the conversation.
   const pageWorkInDock = Boolean(workGroup && ['ready', 'capture', 'confirmation'].includes(workGroup.status));
@@ -480,24 +479,6 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {activity.can_continue_discussion && <p className="text-sm text-muted">You can continue with this explanation, or add more to your answer if you want.</p>}
         {activity.kind === 'close_lesson' && <p role="status" className="text-sm text-muted">Your work is saved. Choose Finish lesson to mark this chapter complete in Curriculum. Any work left to revisit stays in your record.</p>}
         {parentCheck && <p role="status" className="tutor-hint">{triedAgain === activity.interaction?.id ? 'Have another go, then show your book again.' : 'When you are done, show your book to a grown-up.'}</p>}
-        {activity.status === 'pending' && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && <div className="lesson-help">
-          {/* After a miss, the teaching set aside by "Let me try first" is one tap away. */}
-          {activity.teaching_available && (activity.responses?.length > 0 || activity.parent_activity_id) && <button type="button" className="tutor-chip" disabled={working} onClick={() => event('show_teaching')}>Show me how</button>}
-          <button type="button" className="tutor-chip" aria-expanded={helpOpen} aria-controls={`help-${activity.id}`} disabled={working} onClick={() => setHelpOpen((open) => !open)}>{helpOpen ? 'Close help' : 'Help'}</button>
-          {needsResponse(activity) && !paced && (activity.fix
-            ? <button type="button" className="tutor-chip" disabled={working} onClick={() => event('fix_later')}>Back to the lesson</button>
-            : <button type="button" className="tutor-chip" disabled={working} onClick={() => event('skip')}>Skip for now</button>)}
-          {!needsResponse(activity) && activity.can_try_first && <button type="button" className="tutor-chip" disabled={working} onClick={() => event('try_first')}>Let me try first</button>}
-          {helpOpen && <div id={`help-${activity.id}`} role="group" aria-label="Help choices" className="tutor-help-choices">
-            {activity.teaching_available && !activity.responses?.length && !activity.parent_activity_id && <button type="button" className="tutor-chip" disabled={working} onClick={() => { setHelpOpen(false); event('show_teaching'); }}>Show me the lesson first</button>}
-            {(needsResponse(activity) && !paced || activity.kind === 'read_source') && [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']].map(([kind, label]) =>
-              <button type="button" key={kind} className="tutor-chip" disabled={working || !['awaiting_input', 'awaiting_followup', 'ready_to_assess', 'awaiting_work', ...(activity.kind === 'read_source' ? ['ready_to_continue'] : [])].includes(status)}
-                onClick={() => { setHelpOpen(false); event('request_hint', { kind }); }}>{label}</button>)}
-            {!paced && activity.kind === 'request_book_work' && activity.origin === 'required_book' && !activity.assignment_item_id &&
-              <button type="button" className="tutor-chip" disabled={working} onClick={() => { setHelpOpen(false); event('parent_check', { result: 'checked' }); }}>A grown-up checked this in the book</button>}
-            <p className="text-xs text-muted basis-full">You can also ask your tutor anything in the box below.</p>
-          </div>}
-        </div>}
       </>}</>}
           </section>
         </div>
@@ -506,7 +487,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
     </div>
     <footer className="tutor-dock">
       <div ref={setSnapSlot} className="tutor-snap-slot" />
-      {pending && !busy && <div role="alert" className="tutor-note is-attention flex flex-col gap-2"><p className="text-sm">An action is saved on this browser. Recover its result before sending anything else.</p><Button size="sm" onClick={() => execute(pending)}>Recover saved action</Button>{pending.type === 'request_hint' && <Button size="sm" variant="quiet" onClick={() => { writeSaved(pendingKey, null); setPending(null); setProblem('This help request is kept for later. Your answer is safe; choosing the same help again recovers that request.'); }}>Leave this help request for later</Button>}</div>}
+      {pending && !busy && <div role="alert" className="tutor-note is-attention flex flex-col gap-2"><p className="text-sm">An action is saved on this browser. Recover its result before sending anything else.</p><Button size="sm" onClick={() => execute(pending)}>Recover saved action</Button></div>}
       {busy && <p role="status" className="tutor-dock-status">Saving your work and preparing the next response…</p>}
       {state.notice && <p role="status" className="tutor-dock-status text-attention">{state.notice}</p>}
       {problem && <p role="alert" className="tutor-dock-status text-problem">{problem}</p>}
@@ -521,6 +502,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           aria-label={askInstead ? 'Write my answer instead' : 'Ask the tutor a question instead'} title={askInstead ? 'Write my answer instead' : 'Ask a question instead'}
           onClick={() => setAskFor(askInstead ? null : snapKey)}>{askInstead ? <PencilLine size={18} aria-hidden="true" /> : <MessageCircleQuestion size={18} aria-hidden="true" />}</button>}
         {Boolean(activity?.snap) && !snapMode && !state.on_break && !state.page_work?.id && <button type="button" className="tutor-icon-button" aria-label="Take a photo instead" title="Take a photo instead" disabled={working} onClick={() => setTyping(null)}><Camera size={18} aria-hidden="true" /></button>}
+        {stepChoices}
         <div className="tutor-controls-main" aria-label="Lesson step controls">
           <div ref={setSubmitSlot} className="contents" />
           {snapMode && <SnapWork key={snapKey} busy={working} onSnap={snap} viewSlot={snapSlot} onType={() => setTyping(snapKey)}

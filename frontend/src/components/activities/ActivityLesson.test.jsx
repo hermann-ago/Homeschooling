@@ -336,22 +336,17 @@ describe('Shared activity lesson', () => {
     expect(screen.getByText('My words')).toBeTruthy();
     expect(api.event).not.toHaveBeenCalled();
   });
-  it('keeps failed help recoverable and reuses its identity after deferring it', async () => {
-    api.event.mockImplementationOnce(async (session, command) => {
-      const next = makeState(makeActivity(), { error: 'Help is pending', events: [{ operation_id: command.operation_id }], pending_support_commands: [command] });
-      api.state.mockResolvedValue(next); return next;
-    }).mockResolvedValueOnce(makeState());
-    show();
-    fireEvent.click(await screen.findByRole('button', { name: 'Help' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Show me an example' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Leave this help request for later' }));
-    expect(screen.getByLabelText('Your answer')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Help' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Show me an example' }));
-    await waitFor(() => expect(api.event).toHaveBeenCalledTimes(2));
-    expect(api.event.mock.calls[1][1]).toEqual(api.event.mock.calls[0][1]);
+  it('has no Help menu: Skip for now sits in the controls row beside the main button', async () => {
+    api.event.mockResolvedValue(makeState());
+    const { container } = show();
+    const skip = await screen.findByRole('button', { name: 'Skip for now' });
+    expect(screen.queryByRole('button', { name: 'Help' })).toBeNull();
+    expect(skip.closest('footer')).toBe(container.querySelector('footer.tutor-dock'));
+    expect(skip.closest('[aria-label="Lesson step controls"]')).toBeNull(); // never the main button Space presses
+    fireEvent.click(skip);
+    await waitFor(() => expect(api.event.mock.calls.at(-1)?.[1]).toMatchObject({ type: 'skip' }));
   });
-  it('offers Let me try first beside Help on a teaching step', async () => {
+  it('offers Let me try first on a teaching step', async () => {
     api.state.mockResolvedValue(makeState(makeActivity({ id: 'read1', kind: 'read_source', content: { text: 'Elapsed time is…' },
       interaction: { id: 'r1', status: 'ready_to_continue' }, can_try_first: true })));
     api.event.mockResolvedValue(makeState());
@@ -368,19 +363,6 @@ describe('Shared activity lesson', () => {
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'Show me how' }));
     await waitFor(() => expect(api.event.mock.calls.at(-1)?.[1]).toMatchObject({ type: 'show_teaching' }));
-  });
-  it('sends distinct explanation, example and hint requests from the current question', async () => {
-    api.event.mockResolvedValue(makeState());
-    show();
-    for (const [kind, label] of [['explain', 'Explain it another way'], ['example', 'Show me an example'], ['hint', 'Give me a hint']]) {
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Help' }).disabled).toBe(false));
-      fireEvent.click(screen.getByRole('button', { name: 'Help' }));
-      fireEvent.click(await screen.findByRole('button', { name: label }));
-      await waitFor(() => expect(api.event.mock.calls.at(-1)?.[1]).toMatchObject({ type: 'request_hint', payload: { kind } }));
-      // Choosing help closes the panel, leaving two equal buttons.
-      expect(screen.queryByRole('group', { name: 'Help choices' })).toBeNull();
-    }
-    expect(api.event).toHaveBeenCalledTimes(3);
   });
   it('registers all twenty-three semantic activities and keeps internal actions without cards', () => {
     expect(Object.keys(activityRegistry)).toHaveLength(23);
@@ -493,8 +475,7 @@ describe('Shared activity lesson', () => {
     conversation.scrollTop = 0;
     fireEvent.scroll(conversation);
     api.event.mockResolvedValue(makeState(makeActivity({ messages: [{ id: 'hint', role: 'teacher', text: 'Notice the river.' }] }), { revision: 2 }));
-    fireEvent.click(screen.getByRole('button', { name: 'Help' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Give me a hint' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }));
     await screen.findByText('Notice the river.');
     expect(conversation.scrollTop).toBe(0);
     fireEvent.click(screen.getByRole('button', { name: /Back to latest/ }));

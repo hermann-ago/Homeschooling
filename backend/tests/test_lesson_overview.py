@@ -24,8 +24,8 @@ def test_recap_distinguishes_reading_capture_assessment_help_and_unfinished_work
     engine, state, _ = engine_lesson(harness, monkeypatch)
     assert state['learning_summary'] is None
     state = reach_question(engine, state)
-    monkeypatch.setattr(harness.ctx.ai, 'generate', lambda *args, **kw: {'text': 'Think about groups.'})
-    state = event(engine, state, 'request_hint', {'kind': 'explain'})
+    with harness.ctx.store.transaction() as tx:  # help recorded on this step, as in earlier lessons
+        tx.update('lesson_actions', f"{state['session_id']}:{state['active_activity']['id']}", {'help_given': 'Think about groups.'})
     state = event(engine, state, 'submit_response', {'response_id': 'unassessed-original', 'text': 'An unfinished answer'})
     old_interaction = state['active_activity']['interaction']['id']
     state = event(engine, state, 'skip')
@@ -79,35 +79,11 @@ def test_repeat_family_links_resume_and_next_lesson_are_scoped_and_read_only(har
     assert engine.state(original)['attempt_navigation']['resume_repeat'] is None
 
 
-@pytest.mark.parametrize('kind,prefix', [('hint', ''), ('explain', 'Another explanation'), ('example', 'A different example')])
-def test_support_choice_is_frozen_deduplicated_and_attached_to_the_response(harness, monkeypatch, kind, prefix):
-    engine, state, _ = engine_lesson(harness, monkeypatch)
-    state = reach_question(engine, state)
-    before = state
-    calls = []
-    def support(prompt, **kwargs):
-        calls.append(prompt)
-        return {'text': 'Two imaginary clubs can join to form one team.'}
-    monkeypatch.setattr(harness.ctx.ai, 'generate', support)
-    state = event(engine, state, 'request_hint', {'kind': kind}, operation='support-choice-operation')
-    replay = event(engine, before, 'request_hint', {'kind': kind}, operation='support-choice-operation')
-    assert len(calls) == 1
-    assert len(replay['active_activity']['messages']) == 1
-    assert state['active_activity']['messages'][0]['text'].startswith(prefix)
-    assert not harness.ctx.store.all('attempts')
-    state = event(engine, state, 'submit_response', {'response_id': 'after-support', 'text': 'He united them.'})
-    assert 'imaginary clubs' in state['active_activity']['responses'][0]['support_snapshot']['this']
-    with pytest.raises(TutorConflict):
-        event(engine, before, 'request_hint', {'kind': 'example' if kind != 'example' else 'explain'}, operation='support-choice-operation')
-
-
 def test_revisit_does_not_allow_skipping_ahead_from_an_active_question(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     state = reach_question(engine, state)
     with pytest.raises(TutorConflict):
         event(engine, state, 'revisit_activity', {'activity_id': state['active_activity']['id']})
-    with pytest.raises(TutorError):
-        event(engine, state, 'request_hint', {'kind': 'solve_it_for_me'})
 
 
 def test_completed_unfinished_work_continues_in_a_new_attempt(harness, monkeypatch):
@@ -128,30 +104,3 @@ def test_completed_unfinished_work_continues_in_a_new_attempt(harness, monkeypat
     assert not harness.ctx.store.all('attempts')
 
 
-def test_failed_help_keeps_its_request_identity_for_recovery(harness, monkeypatch):
-    engine, state, _ = engine_lesson(harness, monkeypatch)
-    state = reach_question(engine, state)
-    def offline(*args, **kwargs):
-        raise RuntimeError('offline synthetic provider')
-    monkeypatch.setattr(harness.ctx.ai, 'generate', offline)
-    active = state['active_activity']
-    path = f"/api/tutor/sessions/{state['session_id']}/activity-events"
-    body = {'operation_id': 'recover-example-request', 'expected_revision': state['revision'],
-            'activity_id': active['id'], 'interaction_id': active['interaction']['id'],
-            'type': 'request_hint', 'payload': {'kind': 'example'}}
-    response = harness.call('POST', path, key=body['operation_id'], json=body)
-    assert response.status_code == 200, response.text
-    state = response.json()
-    saved = state['pending_support_commands'][0]
-    assert saved['operation_id'] == 'recover-example-request'
-    assert not state['active_activity']['messages']
-    monkeypatch.setattr(harness.ctx.ai, 'generate', lambda *args, **kw: {'text': 'Imagine two teams joining.'})
-    response = harness.call('POST', path, key=body['operation_id'], json={**body, 'expected_revision': state['revision']})
-    assert response.status_code == 200, response.text
-    state = response.json()
-    assert not state['pending_support_commands']
-    assert len(state['active_activity']['messages']) == 1
-    assert len(harness.ctx.store.find('activity_jobs', session_id=state['session_id'])) == 1
-    assert 'x-idempotent-replay' not in response.headers
-    rejected = harness.call('POST', path, key=body['operation_id'], json={**body, 'payload': {'kind': 'explain'}})
-    assert rejected.status_code == 409

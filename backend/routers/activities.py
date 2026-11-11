@@ -40,7 +40,7 @@ class ActivityEvent(StrictRequest):
     expected_revision: int = Field(ge=0)
     activity_id: str = Field(min_length=1, max_length=300)
     interaction_id: str | None = Field(None, max_length=500)
-    type: Literal["submit_response", "confirm_response", "assess", "request_hint", "physical_complete",
+    type: Literal["submit_response", "confirm_response", "assess", "physical_complete",
         "continue", "skip", "take_break", "resume", "acknowledge_return", "reveal", "advance_stage", "parent_review",
         "save_cursor", "save_draft", "checkpoint", "reading_done", "request_followup", "finish",
         "retry_transcription", "request_parent_review", "revisit_activity", "recheck_key", "go_back", "restart_lesson", "acknowledge_source_issue", "focus_unfinished",

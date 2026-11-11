@@ -75,10 +75,6 @@ def response_content(action, interaction):
     return content
 
 
-class HintReply(BaseModel):
-    text: str = Field(min_length=1, max_length=1500)
-
-
 class TranscriptionReply(BaseModel):
     text: str = Field(max_length=4000)
     uncertain: bool = False
@@ -296,10 +292,6 @@ class ActivityEngine:
                 response['source_disputed'] = (message.get('assessment') or {}).get('result') == 'Source disputed' if message else False
                 response['blank_results'] = (message.get('assessment') or {}).get('blank_results') if message else None
                 response['source_issue_acknowledged'] = response['id'] in acknowledged_sources
-        pending_support = [{"operation_id": event["operation_id"], "activity_id": event["activity_id"],
-            "interaction_id": event["interaction_id"], "type": "request_hint", "payload": event["payload"]}
-            for event in events if event["event_type"] == "request_hint" and
-            jobs.get("hint-" + _hash([session_id, event["operation_id"]])[:32], {}).get("status") != "completed"]
         active = next((a for a in views if a["id"] == playback["action_id"]), None) if session['status'] != 'superseded' else None
         from .exercise_sections import sections
         grouped=sections([{**action,'activity_content':capture_content(self.ctx,action)} for action in actions])
@@ -346,7 +338,6 @@ class ActivityEngine:
             "learning_summary": self._learning_summary(session, actions) if session["status"] == "completed" or active and active["kind"] == "close_lesson" else None,
             "catch_up": self._catch_up_info(session, actions),
             "attempt_navigation": self._attempt_navigation(session),
-            "pending_support_commands": pending_support,
             "can_go_back": can_go_back and session["status"] in ("active", "unfinished"),
             "events": [{k: e[k] for k in ("id", "sequence", "event_type", "activity_id", "interaction_id", "operation_id")} for e in events],
             "event_cursor": events[-1]["sequence"] if events else 0, "on_break": bool(playback.get("on_break")),
@@ -771,8 +762,6 @@ class ActivityEngine:
                 # A retried assessment can resume its saved response without duplicating capture.
                 if event_type == "assess" or event_type == "submit_response" and payload.get("assess_after_save") is True or event_type == 'confirm_response' and payload.get('assess_after_confirm') is True:
                     return self._assess(session_id, activity_id, payload.get("response_id"), replace_invalid=payload.get("replace_invalid_reply") is True)
-                if event_type == "request_hint":
-                    return self._hint(session_id, self._action(self.db, session_id, activity_id), operation_id, payload.get("kind", "hint"))
                 if event_type == "request_followup":
                     return self._support_question(session_id, operation_id)
                 if event_type == "finish":
@@ -961,13 +950,6 @@ class ActivityEngine:
                     if event_type == "request_parent_review":
                         tx.update("activity_responses", response["id"], {"status": "parent_review"})
                         tx.update("activity_interactions", interaction["id"], {"status": "parent_review"})
-                elif event_type == "request_hint":
-                    if payload.get("kind", "hint") not in ("hint", "explain", "example"):
-                        raise TutorError("Choose a hint, explanation or example")
-                    if interaction["status"] not in ("awaiting_input", "awaiting_followup", "ready_to_assess", "awaiting_work") and not (action["activity_kind"] == "read_source" and interaction["status"] == "ready_to_continue"):
-                        raise TutorConflict("Finish saving the pending response before requesting a hint")
-                    if action["activity_kind"] == "read_source" and payload.get("cursor"):
-                        self._save_cursor(tx, session_id, action, payload["cursor"])
                 elif event_type == "request_followup":
                     question = _text(payload.get("prompt") or payload.get("text") or "")
                     if not question:
@@ -995,8 +977,6 @@ class ActivityEngine:
                 return page_work.run(self, session_id, page_work.request_payload(session_id, operation_id, event_type, payload))
             if event_type == "assess" or event_type == "submit_response" and payload.get("assess_after_save") is True or event_type == 'confirm_response' and payload.get('assess_after_confirm') is True:
                 return self._assess(session_id, activity_id, payload.get("response_id"), replace_invalid=payload.get("replace_invalid_reply") is True)
-            if event_type == "request_hint":
-                return self._hint(session_id, action, operation_id, payload.get("kind", "hint"))
             if event_type == "request_followup":
                 return self._support_question(session_id, operation_id)
             if event_type == "finish":
@@ -1619,63 +1599,6 @@ class ActivityEngine:
         asked = words((request.get("content") or {}).get("prompt"))
         own = words(action.get("prompt"))
         return bool(asked and own) and (asked in own or own in asked)
-
-    def _hint(self, session_id, action, operation_id, help_kind="hint"):
-        job_id = "hint-" + _hash([session_id, operation_id])[:32]
-        session = self._session(session_id)
-        playback = self.db.get("lesson_playback", session_id)
-        interaction = self._interaction(self.db, session_id, action["action_id"])
-        previous = self.db.get("activity_jobs", job_id)
-        if previous and previous["status"] == "completed":
-            return self.state(session_id)
-        if not previous:
-            with self.db.transaction(kind="activity.hint_queued") as tx:
-                tx.insert("activity_jobs", {"id": job_id, "session_id": session_id, "child_id": session["child_id"],
-                    "activity_id": action["action_id"], "interaction_id": interaction["id"], "kind": "hint", "status": "queued",
-                    "input_snapshot": {"prompt": interaction["prompt"], "help_given": action["help_given"], "help_kind": help_kind}})
-        try:
-            from .interactive import SERVER_TUTOR_RULES
-            source = (action.get("activity_content") or {}).get("text", "") if action["activity_kind"] == "read_source" else self.tutor.interactive._source(action)
-            instruction = {"hint": "Give one small helpful clue without stating the answer.",
-                "explain": "Explain the current idea differently using simpler words. Do not state the answer to the learner's question.",
-                "example": "Show a short worked analogy or similar example with different details or numbers. Label invented situations as imaginary. Do not solve the learner's actual task or introduce new historical claims."}[help_kind]
-            prompt = instruction + " The learner explicitly requested this support.\nQuestion: " + interaction["prompt"] + "\nPrevious support: " + (action["help_given"] or "none") + "\nSource:\n" + source
-            from . import book_questions, extra_questions
-            prepared = (playback.get('context_snapshot') or {}).get('prepared_guide')
-            if book_questions.enabled(prepared):
-                prompt += '\nKeep this support brief. Do not add a new question or request a typed explanation; return to the existing reading/choices.'
-            elif extra_questions.enabled(prepared):
-                prompt += extra_questions.HINT
-            previous = self.db.get("activity_jobs", job_id)
-            frozen = previous["input_snapshot"]
-            if frozen.get("full_prompt"):
-                prompt = frozen["full_prompt"]
-                if tuple(self.ctx.ai.selection()) != tuple(frozen["provider_selection"]):
-                    raise TutorError("Recover the hint with its original provider")
-            else:
-                with self.db.transaction(kind="activity.freeze_hint") as tx:
-                    tx.update("activity_jobs", job_id, {"input_snapshot": {**frozen, "full_prompt": prompt,
-                        "provider_selection": list(self.ctx.ai.selection())}})
-            with (self.ctx.ai.scoped(playback["generation_scope_id"]) if playback.get("generation_scope_id") else nullcontext()), self.ctx.ai.identified(job_id):
-                reply = self.ctx.ai.generate(prompt, schema=HintReply, instructions=SERVER_TUTOR_RULES, max_output=1024)
-            hint = HintReply.model_validate(reply).text
-            from .activities import TextContent
-            hint = TextContent(text=hint).text
-            if help_kind != "hint":
-                hint = ("Another explanation" if help_kind == "explain" else "A different example") + "\n\n" + hint
-            with self.db.transaction(kind="activity.hint_result") as tx:
-                current = self._action(tx, session_id, action["action_id"])
-                tx.update("lesson_actions", action["id"], {"help_given": "\n".join(filter(None, [current["help_given"], hint]))})
-                tx.insert("lesson_dialogue", {"id": job_id, "session_id": session_id, "action_id": action["action_id"],
-                    "role": "teacher", "text": hint, "status": "saved",
-                    "sequence": len(tx.find("lesson_dialogue", session_id=session_id)) + 1})
-                tx.update("activity_jobs", job_id, {"status": "completed", "result": {"text": hint}})
-                tx.touch("tutor_sessions", session_id)
-        except Exception:
-            with self.db.transaction(kind="activity.hint_failed") as tx:
-                tx.update("activity_jobs", job_id, {"status": "failed", "error": "The hint is pending. Saved work and position are safe."})
-            return {**self.state(session_id), "error": "The hint is pending. Please retry when generation is available."}
-        return self.state(session_id)
 
     def _key_correction_inputs(self, db, action, response):
         if response['status'] != 'assessed' or response.get('evidence_ids') or response.get('reasoning'):

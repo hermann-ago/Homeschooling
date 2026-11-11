@@ -496,17 +496,6 @@ def test_response_identity_cannot_cross_sessions_or_prompts(harness, monkeypatch
     assert len(harness.ctx.store.all("activity_responses")) == 1
 
 
-def test_hint_is_saved_support_without_an_attempt_and_can_retry(harness, monkeypatch):
-    engine, state, _ = engine_lesson(harness, monkeypatch)
-    state = invoke(engine, state)
-    monkeypatch.setattr(harness.ctx.ai, "generate", lambda *args, **kwargs: {"text": "Look at what happened to the tribes."})
-    state = event(engine, state, "request_hint", operation="hint-request-once")
-    assert not harness.ctx.store.all("attempts")
-    assert state["active_activity"]["messages"][0]["text"] == "Look at what happened to the tribes."
-    state = event(engine, state, "request_hint", operation="hint-request-once")
-    assert len(state["active_activity"]["messages"]) == 1
-
-
 def test_unobserved_feedback_result_and_foreign_sources_are_rejected(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     with pytest.raises(TutorError):

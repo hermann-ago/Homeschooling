@@ -101,8 +101,6 @@ def test_back_restores_parked_reading_offset_but_replaying_a_finished_read_start
 def test_restart_during_confirmation_keeps_capture_and_assistance_but_never_reuses_it_as_a_new_answer(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     state = reach_question(engine, state)
-    monkeypatch.setattr(harness.ctx.ai, 'generate', lambda *_a, **_k: {'text': 'Think about groups.'})
-    state = event(engine, state, 'request_hint')
     state = event(engine, state, 'submit_response', {'response_id': 'unconfirmed', 'text': 'They united.', 'method': 'dictation'})
     saved = harness.ctx.store.get('activity_responses', 'unconfirmed')
     state = event(engine, state, 'restart_lesson')
@@ -112,7 +110,6 @@ def test_restart_during_confirmation_keeps_capture_and_assistance_but_never_reus
     assert saved['status'] == 'awaiting_confirmation'
     with pytest.raises(TutorError): event(engine, state, 'confirm_response', {'response_id': 'unconfirmed', 'text': 'Changed'})
     state = event(engine, state, 'submit_response', {'response_id': 'after-restart', 'text': 'A new answer'})
-    assert 'groups' in harness.ctx.store.get('activity_responses', 'after-restart')['support_snapshot']['this']
     assert not harness.ctx.store.all('attempts')
 
 

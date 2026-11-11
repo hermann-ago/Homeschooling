@@ -38,8 +38,6 @@ def test_typed_history_slice_finishes_with_original_hint_revision_and_replay(har
     monkeypatch.setattr(interactive, 'gemini_turn', lambda *args: {'feedback': 'Look again at the groups.', 'result': 'Not yet',
         'follow_up': 'What did he do with the tribes?', 'ready_to_continue': False})
     state = http_event(harness, state, 'assess', {'response_id': 'synthetic-original'}, 'assess-original-once')
-    monkeypatch.setattr(harness.ctx.ai, 'generate', lambda *args, **kwargs: {'text': 'Think about joining groups.'})
-    state = http_event(harness, state, 'request_hint')
     state = http_event(harness, state, 'submit_response', {'response_id': 'synthetic-revision', 'text': 'He united the tribes.'})
     state = http_event(harness, state, 'take_break')
     harness.restart()
@@ -262,19 +260,6 @@ def test_tutor_requested_worked_example_uses_same_engine_and_retries_once(harnes
         'assess', {'response_id': 'needs-example'})
     assert state['active_activity']['id'] == child
     assert len([a for a in state['activities'] if a['id'] == child]) == 1
-
-
-def test_help_after_capture_does_not_rewrite_original_independence(harness, monkeypatch):
-    engine, state, _ = engine_lesson(harness, monkeypatch)
-    state = invoke(engine, state)
-    state = event(engine, state, 'submit_response', {'response_id': 'before-hint', 'text': 'He united them.'})
-    monkeypatch.setattr(harness.ctx.ai, 'generate', lambda *args, **kwargs: {'text': 'Think about joining groups.'})
-    state = event(engine, state, 'request_hint')
-    monkeypatch.setattr(interactive, 'gemini_turn', lambda *args: {'feedback': 'Yes.', 'result': 'Correct', 'ready_to_continue': True})
-    state = event(engine, state, 'assess', {'response_id': 'before-hint'})
-    attempt = harness.ctx.store.all('attempts')[0]
-    assert attempt['independence'] == 'independent' and not attempt['help_given']
-    assert 'joining' in harness.ctx.store.get('lesson_actions', f"{state['session_id']}:{state['active_activity']['id']}")['help_given']
 
 
 def test_draft_conflict_keeps_the_first_device_copy(harness, monkeypatch):

@@ -20,6 +20,5 @@ export function writeSaved(key, value) {
 }
 
 export function operationCommitted(state, operation) {
-  return Boolean(operation && !(state?.pending_support_commands || []).some((command) => command.operation_id === operation.operation_id) &&
-    (state?.events || []).some((event) => event.operation_id === operation.operation_id));
+  return Boolean(operation && (state?.events || []).some((event) => event.operation_id === operation.operation_id));
 }
