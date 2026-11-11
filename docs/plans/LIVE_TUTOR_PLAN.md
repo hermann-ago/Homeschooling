@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **not started**. Created 2026-11-11.
+Status: **Step 0 done (2026-11-11)**; Step 1 is next. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -66,7 +66,9 @@ Why it feels robotic — verified in the code:
 | F2 | Live replies are silent with the current narrator. The server can voice them with Inworld; the screen only allows three other providers and prints "This reply is text-only with the selected narrator." | `RegistryGuidedLesson.jsx: renderFeedback`; `routers/tutor.py: feedback_audio` already accepts `inworld` |
 | F3 | Every bridge, welcome and closing is written before the lesson, so none can mention what the child just did; the closing is told not to say how the child did | `lesson_prompt.py: HOW_TO_TEACH` |
 | F4 | The live call only sees the current step's conversation, not the lesson so far (what was read, how earlier exercises went) | `interactive.py: _prompt` (`history`) |
-| F5 | The app does not record how long AI calls take, so the wait a child would feel is unknown | `data/ai-usage.sqlite3: requests` has no duration |
+| F5 | The app did not record how long AI calls take (fixed in Step 0) | `services/ai_budget.py` |
+| F6 | When the app checks an answer itself against the key, the child gets a fixed line: "Correct!", "0 of 1 right. Take another look at: …" — 39 of 136 replies in November | `keyed_assessment.py` |
+| F7 | A reply the AI writes takes a median of 8 seconds to appear; 3 of 97 arrived within 3 seconds | measured in Step 0, below |
 
 Costs since 1 Nov 2026, from the usage log (typical, per item):
 
@@ -86,7 +88,7 @@ Money does not decide this; waiting time and trust do.
 Each step ends with: tests green, one real lesson tried with a child, the
 measurements below written into the progress log, commit and push.
 
-- [ ] **Step 0 — Measure first.**
+- [x] **Step 0 — Measure first.** (done 2026-11-11, results in the progress log)
   Record how long every AI and voice call takes (add a duration to the usage
   record). Save one full real lesson as the "before" reference: every line the
   tutor said, live or prepared, with the child's answers. Choose the pilot:
@@ -145,7 +147,7 @@ measurements below written into the progress log, commit and push.
 
 | Measure | How | Aim |
 |---|---|---|
-| Wait before the tutor's first live word | Step 0's timing | to agree after Step 1; a starting guess is under 3 seconds |
+| Wait before the tutor's first live word | `tools/live_tutor.py replies` and `waits` | under 3 seconds (agreed 2026-11-11; faster is better) |
 | Share of live lines that fell back to the prepared line | engine log | low, and never a stuck lesson |
 | Cost of one lesson run (AI + voice) | usage log | stays near today's, cap respected |
 | Key answers revealed | code check, counted | zero |
@@ -166,8 +168,10 @@ measurements below written into the progress log, commit and push.
 - **Young children.** The outside studies behind this direction involved
   teenagers and adults; our own pilot lessons are the evidence that counts.
 
-Decisions for the family before Step 1: the longest acceptable wait, the two
-pilot lessons, and the spending cap for live calls in one lesson.
+Decided with the family on 2026-11-11: the tutor should start talking within
+3 seconds (faster is better); the pilots are a Math lesson with Lucas and a
+Português lesson with Mila; no spending cap is needed for live calls, since
+the amounts are too small to matter (rule 5 stays as tracking only).
 
 ## Working rules
 
@@ -179,4 +183,27 @@ pilot lessons, and the spending cap for live calls in one lesson.
 
 ## Progress log
 
-- 2026-11-11 — Plan written after the research discussion. Nothing built yet.
+- 2026-11-11 — Plan written after the research discussion.
+- 2026-11-11 — **Step 0 done.**
+  - Every AI and voice call now records its duration (`requests.seconds` in
+    the usage ledger). `backend/tools/live_tutor.py` reports them (`waits`),
+    reports the wait a child felt in past lessons (`replies`) and saves a
+    lesson as taught (`transcript`).
+  - "Before" references saved under `tmp/live-tutor/` (learner records, not in
+    git): Lucas, Math Lesson 19 (`2026-11-06-c1-01`: 29 prepared lines, 25 live)
+    and Mila, Letra K (`2026-11-11-c2-02`: 22 prepared, 3 live).
+  - Past lessons since 1 Nov: 136 live replies. 39 were checked by the app at
+    once and got a fixed line (F6). The 97 written by the AI took a median of
+    8 s, 9 in 10 within 17 s; only 3 arrived within 3 s (F7).
+  - Timing probe, three short tutor replies with no book pages attached: the
+    fast model (gpt-6-luna) took 2.4–3.5 s to write one or two sentences; the
+    narrator took 0.5–1.7 s to voice each (69–108 characters). Written and
+    spoken one after the other: about 3.5–5 s.
+  - What this means for the next steps: the 3-second aim is reachable only if
+    the live call is small. Today's call carries about 22,000 tokens (book
+    pages, notes, history) and its reply is also the grade. Step 2 should
+    split a short spoken line (small prompt built from the prepared notes and
+    the result) from the fuller grading, and Step 1 should start speaking the
+    first sentence as soon as it exists. Where the app already knows the
+    result at once (F6), the spoken line can be requested without waiting for
+    any grading.

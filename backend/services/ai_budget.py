@@ -49,6 +49,9 @@ class BudgetLedger:
                 reserved INTEGER NOT NULL, charged INTEGER NOT NULL, status TEXT NOT NULL,
                 usage TEXT, created_at TEXT NOT NULL)""")
             db.execute("CREATE INDEX IF NOT EXISTS request_month ON requests(month,category)")
+            # How long the provider took, from sending to its reply: the wait a child feels.
+            if "seconds" not in [row[1] for row in db.execute("PRAGMA table_info(requests)")]:
+                db.execute("ALTER TABLE requests ADD COLUMN seconds REAL")
             db.execute("CREATE TABLE IF NOT EXISTS narration_parts (id TEXT PRIMARY KEY, metadata TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS ai_results (id TEXT PRIMARY KEY, text TEXT NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS ai_outcomes (request_id TEXT PRIMARY KEY, cache_id TEXT, metadata TEXT NOT NULL, text TEXT NOT NULL)")
@@ -89,12 +92,19 @@ class BudgetLedger:
                     raise BudgetError("This preparation job is paused. No generation sent.")
             # Reservations track potential charges and prevent duplicate sends.
             # Provider billing controls spending; legacy app caps are not enforced.
-            db.execute("INSERT INTO requests VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            db.execute("INSERT INTO requests (id,month,category,provider,model,operation,reserved,charged,status,usage,created_at) "
+                       "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                        (request_id, month, category, provider, model, operation, maximum, maximum,
                         "reserved", None, self.clock().isoformat()))
             if scope_id:
                 db.execute("INSERT INTO request_scopes VALUES (?,?)", (request_id, scope_id))
         return month
+
+    def _elapsed(self, db, request_id):
+        row = db.execute("SELECT created_at FROM requests WHERE id=?", (request_id,)).fetchone()
+        if not row:
+            return None
+        return round(max(0.0, (self.clock() - datetime.fromisoformat(row[0])).total_seconds()), 3)
 
     def configure_scope(self, scope_id, maximum, category="books", enabled=True):
         if category not in DEFAULT_LIMITS or not isinstance(maximum, int) or maximum < 1:
@@ -119,15 +129,15 @@ class BudgetLedger:
         if not isinstance(actual, int) or actual < 0:
             raise BudgetError("Invalid provider usage; reservation retained")
         with self.connect() as db:
-            db.execute("UPDATE requests SET charged=?, status='completed', usage=? WHERE id=?",
-                       (actual, json.dumps(usage or {}), request_id))
+            db.execute("UPDATE requests SET charged=?, status='completed', usage=?, seconds=? WHERE id=?",
+                       (actual, json.dumps(usage or {}), self._elapsed(db, request_id), request_id))
 
     def mark(self, request_id, status):
         if status not in ("uncertain", "rejected"):
             raise BudgetError("Invalid request status")
         with self.connect() as db:
-            db.execute("UPDATE requests SET status=?, charged=CASE WHEN ?='rejected' THEN 0 ELSE charged END WHERE id=?",
-                       (status, status, request_id))
+            db.execute("UPDATE requests SET status=?, charged=CASE WHEN ?='rejected' THEN 0 ELSE charged END, seconds=? WHERE id=?",
+                       (status, status, self._elapsed(db, request_id), request_id))
 
     def summary(self, limits):
         month = local_month(self.clock())
