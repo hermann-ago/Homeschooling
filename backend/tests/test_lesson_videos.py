@@ -100,6 +100,39 @@ def test_a_lesson_with_a_video_shows_it_after_the_welcome_and_records_watching(h
     assert summary['video'] == {'watched': True}
 
 
+def test_start_over_keeps_the_video_and_opens_a_clean_conversation(harness, monkeypatch):
+    seeded, guide = prepare(harness, monkeypatch)
+    videos.set_for_topic(harness.ctx.store, seeded['genghis']['id'], 'https://vimeo.com/579391169/681f47c29c', http=FakeWebNoTitle())
+    legacy = start(harness, seeded, guide)
+    engine = service(harness.ctx)
+    state = event(engine, engine.state(legacy['session_id']), 'continue')
+    state = event(engine, state, 'video_watched')
+    state = event(engine, state, 'continue')
+    state = event(engine, state, 'reading_done')
+    state = event(engine, state, 'continue')
+    while state['active_activity']['kind'] != 'ask_question':
+        state = event(engine, state, 'continue')
+    state = event(engine, state, 'submit_response', {'response_id': 'before-restart', 'text': 'They joined together.'})
+    saved = {table: harness.ctx.store.all(table) for table in ('activity_responses', 'lesson_dialogue', 'activity_interactions')}
+    assert any(a['responses'] for a in state['activities'])
+    state = event(engine, state, 'restart_lesson')
+    # Nothing is deleted, but the lesson shows none of it.
+    assert all(harness.ctx.store.get(t, row['id']) for t, rows in saved.items() for row in rows)
+    assert not any(a['responses'] or a['messages'] for a in state['activities'])
+    assert all(a['upcoming'] for a in state['activities'] if a['id'] != state['active_activity']['id'] and a['status'] == 'pending')
+    state = event(engine, state, 'continue')
+    active = state['active_activity']
+    assert active['id'] == VIDEO_STEP and active['status'] == 'pending'
+    assert not harness.ctx.store.get('lesson_playback', state['session_id'])['navigation_state'].get('video_watched')
+    while state['active_activity']['kind'] != 'ask_question':
+        state = event(engine, state, 'continue')
+        if state['active_activity']['kind'] == 'read_source':
+            state = event(engine, state, 'reading_done')
+    question = state['active_activity']
+    assert question['interaction']['replay_of'] and not question['responses'] and not question['messages']
+    assert len(question['interactions']) == 1
+
+
 def test_a_lesson_without_a_video_has_no_video_step(harness, monkeypatch):
     seeded, guide = prepare(harness, monkeypatch)
     legacy = start(harness, seeded, guide)

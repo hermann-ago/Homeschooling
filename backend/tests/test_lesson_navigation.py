@@ -36,7 +36,7 @@ def test_repeated_back_moves_to_beginning_and_keeps_pending_draft_after_restart(
     assert not harness.ctx.store.all('attempts')
 
 
-def test_start_over_preserves_answers_feedback_and_guide_but_requests_fresh_work(harness, monkeypatch):
+def test_start_over_keeps_answers_saved_but_shows_a_fresh_lesson(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     state = reach_question(engine, state)
     monkeypatch.setattr(interactive, 'gemini_turn', correct)
@@ -58,10 +58,12 @@ def test_start_over_preserves_answers_feedback_and_guide_but_requests_fresh_work
     assert active['interaction']['replay_of'] == old_question['interaction']['id']
     assert active['interaction']['status'] == 'awaiting_input'
     assert active['interaction']['prompt'] == old_question['content']['prompt']
-    assert active['responses'][0]['id'] == 'old-answer'
+    # The old answer stays saved but is no longer part of the lesson on screen.
+    assert active['responses'] == [] and active['messages'] == []
+    assert harness.ctx.store.get('activity_responses', 'old-answer')
     with pytest.raises(TutorError): event(engine, state, 'assess', {'response_id': 'old-answer'})
     state = event(engine, state, 'submit_response', {'response_id': 'new-answer', 'text': 'They joined together.'})
-    assert len(state['active_activity']['responses']) == 2
+    assert [r['id'] for r in state['active_activity']['responses']] == ['new-answer']
     assert {table: harness.ctx.store.all(table) for table in ('attempts', 'lesson_dialogue')} == {table: snapshots[table] for table in ('attempts', 'lesson_dialogue')}
 
 

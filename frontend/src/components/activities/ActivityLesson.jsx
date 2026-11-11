@@ -108,7 +108,7 @@ function ParentReview({ response, busy, onEvent, sourceIssue = false }) {
 // Steps that carry no typed answer: safe to send again on the refreshed lesson.
 const SAFE_AGAIN = ['continue', 'reading_done', 'done_in_book', 'snap_work', 'fix_work', 'fix_later', 'retry_photo_check'];
 
-export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderTeacherText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions }) {
+export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderSpokenText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions }) {
   const [state, setState] = useState(null);
   const stateRef = useRef(null);
   const [problem, setProblem] = useState('');
@@ -122,6 +122,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const [askFor, setAskFor] = useState(null);
   // Where a written answer sits (inside the text box) and where its button sits (the control row).
   const [answerSlot, setAnswerSlot] = useState(null);
+  const [toolsSlot, setToolsSlot] = useState(null);
   const [submitSlot, setSubmitSlot] = useState(null);
   const [singleItemExercise, setSingleItemExercise] = useState(null);
   const [typing, setTyping] = useState(null); // the exercise answered here instead of with a photo
@@ -350,12 +351,11 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const history = visibleActivities(state);
   const groupedIds = new Set([...history.map((item) => item.id), ...(activity ? [activity.id] : [])]);
   const modes = activity?.content?.response_modes || [];
-  // A plain written answer goes in the text box at the bottom, as in a chat. Choices,
-  // answer boxes, matching and photo answers keep their own controls in the step.
-  const plainAnswer = Boolean(captures && !workGroup && modes.includes('text') && !modes.includes('choice') && !modes.includes('written_steps')
-    && !activity.content?.blanks && !activity.content?.matching && !activity.content?.choices?.length && !activity.content?.require_reasoning
-    && !['written_steps', 'handwriting', 'diagram', 'reasoning'].includes(activity.content?.evidence_requirement)
-    && !['predict_then_check', 'capture_and_confirm', 'find_and_fix_mistake', 'worked_example'].includes(activity.kind));
+  // As in a chat, any written answer goes in the text box at the bottom; the card above it
+  // holds only what the child picks or fills in (choices, answer boxes, matching).
+  const plainAnswer = Boolean(captures && !workGroup && !activity.content?.blanks && !activity.content?.matching
+    && (['text', 'written_steps', 'device_dictation', 'audio'].some((mode) => modes.includes(mode))
+      || ['written_steps', 'handwriting', 'diagram'].includes(activity.content?.evidence_requirement)));
   const canAsk = Boolean(activity && !definition.internal && !state.on_break && state.status !== 'completed' && state.status !== 'superseded'
     && ['pending', 'answered'].includes(activity.status) && !['close_lesson', 'take_break_and_return'].includes(activity.kind) && !activity.parent_activity_id);
   const working = busy || Boolean(pending);
@@ -373,14 +373,14 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const checkOnConfirm = activity?.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection';
   const answerPanel = state.on_break ? null : pageWorkInDock ? pageWork
     : !workGroup && captures && !(plainAnswer && askInstead) ? <ResponseCapture compact key={`${activity.id}.${activity.interaction?.id || stage}`} sessionId={sessionId} activity={activity} language={language} draftEvidence={state.draft_evidence || []} busy={working} onPauseNarration={onPauseNarration} onUpload={upload} onSaveDraft={(draft) => saveDraft(activity.id, activity.interaction?.id, draft)} onSubmit={(payload) => event('submit_response', payload)}
-      submitSlot={submitSlot} {...(plainAnswer ? { textSlot: answerSlot } : {})} />
+      submitSlot={submitSlot} toolsSlot={toolsSlot} {...(plainAnswer ? { textSlot: answerSlot } : {})} />
     : !workGroup && awaitingConfirmation && response ? <>
       <ConfirmResponse key={response.id} sessionId={sessionId} language={language} response={response} busy={working} checkOnConfirm={checkOnConfirm} submitSlot={submitSlot} onConfirm={(text) => event('confirm_response', { response_id: response.id, text, ...(checkOnConfirm ? { assess_after_confirm: true } : {}) })} />
       {response.transcription_status === 'failed' && <Button size="sm" disabled={working} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
       {response.evidence_ids?.length > 0 && <Button size="sm" variant="quiet" disabled={working} onClick={() => event('request_parent_review', { response_id: response.id })}>Ask a parent to inspect this photo</Button>}
     </> : null;
   const composer = state.status !== 'completed' && state.status !== 'superseded' && <TutorComposer sessionId={sessionId} language={language} canAsk={canAsk} busy={working} onPauseNarration={onPauseNarration}
-    answering={plainAnswer && !askInstead && !state.on_break} onAnswerSlot={setAnswerSlot}
+    answering={plainAnswer && !askInstead && !state.on_break} onAnswerSlot={setAnswerSlot} onToolsSlot={setToolsSlot}
     onAsk={(text) => event('request_followup', { prompt: text })} />;
   return <section ref={lessonPanel} aria-label="Tutor activities" className="tutor-chat">
     <header className="tutor-chat-header">
@@ -434,7 +434,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
               {pageWorkInDock ? <div className="tutor-bubble">{workGroup.instruction && <p className="font-semibold whitespace-pre-wrap">{workGroup.instruction}</p>}<p className={workGroup.instruction ? 'mt-2 text-sm' : undefined}>Answer {workGroup.items.length === 1 ? 'it' : `all ${workGroup.items.length} parts`} in the box below.</p></div> : pageWork}</> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current">
               {activity.practice_section && !snapMode && <progress className="tutor-step-progress" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} />}
               {!ownQuestion && <p className="tutor-step-label"><span ref={activeHeading} tabIndex={-1} className="focus-visible:outline-action">{activity.content?.video ? 'Video lesson' : definition.label}</span>{activity.practice_section && <span> · {activity.practice_section.title} {activity.practice_section.item} of {activity.practice_section.total}</span>}{needsResponse(activity) && !['required_book', 'required', 'book'].includes(activity.origin) && <span> · {activity.origin === 'review' ? 'Review' : 'Extra practice'}</span>}</p>}
-              {!ownQuestion && <div className="tutor-bubble"><ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderTeacherText={renderTeacherText} docked /></div>}
+              {!ownQuestion && <div className="tutor-bubble"><ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderSpokenText={renderSpokenText} docked /></div>}
               {activity.review_after_video && activity.status === 'pending' && <div className="tutor-note flex flex-col gap-2">
                 <p className="text-sm">You watched the video. This is the book's mini lesson on the same idea: read it as a quick review, or skip ahead.</p>
                 <Button size="sm" className="self-start" disabled={working} onClick={() => event('reading_done')}>Skip the review</Button>
@@ -535,7 +535,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
 
 /** The always-ready text box, as in a chat: a question for the tutor at any step.
  *  Enter sends; Shift+Enter starts a new line. */
-function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarration, answering = false, onAnswerSlot }) {
+function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarration, answering = false, onAnswerSlot, onToolsSlot }) {
   const key = storageKey(sessionId, 'composer-question');
   const [text, setText] = useState(() => readSaved(key)?.text || '');
   const box = useRef(null);
@@ -552,7 +552,9 @@ function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarrat
     onPauseNarration?.();
     if (await onAsk(value)) { setText(''); writeSaved(key, null); }
   };
-  if (answering) return <div className="tutor-composer-box" data-answering><div ref={onAnswerSlot} className="tutor-composer-slot" /></div>;
+  // Other ways to answer (photo, voice, a parent's check) sit as icons inside the box.
+  const tools = <div ref={onToolsSlot} className="tutor-composer-tools" role="group" aria-label="Other ways to answer" />;
+  if (answering) return <div className="tutor-composer-box" data-answering><div ref={onAnswerSlot} className="tutor-composer-slot" />{tools}</div>;
   return <form aria-label="Message your tutor" className="tutor-composer-box" onSubmit={(formEvent) => { formEvent.preventDefault(); void send(); }}>
     <textarea ref={box} rows={1} lang={language} maxLength={2000} value={text} disabled={!canAsk} aria-label="Ask your tutor"
       placeholder={canAsk ? 'Ask your tutor anything…' : 'You can ask a question during a lesson step'}
@@ -561,6 +563,7 @@ function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarrat
         if (keyEvent.key !== 'Enter' || keyEvent.shiftKey || keyEvent.nativeEvent.isComposing || keyEvent.keyCode === 229) return;
         keyEvent.preventDefault(); void send();
       }} />
+    {tools}
     <button type="submit" className="tutor-composer-send" aria-label="Ask" disabled={busy || !canAsk || !text.trim()}><ArrowUp size={18} aria-hidden="true" /></button>
   </form>;
 }

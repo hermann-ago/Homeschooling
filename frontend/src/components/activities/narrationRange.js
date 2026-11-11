@@ -19,3 +19,24 @@ export function narrationRange(guide, activity) {
   if (activity.kind !== 'read_source' && recorded !== current) return null;
   return { start, end };
 }
+
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Where the sentence being spoken sits in the text on screen. `spoken` lists
+ *  the step's sentences up to and including the current one, so a repeated
+ *  sentence is found in its own place. Null when the text does not contain it. */
+export function spokenParts(text, spoken) {
+  if (!text || !spoken?.length) return null;
+  let from = 0;
+  let match = null;
+  for (const sentence of spoken) {
+    const words = normalize(sentence).split(' ').filter(Boolean).map(escape);
+    const pattern = new RegExp(words.join('\\s+'), 'g');
+    pattern.lastIndex = from;
+    match = words.length ? pattern.exec(text) : null;
+    // An earlier sentence shown elsewhere (another line of the card) is passed over.
+    if (match) from = match.index + match[0].length;
+  }
+  if (!match) return null;
+  return { before: text.slice(0, match.index), spoken: match[0], after: text.slice(from) };
+}

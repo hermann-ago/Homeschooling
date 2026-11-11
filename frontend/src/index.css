@@ -130,8 +130,8 @@
   color: var(--color-ink);
 }
 .teacher-note-label { display: block; margin-bottom: .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8A6100; }
-/* The sentence being spoken inside a note, stronger than the note itself. */
-.teacher-note [aria-current="true"] { background: #F5C842; border-radius: 4px; box-shadow: 0 0 0 2px #F5C842; }
+/* The sentence being spoken, in any text of the step on screen. */
+.spoken-now { background: #F5C842; color: inherit; border-radius: 4px; box-shadow: 0 0 0 2px #F5C842; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .book-follow-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; margin: 0; font-size: .875rem; color: var(--color-muted); }
 .book-follow-note > button { color: var(--color-action); font-weight: 600; text-decoration: underline; min-height: 2.25rem; }
 
@@ -251,6 +251,15 @@
 /* A written answer goes in the text box itself; a card with nothing else to show stays closed. */
 .tutor-dock-card:has(> .response-composer:only-child):not(:has(> .response-composer > :not(.sr-only))) { display: none; }
 .tutor-composer-box[data-answering] { padding-right: .85rem; }
+.tutor-composer-box[data-answering]:has(> .tutor-composer-tools:not(:empty)) { padding-right: .35rem; }
+/* Other ways to answer, as small icons at the right of the text box. */
+.tutor-composer-tools { display: flex; align-items: center; gap: .1rem; flex-shrink: 0; }
+.tutor-composer-tools:empty { display: none; }
+.tutor-tool { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; border-radius: 50%; color: var(--color-muted); }
+.tutor-tool:hover:not(:disabled) { background: var(--color-paper); color: var(--color-ink); }
+.tutor-tool[aria-pressed="true"] { background: var(--color-action-soft); color: var(--color-action); }
+.tutor-tool:disabled { opacity: .45; }
+.tutor-composer-note { padding: .45rem 0; font-size: .95rem; color: var(--color-muted); }
 .tutor-composer-slot { flex: 1; min-width: 0; min-height: 2.25rem; display: flex; align-items: center; }
 .tutor-composer-slot > textarea { flex: 1; min-width: 0; height: auto; min-height: 0; resize: none; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent;
   padding: .45rem 0; font-size: .95rem; line-height: 1.45; max-height: 8.5rem; color: var(--color-ink); }
@@ -349,6 +358,7 @@
   .lesson-options > summary, .tutor-session-controls .session-replay,
   .tutor-session-controls .lesson-options > summary, .tutor-icon-button, .tutor-composer-send, .tutor-composer-mode { min-height: 2.75rem; min-width: 2.75rem; }
   .tutor-composer-slot { min-height: 2.75rem; }
+  .tutor-tool { width: 2.75rem; height: 2.75rem; }
   .tutor-chip { min-height: 2.75rem; }
   .tutor-session-controls { grid-template-columns: minmax(0, 1fr) 4.5rem auto auto; }
   .tutor-session-controls select { height: 2.75rem; }

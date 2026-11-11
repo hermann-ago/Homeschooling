@@ -219,8 +219,16 @@ class ActivityEngine:
                     self._new_interaction(tx, session, action, status="completed" if action["status"] in DONE else None)
                 tx.touch("tutor_sessions", session_id)
 
-    def _view(self, action, active=False):
-        interaction = self._interaction(self.db, action["session_id"], action["action_id"])
+    def _view(self, action, active=False, fresh=None):
+        # After Start over, what was said before stays saved but out of the lesson.
+        hidden = ((fresh or {}).get("interactions") or {}).get(action["action_id"], 0)
+        interactions = sorted(self.db.find("activity_interactions", session_id=action["session_id"], activity_id=action["action_id"]),
+                              key=lambda item: item["sequence"])
+        interaction = interactions[-1] if interactions else None
+        if interaction and not active and interaction["sequence"] <= hidden:
+            interaction = None
+        interactions = [item for item in interactions if item["sequence"] > hidden or item is interaction]
+        shown = {item["id"] for item in interactions}
         action = {**action, 'activity_content': capture_content(self.ctx, action)}
         content = response_content(action, interaction) or {"prompt": action["prompt"]}
         stage = (interaction or {}).get("stage") or action.get("stage") or "initial"
@@ -237,8 +245,10 @@ class ActivityEngine:
                 content["steps"] = content.get("steps", [])[:reached + 1]
                 content.pop("practice_prompt", None)
         future = action['status'] == 'not_assigned' or not active and action["status"] == "pending" and interaction is None
-        messages = sorted(self.db.find("lesson_dialogue", session_id=action["session_id"], action_id=action["action_id"]),
-                          key=lambda m: m["sequence"] or 0)
+        messages = sorted((m for m in self.db.find("lesson_dialogue", session_id=action["session_id"], action_id=action["action_id"])
+                           if (m["sequence"] or 0) > (fresh or {}).get("dialogue", 0)), key=lambda m: m["sequence"] or 0)
+        responses = [r for r in self.db.find("activity_responses", session_id=action["session_id"], activity_id=action["action_id"])
+                     if not fresh or r.get("interaction_id") in shown]
         return {"id": action["action_id"], "kind": action.get("activity_kind") or "ask_question", "version": 1,
             "content": {} if future else content, "origin": action.get("origin") or "required_book",
             "source_refs": [] if future else action.get("source_refs") or [], "parent_activity_id": action.get("parent_activity_id"),
@@ -248,10 +258,10 @@ class ActivityEngine:
             "stage_count": len((action.get("activity_content") or {}).get("steps", [])),
             "has_practice": bool((action.get("activity_content") or {}).get("practice_prompt")),
             "interaction": None if future else interaction,
-            "interactions": [] if future else sorted(self.db.find("activity_interactions", session_id=action["session_id"], activity_id=action["action_id"]), key=lambda item: item["sequence"]),
+            "interactions": [] if future else interactions,
             "draft": (self.db.get("activity_drafts", interaction["id"]) or {}).get("content") if interaction and active else None,
             "draft_revision": (self.db.get("activity_drafts", interaction["id"]) or {}).get("revision", 0) if interaction and active else 0,
-            "responses": [] if future else self.db.find("activity_responses", session_id=action["session_id"], activity_id=action["action_id"]),
+            "responses": [] if future else responses,
             "messages": [] if future else [{k: m[k] for k in ("id", "role", "text", "status", "evidence_ids", "sequence")} for m in messages],
             **{k: action.get(k) for k in ("start_sentence", "end_sentence", "resume_index")}}
 
@@ -264,7 +274,8 @@ class ActivityEngine:
         playback = self.db.get("lesson_playback", session_id)
         actions = sorted(self.db.find("lesson_actions", session_id=session_id), key=lambda a: (a.get("activity_order") or 0, a["created_at"], a["id"]))
         checks = photo_check.overview(self.db, session_id)
-        views = [self._view(a, a["action_id"] == playback["action_id"]) for a in actions]
+        fresh = (playback.get("navigation_state") or {}).get("fresh_start")
+        views = [self._view(a, a["action_id"] == playback["action_id"], fresh) for a in actions]
         events = sorted(self.db.find("activity_events", session_id=session_id), key=lambda e: e["sequence"])
         jobs = {job["id"]: job for job in self.db.find("activity_jobs", session_id=session_id)}
         assessment_jobs = {job["response_id"]: job for job in jobs.values() if job["kind"] == "assessment"}
@@ -1156,9 +1167,18 @@ class ActivityEngine:
         positions = dict(navigation.get("positions") or {})
         positions[action["action_id"]] = playback.get("narration_cursor")
         waiting = set(navigation.get("pending_replays") or [])
+        fresh_start = navigation.get("fresh_start")
         if kind == "restart_lesson":
+            # Starting over opens a clean conversation. Everything said before stays
+            # saved; the lesson only stops showing it.
+            fresh_start = {"dialogue": max((m["sequence"] or 0 for m in tx.find("lesson_dialogue", session_id=session["id"])), default=0),
+                "interactions": {a["action_id"]: i["sequence"] for a in tx.find("lesson_actions", session_id=session["id"])
+                                 if (i := self._interaction(tx, session["id"], a["action_id"]))}}
+            for key in ("video_watched", "tried_first"):
+                navigation.pop(key, None)
             guide = guide_mod.package(self.ctx, tx.get('guides', playback['guide_id']), True)
-            planned_ids = {item['id'] for item in guide['activities']}
+            # The book's video step is added to the script when the lesson opens.
+            planned_ids = {item['id'] for item in guide['activities']} | {VIDEO_STEP}
             planned = [step for step in steps if step['action_id'] in planned_ids]
             if planned:
                 for step in steps:
@@ -1192,7 +1212,8 @@ class ActivityEngine:
         tx.update("lesson_playback", session["id"], {"action_id": target["action_id"], "on_break": False,
             "break_snapshot": None, "reading_finished": False, "resume_index": target.get("resume_index") or 0,
             "sentence_index": (cursor or {}).get("sentence_index", target.get("start_sentence") or 0), "narration_cursor": cursor,
-            "navigation_state": {"positions": positions, "pending_replays": sorted(waiting)}})
+            "navigation_state": {**navigation, "positions": positions, "pending_replays": sorted(waiting),
+                                 **({"fresh_start": fresh_start} if fresh_start else {})}})
         tx.update("tutor_sessions", session["id"], {"status": "active"})
 
     def _save_cursor(self, tx, session_id, action, payload):

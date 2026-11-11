@@ -172,8 +172,13 @@ describe('Shared activity lesson', () => {
   });
   it('opens the camera for Photo of my work and sends nothing without a photo', async () => {
     show();
-    fireEvent.change(await screen.findByLabelText('How to answer'), { target: { value: 'photo' } });
+    // Other ways to answer are icons inside the text box; the menu is gone.
+    expect(screen.queryByLabelText('How to answer')).toBeNull();
+    const camera = await screen.findByRole('button', { name: 'Answer with a photo of my work' });
+    expect(camera.closest('.tutor-composer-box')).toBeTruthy();
+    fireEvent.click(camera);
     expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Type my answer instead' }).getAttribute('aria-pressed')).toBe('true');
     expect(screen.queryByLabelText('What you wrote (optional transcript)')).toBeNull();
     expect(screen.getByRole('button', { name: 'Read my photo' }).disabled).toBe(true);
     expect(screen.getByText(/Take a photo of your book/)).toBeTruthy();
@@ -212,6 +217,26 @@ describe('Shared activity lesson', () => {
     view.unmount();
     render(<ActivityCard activity={activity} readOnly />);
     expect(screen.getByText('Choose the animal. a. Cat b. Tree')).toBeTruthy();
+  });
+  it('puts choices in the card above the text box and a written answer in the box itself', async () => {
+    api.state.mockResolvedValue(makeState(makeActivity({content:{prompt:'Choose the animal.',response_modes:['choice','text','photo','parent_review'],
+      answer_format:'single_choice',choices:[{id:'a',label:'Cat'},{id:'b',label:'Tree'}]}})));
+    api.event.mockResolvedValue(makeState(makeActivity({status:'answered'}),{revision:2}));
+    show();
+    const card = await screen.findByRole('region',{name:'Your answer to this step'});
+    expect(within(card).getByRole('radio',{name:'Cat'})).toBeTruthy();
+    const box = screen.getByLabelText('Your answer');
+    expect(box.closest('.tutor-composer-box')).toBeTruthy();
+    expect(box.getAttribute('placeholder')).toBe('Or write your answer…');
+    const tools = screen.getByRole('group',{name:'Other ways to answer'});
+    expect(within(tools).getByRole('button',{name:'Answer with a photo of my work'})).toBeTruthy();
+    expect(within(tools).getByRole('button',{name:'Ask a parent to inspect my work'})).toBeTruthy();
+    fireEvent.click(within(card).getByRole('radio',{name:'Cat'}));
+    fireEvent.change(box,{target:{value:'A cat'}});
+    expect(within(card).getByRole('radio',{name:'Cat'}).checked).toBe(false);
+    fireEvent.click(screen.getByRole('button',{name:'Check my answer'}));
+    await waitFor(() => expect(api.event).toHaveBeenCalled());
+    expect(api.event.mock.calls.at(-1)[1].payload).toMatchObject({method:'typed',text:'A cat',choice_ids:[]});
   });
   it('clears a recovered connection error even when the lesson revision did not change', async () => {
     let poll;

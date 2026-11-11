@@ -78,8 +78,10 @@ function VisualAid({ visual, onSource }) {
 const teacherWords = (activity) => ['introduce', 'close_lesson'].includes(activity.kind)
   || (activity.kind === 'explain_or_observe' && activity.origin !== 'required_book');
 
-export default function ActivityCard({ activity, language, busy, onEvent, onSource, renderReading, renderTeacherText, state, readOnly = false, docked = false }) {
+export default function ActivityCard({ activity, language, busy, onEvent, onSource, renderReading, renderSpokenText, state, readOnly = false, docked = false }) {
   const content = activity.content || {};
+  // Text the tutor is reading aloud marks the sentence being spoken.
+  const spoken = (text) => (!readOnly && renderSpokenText?.(activity, text)) || text;
   const definition = activityDefinition(activity);
   const stage = responseStage(activity);
   const stepIndex = String(stage).startsWith('example:') ? Number(String(stage).split(':')[1]) : ['practice', 'complete'].includes(stage) ? (content.steps || []).length : Number.isFinite(Number(stage)) ? Number(stage) : Number(activity.stage_index || 0);
@@ -104,9 +106,9 @@ export default function ActivityCard({ activity, language, busy, onEvent, onSour
     {teacherWords(activity) && content.text
       ? <div className={clsx('teacher-note', activity.kind === 'introduce' && 'activity-introduction')}>
           <span className="teacher-note-label">Teacher</span>
-          <div className="whitespace-pre-wrap">{renderTeacherText?.(activity) || content.text}</div>
+          <div className="whitespace-pre-wrap">{spoken(content.text)}</div>
         </div>
-      : content.text && !(definition.family === 'reading' && renderReading) && <p className="whitespace-pre-wrap leading-relaxed">{content.text}</p>}
+      : content.text && !(definition.family === 'reading' && renderReading) && <p className="whitespace-pre-wrap leading-relaxed">{spoken(content.text)}</p>}
     {content.video && <VideoLesson video={content.video} readOnly={readOnly || activity.status !== 'pending'} onWatched={() => onEvent?.('video_watched')} />}
     {definition.family === 'reading' && renderReading?.({ activity, state, complete: () => onEvent('reading_done') })}
     {definition.family === 'reading' && !renderReading && !readOnly && !docked && activity.status === 'pending' && <Button size="sm" disabled={busy} onClick={() => onEvent('reading_done')}>I have finished this reading</Button>}
@@ -130,7 +132,7 @@ export default function ActivityCard({ activity, language, busy, onEvent, onSour
       {!revealed && <p className="text-sm text-muted">Save your prediction and your reason before checking the next part.</p>}
       {revealed && <div className="rounded-xl border border-action/30 bg-action-soft p-3" aria-label="Prediction check"><p className="font-semibold mb-1">Now check</p><p className="whitespace-pre-wrap">{content.reveal?.text}</p></div>}
     </>}
-    {prompt && prompt !== content.text && <p className="font-semibold whitespace-pre-wrap">{prompt}</p>}
+    {prompt && prompt !== content.text && <p className="font-semibold whitespace-pre-wrap">{spoken(prompt)}</p>}
     {!docked && content.prompt && prompt && content.prompt !== prompt && <p className="text-sm text-muted">Original question: {content.prompt}</p>}
     {!readOnly && !docked && definition.family !== 'reading' && <ReadAloudButton text={[...new Set([content.text, prompt].filter(Boolean))].join('\n')} language={language} disabled={busy} />}
   </div>;
