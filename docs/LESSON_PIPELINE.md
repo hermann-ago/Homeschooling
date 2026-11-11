@@ -86,7 +86,10 @@ student bundle. Output: `welcome`, `turns`, `closing`, where a turn is
 - `ask` — the tutor's own question (discussion, retelling, reasoning).
 - `book_work` — an original exercise with its page, the printed `items` it
   covers and its response format, plus teacher-only `answer` / `answer_page`
-  copied from the key.
+  copied from the key. When the lesson has the book's video (`tutoring/videos.py`),
+  the writer sets `video: true` on the book_work turn that asks the child to
+  watch it, and the video plays inside that step; unmarked scripts get a video
+  step after the welcome.
 
 Model and budget: `gpt-6.1-sol`, high reasoning, `MAX_PLAN_OUTPUT` 32,768 tokens.
 
