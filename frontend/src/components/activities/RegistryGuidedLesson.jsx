@@ -43,7 +43,9 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
   }, [activity.id, start, end, savedCursor, onActiveIndex]);
   const save = useCallback(async () => {
     const current = latest.current;
-    if (!cursor.current || saving.current || current.state.on_break || current.activity.status !== 'pending') return;
+    // The home server keeps a reading position for reading steps only; the hidden player that
+    // voices any other step keeps its place on this device (above) and sends nothing.
+    if (headless || !cursor.current || saving.current || current.state.on_break || current.activity.status !== 'pending') return;
     saving.current = true;
     try {
       await activitiesApi.event(current.state.session_id, { operation_id: operationId(),
@@ -53,7 +55,7 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
       // Local cursor is already durable. The next explicit activity event checks
       // the server revision, and refresh reconciles the authoritative activity.
     } finally { saving.current = false; }
-  }, []);
+  }, [headless]);
   const changed = useCallback((next) => {
     cursor.current = next; writeSaved(key, next); onCursor(next, activity.id);
     if (!timer.current) timer.current = window.setTimeout(() => { timer.current = null; save(); }, 1000);

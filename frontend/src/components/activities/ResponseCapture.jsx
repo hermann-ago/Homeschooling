@@ -1,13 +1,22 @@
 import { focusLessonControl } from '../../utils/lessonFocus';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../../ui';
 import { inputClasses } from '../../ui/classes';
 import { modeHref } from '../../api/mode';
 import { operationId, readSaved, storageKey, writeSaved } from './durable';
 import WorkCamera from './WorkCamera';
 
+/** Shown in place, or (in the lesson's dock) with its parts where a chat app keeps them:
+ *  textSlot holds the written answer inside the lesson's text box and submitSlot holds the
+ *  send button in the control row. A slot that is null is not ready yet: that part waits. */
+function placed(slot, element) {
+  if (slot === undefined) return element;
+  return slot ? createPortal(element, slot) : null;
+}
+
 /** A draft belongs to one exact session, activity and interaction, including after refresh. */
-export default function ResponseCapture({ sessionId, activity, busy, onSubmit, onUpload, onSaveDraft, onPauseNarration, language = 'en-US', draftEvidence = [], compact = false }) {
+export default function ResponseCapture({ sessionId, activity, busy, onSubmit, onUpload, onSaveDraft, onPauseNarration, language = 'en-US', draftEvidence = [], compact = false, textSlot, submitSlot }) {
   const content = activity.content || {};
   const keyboardHelpId = useId();
   const key = storageKey(sessionId, `draft.${activity.id}.${activity.interaction?.id || 'initial'}`);
@@ -60,7 +69,14 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
     }, 600);
     return () => { window.clearTimeout(timer); saveGeneration.current += 1; };
   }, [key, draft]);
-  useEffect(() => { focusLessonControl(textInput.current); }, [activity.interaction?.id]);
+  useEffect(() => { focusLessonControl(textInput.current); }, [activity.interaction?.id, textSlot]);
+  // In the text box the answer grows with its words, as the chat box does.
+  useLayoutEffect(() => {
+    const box = textInput.current;
+    if (!textSlot || !box || box.tagName !== 'TEXTAREA') return;
+    box.style.height = 'auto';
+    box.style.height = `${Math.min(box.scrollHeight, 136)}px`;
+  }, [textSlot, draft.text]);
   const change = (patch) => setDraft((previous) => ({ ...previous, ...patch }));
   const reasoningRequired = content.require_reasoning || content.evidence_requirement === 'reasoning' || ['explain_thinking', 'predict_then_check', 'find_and_fix_mistake'].includes(activity.kind);
   // Retelling and explanation prompts already ask for the explanation itself.
@@ -127,6 +143,10 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
   };
   const checkOnSend = ['typed', 'written_steps', 'choice'].includes(draft.method) && !draft.evidence_ids.length && activity.kind !== 'capture_and_confirm' &&
     (activity.kind !== 'predict_then_check' || activity.interaction?.stage === 'reflection');
+  const methods = [modes.includes('text'), modes.includes('choice'), modes.includes('device_dictation') || modes.includes('audio'),
+    modes.includes('written_steps') || physicalEvidence, modes.includes('photo'), modes.includes('parent_review')].filter(Boolean).length;
+  const answerLabel = draft.method === 'dictation' ? 'Your spoken transcript' : draft.method === 'written_steps' ? 'Your written steps' : draft.method === 'photo' ? 'What you wrote (optional transcript)' : draft.method === 'parent_review' ? 'What you would like checked (optional)' : activity.kind === 'find_and_fix_mistake' ? 'Your corrected example' : 'Your answer';
+  const answerBox = (inBox) => <textarea ref={textInput} lang={language} rows={inBox ? 1 : draft.method === 'written_steps' ? 4 : compact ? 2 : 3} placeholder={compact ? 'Write your answer…' : undefined} maxLength={4000} value={draft.text} disabled={busy} onKeyDown={submitOnEnter} aria-describedby={keyboardHelpId} aria-label={inBox ? answerLabel : undefined} onChange={(event) => change({ text: event.target.value })} className={`${inputClasses} h-auto py-3 font-normal`} />;
   const reasoningBox=<label className="text-sm font-semibold flex flex-col gap-1">{reasoningInputRequired ? 'Explain your thinking' : 'Explain your thinking (optional)'}<textarea rows={compact ? 2 : 3} maxLength={4000} value={draft.reasoning} disabled={busy} onKeyDown={submitOnEnter} aria-describedby={keyboardHelpId} onChange={(event) => change({ reasoning: event.target.value })} className={`${inputClasses} h-auto py-3 font-normal`} /></label>;
   return <div className={compact ? 'response-composer' : 'flex flex-col gap-3'} aria-label="Answer capture">
     {boxes && <fieldset className="flex flex-col gap-2" aria-label="Your answers">
@@ -163,7 +183,7 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
       if (photo && !draft.evidence_ids.length) { onPauseNarration?.(); setCameraOpen(true); }
     }}>
       {draft.method === 'photo' ? 'Type my answers instead' : 'Send a photo of my book instead'}</Button>}
-    {!choiceOnly && !content.blanks && <label className="text-sm font-semibold flex flex-col gap-1">How to answer
+    {!choiceOnly && !content.blanks && !(textSlot !== undefined && methods === 1) && <label className="text-sm font-semibold flex flex-col gap-1">How to answer
       <select className={inputClasses} value={draft.method} disabled={busy} onChange={(event) => {
         change({ method: event.target.value });
         if (event.target.value === 'photo' && !draft.evidence_ids.length) { onPauseNarration?.(); setCameraOpen(true); }
@@ -183,10 +203,8 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
       const text=matching.items.filter((row)=>matches[row.id]).map((row)=>`${row.label} → ${matching.options.find((option)=>option.id===matches[row.id])?.label || ''}`).join('\n');
       change({matches,text});
     }}><option value="">Choose a match</option>{matching.options.map((option)=><option key={option.id} value={option.id} disabled={!matching.allow_reuse && Object.entries(selectedMatches).some(([id,value])=>id!==item.id && value===option.id)}>{option.label}</option>)}</select></label>)}</fieldset>}
-    {draft.method !== 'choice' && draft.method !== 'photo' && !matching && !boxes && <label className="text-sm font-semibold flex flex-col gap-1">
-      {draft.method === 'dictation' ? 'Your spoken transcript' : draft.method === 'written_steps' ? 'Your written steps' : draft.method === 'photo' ? 'What you wrote (optional transcript)' : draft.method === 'parent_review' ? 'What you would like checked (optional)' : activity.kind === 'find_and_fix_mistake' ? 'Your corrected example' : 'Your answer'}
-      <textarea ref={textInput} lang={language} rows={draft.method === 'written_steps' ? 4 : compact ? 2 : 3} placeholder={compact ? 'Write your answer…' : undefined} maxLength={4000} value={draft.text} disabled={busy} onKeyDown={submitOnEnter} aria-describedby={keyboardHelpId} onChange={(event) => change({ text: event.target.value })} className={`${inputClasses} h-auto py-3 font-normal`} />
-    </label>}
+    {draft.method !== 'choice' && draft.method !== 'photo' && !matching && !boxes && (textSlot !== undefined ? placed(textSlot, answerBox(true))
+      : <label className="text-sm font-semibold flex flex-col gap-1">{answerLabel}{answerBox(false)}</label>)}
     {(modes.includes('device_dictation') || modes.includes('audio')) && draft.method === 'dictation' && <Button size="sm" disabled={busy} onClick={dictate}>Use device dictation</Button>}
     {reasoningInputRequired ? reasoningBox : draft.method==='choice' && !choiceOnly && <details><summary className="text-sm text-action cursor-pointer">Add an explanation (optional)</summary><div className="mt-2">{reasoningBox}</div></details>}
     {physicalEvidence && <p className="text-sm text-muted">{content.evidence_requirement.replaceAll('_', ' ')} needs the actual work checked. A spoken answer alone does not show everything written on the page.</p>}
@@ -203,11 +221,11 @@ export default function ResponseCapture({ sessionId, activity, busy, onSubmit, o
     {reasoningInputRequired && canSend && !draft.reasoning.trim() && <p role="status" className="text-sm text-muted">Add your explanation in “Explain your thinking” before sending.</p>}
     {savedWhere && <p role="status" className={savedWhere.startsWith('Draft not saved') ? 'text-xs text-attention' : 'sr-only'}>{savedWhere}</p>}
     <p id={keyboardHelpId} className="sr-only">{choiceOnly ? 'Enter to send' : boxes ? 'Enter goes to the next box' : 'Enter to send · Shift+Enter for a new line'}</p>
-    <Button variant="primary" disabled={!canSubmit} onClick={send}>{busy ? 'Saving…' : draft.method === 'parent_review' ? 'Ask a parent to check' : draft.method === 'photo' ? 'Read my photo' : draft.method === 'dictation' || draft.evidence_ids.length ? 'Save answer for confirmation' : checkOnSend ? 'Check my answer' : 'Save answer'}</Button>
+    {placed(submitSlot, <Button variant="primary" data-answer-submit={submitSlot !== undefined || undefined} disabled={!canSubmit} onClick={send}>{busy ? 'Saving…' : draft.method === 'parent_review' ? 'Ask a parent to check' : draft.method === 'photo' ? 'Read my photo' : draft.method === 'dictation' || draft.evidence_ids.length ? 'Save answer for confirmation' : checkOnSend ? 'Check my answer' : 'Save answer'}</Button>)}
   </div>;
 }
 
-export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnConfirm = false, language }) {
+export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnConfirm = false, language, submitSlot }) {
   const key = storageKey(sessionId, `confirmation.${response.id}`);
   const [saved] = useState(() => readSaved(key));
   const originalText = typeof response.original === 'string' ? response.original : response.original?.text || response.text || '';
@@ -227,9 +245,9 @@ export function ConfirmResponse({ sessionId, response, busy, onConfirm, checkOnC
       <label className="text-sm font-semibold flex flex-col gap-1">{photos.length ? 'What I read' : 'Confirmed answer'}<textarea lang={language} value={text} maxLength={4000} rows={Math.min(10, Math.max(3, text.split('\n').length))} disabled={busy} onChange={(event) => { edited.current = true; setText(event.target.value); }} className={`${inputClasses} h-auto py-3 font-normal text-base`} /></label>
     </div>
     {!locallySaved && <p className="text-xs text-attention">Keep this page open until you confirm your answer.</p>}
-    <Button data-lesson-primary variant="primary" disabled={busy || !text.trim()} onClick={async () => {
+    {placed(submitSlot, <Button data-lesson-primary variant="primary" disabled={busy || !text.trim()} onClick={async () => {
       const next = await onConfirm(text);
       if (next) writeSaved(key, null);
-    }}>{checkOnConfirm ? photos.length ? 'Yes, check it' : 'Confirm and check my answer' : 'This matches my answer'}</Button>
+    }}>{checkOnConfirm ? photos.length ? 'Yes, check it' : 'Confirm and check my answer' : 'This matches my answer'}</Button>)}
   </section>;
 }

@@ -239,23 +239,23 @@
 .tutor-snap-slot:empty { display: none; }
 .tutor-composer-box { display: flex; align-items: flex-end; gap: .35rem; padding: .35rem .35rem .35rem .85rem; border: 1px solid var(--color-line); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); }
 .tutor-composer-box:focus-within { border-color: var(--color-action); }
-/* The answer card: the step's own answer controls grow the text box upward, in one frame. */
-.tutor-dock-card { display: flex; flex-direction: column; border: 1px solid var(--color-line); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); overflow: hidden; }
-.tutor-dock-card:focus-within { border-color: var(--color-action); }
-.tutor-dock-panel { max-height: min(46vh, 26rem); overflow-y: auto; overscroll-behavior: contain; padding: .8rem .9rem; display: flex; flex-direction: column; gap: .6rem; }
-.tutor-dock-panel .response-composer { border: 0; border-radius: 0; padding: 0; background: transparent; }
-.tutor-dock-card > .tutor-composer-box { border: 0; border-top: 1px solid var(--color-line); border-radius: 0; box-shadow: none; }
 .tutor-composer-box:has(> .tutor-composer-mode) { padding-left: .35rem; }
-/* A written answer in the dock: the same answer box, shaped like the chat box. */
-.tutor-dock-answer > .response-composer { gap: .25rem .4rem; padding: .35rem .35rem .35rem .85rem; border: 1px solid var(--color-action); border-radius: 1.4rem; background: var(--color-surface); box-shadow: var(--shadow-soft); grid-auto-flow: row dense; }
-.tutor-dock-answer > .response-composer > label:has(textarea) { grid-column: 1; grid-row: 2; font-size: 0; gap: 0; }
-.tutor-dock-answer > .response-composer textarea { min-height: 2.5rem; max-height: 8.5rem; resize: none; font-size: .95rem; padding: .45rem 0; }
-/* The rounded frame shows the focus, as the chat box does; no second ring inside it. */
-.tutor-dock-answer > .response-composer textarea:focus { outline: none; }
-.tutor-dock-answer > .response-composer:focus-within { box-shadow: 0 0 0 1px var(--color-action), var(--shadow-soft); }
-.tutor-dock-answer > .response-composer > button:last-child { grid-column: 2; grid-row: 2; align-self: end; min-height: 2.25rem; padding: .35rem .9rem; border-radius: 1.2rem; font-size: .8rem; }
-.tutor-dock-answer > .response-composer > label:first-child:has(select) { font-size: .7rem; color: var(--color-muted); }
-.tutor-dock-answer > .response-composer > p { font-size: .7rem; margin: 0; }
+/* As in a chat app, the text box never moves. What a step asks for (choices, answer boxes,
+   a photo to confirm) opens as a card above it: its bottom edge tucks behind the text box. */
+.tutor-dock-input { display: flex; flex-direction: column; }
+.tutor-dock-input > .tutor-composer-box { position: relative; z-index: 1; }
+.tutor-dock-card { margin: 0 .6rem -1.4rem; padding: .8rem .95rem 2.2rem; max-height: min(46vh, 26rem); overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: .6rem; border: 1px solid var(--color-line); border-bottom: 0; border-radius: 1.15rem 1.15rem 0 0; background: var(--color-paper); }
+.tutor-dock-card .response-composer { display: flex; flex-direction: column; gap: .6rem; border: 0; border-radius: 0; padding: 0; background: transparent; }
+.tutor-dock-card .response-composer > label:first-child:has(select) { font-size: .75rem; }
+/* A written answer goes in the text box itself; a card with nothing else to show stays closed. */
+.tutor-dock-card:has(> .response-composer:only-child):not(:has(> .response-composer > :not(.sr-only))) { display: none; }
+.tutor-composer-box[data-answering] { padding-right: .85rem; }
+.tutor-composer-slot { flex: 1; min-width: 0; min-height: 2.25rem; display: flex; align-items: center; }
+.tutor-composer-slot > textarea { flex: 1; min-width: 0; height: auto; min-height: 0; resize: none; border: 0; border-radius: 0; outline: 0; box-shadow: none; background: transparent;
+  padding: .45rem 0; font-size: .95rem; line-height: 1.45; max-height: 8.5rem; color: var(--color-ink); }
+.tutor-composer-slot > textarea:focus { outline: none; }
+.tutor-composer-slot > textarea::placeholder { color: var(--color-subtle); }
 .tutor-composer-box > textarea { flex: 1; min-width: 0; resize: none; border: 0; outline: 0; background: transparent; padding: .45rem 0; font-size: .95rem; line-height: 1.45; max-height: 8.5rem; color: var(--color-ink); }
 .tutor-composer-box > textarea:disabled { cursor: default; }
 .tutor-composer-box > textarea::placeholder { color: var(--color-subtle); }
@@ -348,6 +348,7 @@
   .app-segmented > button, .pdf-page-controls button, .response-composer > button,
   .lesson-options > summary, .tutor-session-controls .session-replay,
   .tutor-session-controls .lesson-options > summary, .tutor-icon-button, .tutor-composer-send, .tutor-composer-mode { min-height: 2.75rem; min-width: 2.75rem; }
+  .tutor-composer-slot { min-height: 2.75rem; }
   .tutor-chip { min-height: 2.75rem; }
   .tutor-session-controls { grid-template-columns: minmax(0, 1fr) 4.5rem auto auto; }
   .tutor-session-controls select { height: 2.75rem; }

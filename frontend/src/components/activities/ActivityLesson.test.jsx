@@ -380,6 +380,9 @@ describe('Shared activity lesson', () => {
     expect(within(conversation).getByText('Earlier answer')).toBeTruthy();
     expect(conversation.contains(screen.getByLabelText('Your answer'))).toBe(false);
     expect(screen.getByLabelText('Your answer').closest('footer')).toBeTruthy();
+    // The written answer goes in the lesson's own text box; its button sits in the control row.
+    expect(screen.getByLabelText('Your answer').closest('.tutor-composer-box')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Check my answer' }).closest('[aria-label="Lesson step controls"]')).toBeTruthy();
     expect(screen.getByText('Earlier answer').compareDocumentPosition(screen.getByText('Why did the travelers stop?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
