@@ -134,3 +134,33 @@ def test_hands_on_book_work_waits_for_a_grown_up():
     work = [s for s in plan['segments'] if s['type'] == 'activity']
     assert work[0]['activity_kind'] == 'explain_or_observe' and work[0]['content']['parent_check'] is True
     assert work[0]['origin'] == 'required_book'
+
+
+def test_tutor_notes_stay_private_and_reach_the_reviewer_only_when_written():
+    from tutoring import script_review
+    say = {'type': 'say', 'text': 'Seven fourths fill one whole and three fourths more.',
+           'notes': 'Key idea: the denominator names the size of a part. Usual mistake: counting all pieces.'}
+    plan = compile_({'type': 'read', 'first': 0, 'last': 0}, say)
+    assert 'Usual mistake' not in json.dumps(plan)
+    frozen = {'teaching_script': {'script': {'turns': [say]}}}
+    assert script_review._tutor_notes(frozen) == [{'explanation': say['text'], 'notes': say['notes']}]
+    assert script_review._tutor_notes({'teaching_script': {'script': {'turns': [{'type': 'say', 'text': 'Hi.'}]}}}) is None
+
+
+def test_an_exercise_gets_its_own_notes(monkeypatch):
+    from types import SimpleNamespace
+    turns = [{'type': 'say', 'text': 'Wholes first.', 'notes': 'About number lines.'},
+             {'type': 'read', 'first': 0, 'last': 0}, {**work(prompt='1. Write the mixed number.', answer='2 1/3'), 'notes': 'Checks naming shaded shapes.'},
+             {'type': 'say', 'text': 'Now draw it.'},
+             {**work(prompt='2. Draw 3 1/8.', answer=None), 'notes': 'Usual mistake: shading only the fraction.'}, work(prompt='3. Plot 1 2/5.', answer=None)]
+    guide = {'activities': [{'id': 'activity-1', 'kind': 'request_book_work', 'origin': 'required_book'},
+                            {'id': 'activity-2', 'kind': 'request_book_work', 'origin': 'required_book'},
+                            {'id': 'activity-3', 'kind': 'request_book_work', 'origin': 'required_book'}]}
+    rows = {('lesson_playback', 's'): {'guide_id': 'g', 'context_snapshot': {'prepared_guide': {'teaching_script': {'script': {'turns': turns}}}}},
+            ('guides', 'g'): {'guide_path': 'g.json', 'guide_file_sha256': None}}
+    ctx = SimpleNamespace(store=SimpleNamespace(get=lambda table, key: rows.get((table, key))), file_bytes=lambda path, sha: json.dumps(guide).encode())
+    notes = lambda aid: page_script.teaching_notes_for(ctx, {'session_id': 's', 'action_id': aid})
+    # Each exercise has its own notes: never borrowed from a nearby explanation about something else.
+    assert notes('activity-1') == 'Checks naming shaded shapes.'
+    assert notes('activity-2') == 'Usual mistake: shading only the fraction.'
+    assert notes('activity-3') is None and notes('question-9') is None

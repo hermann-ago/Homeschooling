@@ -67,6 +67,8 @@ class BookWork(Content):
     proposed_answers: list[str] = Field(default_factory=list, max_length=30)
     # The turn where the book asks the child to watch its video lesson; the app plays it here.
     video: bool = False
+    # Teacher-only, for the live tutor: what this exercise checks and the usual mistake.
+    notes: str = Field(default='', max_length=1000)
 
     @model_validator(mode='after')
     def answers_match_blanks(self):
@@ -320,6 +322,24 @@ def answer_key(snapshot, approvals=()):
 
 def approvals(ctx, guide_id):
     return ctx.store.find('answer_approvals', guide_id=guide_id)
+
+
+def teaching_notes_for(ctx, action):
+    """The writer's private notes for one book exercise (what it checks, the usual mistake),
+    written beside the pages. None for older scripts and for exercises without notes."""
+    playback = ctx.store.get('lesson_playback', action['session_id'])
+    prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
+    turns = ((prepared.get('teaching_script') or {}).get('script') or {}).get('turns', [])
+    if not any(t.get('type') == 'book_work' and t.get('notes') for t in turns):
+        return None
+    row = ctx.store.get('guides', playback['guide_id'])
+    guide = json.loads(ctx.file_bytes(row['guide_path'], row.get('guide_file_sha256')))
+    work = [a['id'] for a in guide.get('activities', [])
+            if a.get('origin') == 'required_book' and a['kind'] in ('request_book_work', 'explain_or_observe')]
+    positions = [i for i, t in enumerate(turns) if t.get('type') == 'book_work']
+    if len(work) != len(positions) or action['action_id'] not in work:
+        return None
+    return turns[positions[work.index(action['action_id'])]].get('notes') or None
 
 
 def answer_for(ctx, action):

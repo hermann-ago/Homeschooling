@@ -90,7 +90,10 @@ Return one compact JSON object matching the supplied schema: welcome, turns,
 closing. No markdown fences or text outside it. Paragraph breaks go inside
 strings as \\n. Text fields contain exactly the words the teacher says.
 Turns:
-- say: teaching; the child presses Continue.
+- say: teaching; the child presses Continue. Its notes are for the live tutor who sits beside
+  the child during the lesson and can adapt this explanation to how the child is doing: in a few
+  short lines, the one idea this explanation must land, one example that makes it concrete, and the
+  mistake a child of this age usually makes here. The child never hears the notes.
 - read: assigned reading only, never worksheet directions. READ_FORMS
 - ask: your own question, with purpose discussion, retelling or reasoning.
 - book_work: an original exercise, with document_id and its PDF page; one
@@ -99,6 +102,8 @@ Turns:
   teacher-only: copy this exercise's answers from the ANSWER KEY PAGES,
   numbered as printed (for example "3. Mehmed; 4. Istanbul"), with the key's
   PDF page; null when no key page covers it. The child never sees them.
+  Its notes are for the live tutor: in a line or two, what this exercise checks and the
+  mistake a child usually makes on it, from what you see on the page. The child never sees them.
   For blanks, also copy each box's key answer into answers, in the same
   order (for example ["31", "31", "47"]); empty when no key covers them.
   When no key covers a blanks exercise but each box has one clear answer

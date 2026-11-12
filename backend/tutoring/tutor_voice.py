@@ -126,7 +126,7 @@ def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5, afte
 
 
 def compose(ctx, *, child, grade, language, family_style, lesson, so_far, step, answer, result, note,
-            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None, next_step=None):
+            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None, next_step=None, teaching_notes=None):
     """The spoken reply, or None when it cannot be used (the caller keeps the grader's words)."""
     if result not in SPOKEN_RESULTS:
         return None
@@ -142,6 +142,7 @@ Your own most recent lines in this lesson (do not repeat them): {json.dumps(list
 The checker's verdict: {result}.
 The checker's note (private): {json.dumps(str(note or "")[:1500], ensure_ascii=False)}
 {"Parts the checker found NOT yet right on this try (the truth; never call one of these right, fixed or improved): " + json.dumps(list(not_yet), ensure_ascii=False) if not_yet else ""}
+{"The lesson writer's notes on the idea behind this step (private; draw hints from its example and its usual mistake): " + json.dumps(teaching_notes, ensure_ascii=False) if teaching_notes else ""}
 The book's answer (private, so that your hints are accurate; never say it or any part of it that the child has not written): {json.dumps(list(key_answers), ensure_ascii=False) if key_answers else "not supplied"}
 {"After your words the child will see this follow-up question; lead into it without repeating it: " + json.dumps(follow_up, ensure_ascii=False) if follow_up else "Do not add a new task; a small guiding question about this same step is fine."}
 {"This finishes the step. What plays right after your words (private; do not teach or repeat it): " + json.dumps(next_step, ensure_ascii=False) if next_step else "The next exercise appears by itself right after your words: say nothing about what comes next."}
@@ -174,6 +175,7 @@ def reply(ctx, db, session, action, message, assessment, answer, key):
     checked = assessment.get("blank_results") or {}
     not_yet = [box.get("label") or box["id"] for box in (action.get("activity_content") or {}).get("blanks") or []
                if checked.get(box["id"]) is False]
+    from .page_script import teaching_notes_for
     finished = assessment["result"] == "Correct" and assessment.get("ready_to_continue") and not assessment.get("follow_up")
     line = compose(ctx, child=child.get("nickname") or child["name"], grade=subject.get("grade") or child.get("grade_year"),
         language=language_of(db, subject), family_style=instructions(packet(db, session["child_id"])),
@@ -181,5 +183,6 @@ def reply(ctx, db, session, action, message, assessment, answer, key):
         step=action.get("prompt"), answer=answer, result=assessment["result"],
         note="\n".join(filter(None, [assessment.get("feedback"), assessment.get("help")])),
         follow_up=assessment.get("follow_up"), said=said, attempt=attempt, not_yet=not_yet,
-        next_step=coming_next(db, session["id"], action) if finished else None, key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
+        next_step=coming_next(db, session["id"], action) if finished else None,
+        teaching_notes=teaching_notes_for(ctx, action), key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
     return {**assessment, "feedback": line, "grader_note": assessment.get("feedback")} if line else assessment

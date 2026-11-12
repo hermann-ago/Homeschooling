@@ -62,7 +62,16 @@ def inputs(ctx,row):
         'family_style':{'sha256':family.get('sha256'),'content':family.get('content'),
                         'learner_profile':family.get('learner_profile')},
         # Only scripts with recorded key answers carry this, so older review identities stay unchanged.
-        **({'answer_key':key} if (key:=_answer_key(frozen)) else {})}
+        **({'answer_key':key} if (key:=_answer_key(frozen)) else {}),
+        # Only scripts written with notes for the live tutor carry them.
+        **({'tutor_notes':notes} if (notes:=_tutor_notes(frozen)) else {})}
+
+
+def _tutor_notes(frozen):
+    turns=((frozen.get('teaching_script') or {}).get('script') or {}).get('turns') or []
+    notes=[{('explanation' if t['type']=='say' else 'exercise'):(t.get('text') or t.get('prompt') or '')[:300],'notes':t['notes']}
+           for t in turns if t.get('type') in ('say','book_work') and t.get('notes')]
+    return notes or None
 
 
 def _answer_key(frozen):
@@ -192,6 +201,9 @@ def _run(ctx,row,*,human=False,retry=False):
         + ('\nanswer_key lists the teacher-only answers the writer copied for each book exercise. Spot-check '
            'them against the attached answer-key pages; report a wrong or misplaced answer as a task finding.'
            if data.get('answer_key') else '')
+        + ('\ntutor_notes are the writer\'s private notes for the live tutor beside each explanation. Report a note '
+           'that contradicts the pages or the explanation, or that would lead the tutor to a wrong idea, as a task finding.'
+           if data.get('tutor_notes') else '')
         + ('\nexercise_assignment lists the only items of the shared exercise pages assigned to this lesson; '
            'the other items on those pages belong to other lessons and are not omissions.'
            if data.get('exercise_assignment') else '')

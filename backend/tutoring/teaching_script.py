@@ -60,6 +60,9 @@ class Response(Content):
 class Say(Content):
     type: Literal['say']
     text: str = Field(min_length=1,max_length=12000)
+    # Teacher-only notes for the live tutor beside the child (the key idea, a good example, the
+    # usual mistake). Frozen with the raw script; never compiled into child content.
+    notes: str = Field(default='', max_length=1500)
 
 
 class Read(Content):

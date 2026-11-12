@@ -487,6 +487,8 @@ class InteractiveTutor:
         original_questions = original_refs(action)
         from .tutor_voice import coming_next
         next_step = coming_next(self.db, session["id"], action)
+        from .page_script import teaching_notes_for
+        notes = teaching_notes_for(self.ctx, action) if action.get("origin") == "required_book" else None
         text = f'''You are the student's patient homeschool tutor. Respond in the curriculum's language.
 {family_instructions(family)}
 
@@ -515,6 +517,7 @@ For target answer, check the submitted words/content; writing in a workbook does
 mean handwriting is being assessed. Do not demand a photo just because the direction says write.
 Its saved follow-up: {action['next_prompt']}
 Kind: {action['kind']}. Help already supplied: {action['help_given'] or 'none'}.
+{("The lesson writer's private notes on the idea behind this exercise (key idea, example, usual mistake); use them to make clues concrete: " + notes) if notes else ''}
 Assigned source passage:
 {source}
 Known learner observations: {json.dumps(observations, default=str, ensure_ascii=False)}

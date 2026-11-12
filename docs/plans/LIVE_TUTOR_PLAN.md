@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Steps 0–3 done (2026-11-12)**; streaming (2c) postponed by the family; Step 4 is next. Created 2026-11-11.
+Status: **Steps 0–3 done; Step 4a done (2026-11-12)**; 4b (live explanations) is a family decision; streaming (2c) postponed. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -122,7 +122,8 @@ measurements below written into the progress log, commit and push.
   *Done when* a lesson with the network unplugged plays exactly as today, and a
   normal lesson has a live sentence after each exercise.
 
-- [ ] **Step 4 — Thin the script.**
+- [~] **Step 4 — Thin the script.** 4a done 2026-11-12 (notes written ahead, used by the live
+  replies); 4b (live explanations) waits for a decision — see the progress log.
   New writer contract: a `say` turn becomes teaching notes for the tutor (the
   key idea, a good example, the usual mistake) plus one short prepared line
   used only as the safety net. The reviewer checks the notes. Decide from
@@ -339,3 +340,27 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     short clean replies. AI-graded examples: Portuguese ("Agora vamos observar
     o som de S e SS entre vogais"), History ("That's the last question—nice
     work finishing this lesson").
+- 2026-11-12 — **Step 4a: notes for the live tutor, written ahead.**
+  - The writer now adds private `notes` to every explanation (the idea to land,
+    an example, the usual mistake) and to every exercise (what it checks, the
+    usual mistake). Notes are never compiled into child content; the reviewer
+    sees and checks them; older scripts and their reviews are unchanged.
+  - The live tutor voice and the AI grader get **the exercise's own notes** when
+    they reply. A first try took the notes of the nearest explanation instead
+    and produced a hint about number lines for a picture exercise: notes must
+    belong to the exercise, written beside its page.
+  - Pilot: Lucas, Math Lesson 21 (not started), prepared by the app twice. 15 of
+    15 explanations and 13 of 13 exercises got notes; reviewer approved. Cost of
+    the last run $0.49 writing (one writer retry) + $0.09 review.
+  - Hints with notes name the real trap without the answer, e.g. "this number
+    line is divided into sixths, so how many of those parts make up the
+    distance to A?" (without notes: "how many equal spaces are there…").
+  - **4b, live explanations, measured but not built.** The fast model rewrote
+    an explanation from the prepared text plus notes accurately in 2.3–2.6 s,
+    but at ~1.8× the length, so ~5 s at Continue unless prepared in advance.
+    In Lesson 21 only 1 of 9 explanations follows an exercise on the same idea
+    (most come right after a reading), and Step 3's lead-in already covers that
+    moment. Building it needs advance preparation and a new way to play an
+    explanation. Recommendation: keep prepared explanations; revisit 4b
+    together with streaming, or with explanations that adapt to the learning
+    memory (Step 6).
