@@ -681,8 +681,18 @@ class TutorService:
         here = next(i for i, t in enumerate(topics) if t["id"] == topic["id"])
         last = next((t for t in reversed(topics[:here]) if t["completed"]), None)
         upcoming = next((t for t in topics[here + 1:] if not t["completed"]), None)
-        return {"last": last and {"title": last["title"], **self._closing_words(last)},
+        return {"last": last and {"title": last["title"], **(self._closing_note(last) or self._closing_words(last))},
                 "today": topic["title"], "next": upcoming and upcoming["title"]}
+
+    def _closing_note(self, topic: dict) -> dict | None:
+        """The tutor's own look back from the last time this lesson was finished, when one was written."""
+        sessions = sorted((s for s in self.store.find("tutor_sessions", topic_id=topic["id"]) if s["status"] == "completed"
+                           and ((s.get("completion_summary") or {}).get("closing_note") or {}).get("text")),
+                          key=lambda s: str(s.get("updated_at") or s["id"]), reverse=True)
+        if not sessions:
+            return None
+        note = sessions[0]["completion_summary"]["closing_note"]
+        return {"summary": note["text"], **({"audio": note["audio"]} if note.get("audio") else {})}
 
     def _closing_words(self, topic: dict) -> dict:
         rows = sorted(self.store.find("guides", topic_id=topic["id"]), key=lambda g: str(g.get("created_at")), reverse=True)

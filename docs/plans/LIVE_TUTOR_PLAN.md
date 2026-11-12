@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Steps 0–3 done; Step 4a done (2026-11-12)**; 4b (live explanations) is a family decision; streaming (2c) postponed. Created 2026-11-11.
+Status: **Steps 0–3, 4a and 6 done (2026-11-12)**. Postponed by the family: streaming (2c), live explanations (4b). Dropped: Step 5. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -132,14 +132,14 @@ measurements below written into the progress log, commit and push.
   *Done when* a lesson prepared the new way is taught live from its notes, and
   the parent rates it at least as clear as the scripted one.
 
-- [ ] **Step 5 — Let it adapt.**
+- [-] **Step 5 — Let it adapt.** (dropped 2026-11-12: the family does not expect it to be useful)
   The tutor may offer bounded choices on its own explanations only: shorten a
   review the child has clearly understood, or add one more example. It can
   never skip a reading or an exercise (rule 1).
   *Done when* a child who gets the first problems right is offered the shorter
   path, and a child who struggles gets the extra example.
 
-- [ ] **Step 6 — An honest closing, remembered next time.**
+- [x] **Step 6 — An honest closing, remembered next time.** (done 2026-11-12)
   The closing is written from the lesson's real results, and a short note is
   saved so the next lesson's welcome can pick it up ("last time the zeros gave
   you trouble; today…").
@@ -364,3 +364,24 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     explanation. Recommendation: keep prepared explanations; revisit 4b
     together with streaming, or with explanations that adapt to the learning
     memory (Step 6).
+- 2026-11-12 — Family decisions: live explanations (4b) wait for another time;
+  Step 5 is dropped; **a right answer gets no explanation** — the AI grader
+  now confirms a correct answer in a few words (one line in its instructions);
+  the tutor voice already did. Regrading six real right answers: "Correct—
+  455,898 altogether." in place of explanations of why it was right.
+- 2026-11-12 — Tests: the full suite runs in parallel (`pytest -q -n auto`,
+  pytest-xdist): **4 minutes instead of 15**. Per the family, only the tests
+  for what changed run after a small change.
+- 2026-11-12 — **Step 6 done.** When a lesson is finished, the tutor writes a
+  two-or-three-sentence look back from the lesson's record (each task and how
+  its tries went), knowing the next lesson's title, voices it with the
+  lesson's narrator and keeps both with the finished lesson
+  (`tutor_voice.remember_closing`, in the background: Finish does not wait).
+  The next lesson's warm-up card shows and plays it under "Last time" in place
+  of the prepared closing words, and the live tutor knows it during that
+  lesson. Off with the tutor voice. Examples from real lessons:
+  "Rounding the kookaburra population to the nearest hundred million took
+  some help, so we'll keep an eye on which place value to check together as
+  we start fractions and mixed numbers." / "…na próxima aula, vamos ficar de
+  olho juntos em como seguir as setas ao escrever o W." A first version did
+  not know the next lesson and told Mila they would continue with K.

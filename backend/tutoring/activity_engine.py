@@ -1822,6 +1822,9 @@ class ActivityEngine:
                 **({"photo_checks": photo_check.summary(tx, session_id, actions)}
                    if any(a["status"] in ("fix", "checking") for a in actions) else {})}})
         self.tutor.close_reader(session_id)
+        # The tutor's honest look back, for the next lesson's "Last time" (written in the background).
+        from . import tutor_voice
+        tutor_voice.remember_in_background(self.ctx, session_id)
         return self.state(session_id)
 
 

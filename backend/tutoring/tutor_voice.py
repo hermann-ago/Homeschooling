@@ -126,13 +126,14 @@ def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5, afte
 
 
 def compose(ctx, *, child, grade, language, family_style, lesson, so_far, step, answer, result, note,
-            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None, next_step=None, teaching_notes=None):
+            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None, next_step=None, teaching_notes=None, last_time=None):
     """The spoken reply, or None when it cannot be used (the caller keeps the grader's words)."""
     if result not in SPOKEN_RESULTS:
         return None
     prompt = f"""{family_style}
 
 Child: {child}. Grade: {grade or 'not supplied'}. Lesson language: {language}. Lesson: {lesson}.
+{"What you said at the end of the last lesson in this subject (connect to it only when this step touches the same thing): " + json.dumps(last_time, ensure_ascii=False) if last_time else ""}
 The lesson so far (oldest first):
 {json.dumps(so_far, ensure_ascii=False)}
 
@@ -184,5 +185,110 @@ def reply(ctx, db, session, action, message, assessment, answer, key):
         note="\n".join(filter(None, [assessment.get("feedback"), assessment.get("help")])),
         follow_up=assessment.get("follow_up"), said=said, attempt=attempt, not_yet=not_yet,
         next_step=coming_next(db, session["id"], action) if finished else None,
-        teaching_notes=teaching_notes_for(ctx, action), key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
+        teaching_notes=teaching_notes_for(ctx, action),
+        last_time=(last_note(db, session["child_id"], session["subject_id"], session["id"]) or {}).get("text"),
+        key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
     return {**assessment, "feedback": line, "grader_note": assessment.get("feedback")} if line else assessment
+
+
+# ── An honest closing, remembered at the next lesson (Step 6) ──────────────
+
+NOTE_RULES = """You are this child's own tutor. The lesson has just ended. Write what you will say to the child
+at the start of the next lesson in this subject, looking back at this one: two or three short spoken
+sentences. Name one thing that went well, specifically. If something needed help or was skipped, name
+it kindly and say what you will keep an eye on together; if everything went well, say so plainly.
+Use only what the lesson record shows. No grades, scores or counts of right answers. Plain spoken
+words in the lesson's language, no lists, markdown or emoji."""
+
+
+def lesson_record(db, session_id):
+    """Each exercise and question of the lesson with how it went, for the closing note."""
+    results = {}
+    for message in sorted(db.find("lesson_dialogue", session_id=session_id), key=lambda m: m["sequence"] or 0):
+        result = (message.get("assessment") or {}).get("result") if message["role"] == "student" else None
+        if result:
+            results.setdefault(message["action_id"], []).append(result)
+    lines = []
+    for action in sorted(db.find("lesson_actions", session_id=session_id), key=lambda a: a.get("activity_order") or 0):
+        kind = action.get("activity_kind")
+        checked_by_grown_up = (action.get("activity_content") or {}).get("parent_check")
+        if kind in ("introduce", "read_source", "close_lesson") or (
+                kind == "explain_or_observe" and action["action_id"] not in results and not checked_by_grown_up):
+            continue
+        start = " ".join(str(action.get("prompt") or "").split())[:110]
+        seen = results.get(action["action_id"])
+        how = ", then ".join(seen) if seen else {"skipped": "skipped", "in_book": "done in the book"}.get(action["status"], action["status"])
+        lines.append(f"{start} -> {how}" + (" (with help)" if action.get("help_given") else ""))
+    return lines
+
+
+def closing_note(ctx, db, session_id):
+    """The note itself, or None when there is nothing to say or the AI is unavailable."""
+    from .audio import language_of
+    from .family_skill import packet, instructions
+    session = db.get("tutor_sessions", session_id)
+    record = lesson_record(db, session_id)
+    if not record:
+        return None
+    child = db.get("children", session["child_id"])
+    subject = db.get("subjects", session["subject_id"])
+    finished = db.get("topics", session["topic_id"])
+    order = lambda t: (t.get("chapter_order") or 0, t["id"])
+    upcoming = next((t for t in sorted(db.find("topics", subject_id=subject["id"]), key=order)
+                     if t.get("is_core") and not t.get("archived") and not t["completed"] and order(t) > order(finished)), None)
+    prompt = f"""{instructions(packet(db, session["child_id"]))}
+
+Child: {child.get("nickname") or child["name"]}. Grade: {subject.get("grade") or child.get("grade_year") or 'not supplied'}.
+Lesson language: {language_of(db, subject)}. Lesson just finished: {finished["title"]}.
+The next lesson in this subject, where your words will be heard: {upcoming["title"] if upcoming else "not known"}.
+The lesson record, in order (each line: the task, then how the child's tries went):
+{json.dumps(record, ensure_ascii=False)}"""
+    try:
+        return Line.model_validate(ctx.ai.generate(prompt, schema=Line, instructions=NOTE_RULES, max_output=400)).text.strip()
+    except Exception as exc:
+        logger.warning("Closing note unavailable (%s)", type(exc).__name__)
+        return None
+
+
+def remember_closing(ctx, session_id):
+    """Write the note, voice it with the lesson's narrator, and keep both with the finished lesson."""
+    db = ctx.store
+    text = closing_note(ctx, db, session_id)
+    if not text:
+        return None
+    session = db.get("tutor_sessions", session_id)
+    note = {"text": text}
+    try:
+        from . import passages
+        from .audio import language_of
+        from .narration import generate
+        from routers.tutor import _narrator
+        topic = db.get("topics", session["topic_id"])
+        voice, rate = _narrator(topic)
+        package = {"passage_sha256": passages.passage_sha256(text), "sentences": passages.split_sentences(text)}
+        made = generate(ctx, topic, package, voice=voice, rate=rate, language=language_of(db, db.get("subjects", topic["subject_id"])),
+                        purpose="closing-note", maximum_usd=.05)
+        note["audio"] = {"track_id": made["track_id"], "part": 0}
+    except Exception as exc:  # the words alone are still worth keeping
+        logger.warning("Closing note voice unavailable (%s)", type(exc).__name__)
+    with db.transaction(kind="tutor.closing_note") as tx:
+        summary = dict(tx.get("tutor_sessions", session_id).get("completion_summary") or {})
+        tx.update("tutor_sessions", session_id, {"completion_summary": {**summary, "closing_note": note}})
+    return note
+
+
+def remember_in_background(ctx, session_id):
+    """Finishing a lesson does not wait for the note: it is written while the child moves on."""
+    import contextvars
+    import threading
+    if enabled(ctx):
+        threading.Thread(target=contextvars.copy_context().run, args=(remember_closing, ctx, session_id), daemon=True).start()
+
+
+def last_note(db, child_id, subject_id, before_session_id=None):
+    """The closing note of this child's most recent finished lesson in the subject."""
+    sessions = sorted((s for s in db.find("tutor_sessions", child_id=child_id, subject_id=subject_id)
+                       if s["status"] == "completed" and s["id"] != before_session_id
+                       and ((s.get("completion_summary") or {}).get("closing_note") or {}).get("text")),
+                      key=lambda s: str(s.get("updated_at") or s["id"]), reverse=True)
+    return sessions[0]["completion_summary"]["closing_note"] if sessions else None

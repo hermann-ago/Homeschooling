@@ -544,7 +544,8 @@ acknowledgment, record the acknowledgment, not independent understanding.
 Do not say progress was saved; the server validates and saves it after this response.
 Requests for help or clarification are not incorrect attempts; use Unanswered until there is an answer.
 Set ready_to_continue only when this action is sufficiently addressed; the student must manually continue.
-If correct, avoid unnecessary further questions. A follow_up means the action remains pending.
+If correct, confirm it in a few words, at most echoing the answer: do not explain why it is right, since the
+child has just shown they understand it, and avoid further questions. A follow_up means the action remains pending.
 {('What plays right after this step, when it is finished (private; do not teach or repeat it): ' + next_step + chr(10) + 'When this answer finishes the step, close the feedback with one short sentence that turns the page toward it, in your own words.') if next_step else ''}
 You may request at most one supported teaching activity in activity_requests, using kind and content.
 Use a worked_example, visual_demonstration, check_prerequisite, explain_thinking or other shared

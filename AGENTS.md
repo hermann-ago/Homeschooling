@@ -23,7 +23,8 @@ history only and may describe retired workflows.
 ## Commands
 
 ```bash
-cd backend && venv/Scripts/python -m pytest -q          # full suite, ~17 min
+cd backend && venv/Scripts/python -m pytest -q tests/test_<area>.py   # the tests for what you changed
+cd backend && venv/Scripts/python -m pytest -q -n auto  # full suite in parallel, ~4 min; before larger commits
 cd frontend && npm test && npm run lint && npm run build
 python backend/tools/lesson_workflow.py export --learner L --topic T --out tmp/lesson-T
 python backend/tools/lesson_eval.py tmp/eval --all --guide before-guide.json
