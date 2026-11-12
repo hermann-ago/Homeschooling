@@ -4,12 +4,23 @@ import { Volume2 } from 'lucide-react';
 import { Button } from '../ui';
 import { beginNarration, isNarrating, registerNarrator } from '../utils/narration';
 
+const HOLD_LIMIT_MS = 6000;
+
 export default function FeedbackVoice({ session, message, language, action = false, trackId = null, autoPlay = false,speed=1 }) {
   const [busy, setBusy] = useState(false);
   const [urls, setUrls] = useState([]);
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState('');
   const [deviceAvailable, setDeviceAvailable] = useState(false);
+  // A new reply is shown when it can be heard, so words and voice arrive together.
+  // It never waits long: a slow or failed voice shows the words on their own.
+  const [settled, setSettled] = useState(false);
+  const holding = autoPlay && !settled;
+  useEffect(() => {
+    if (!holding) return undefined;
+    const limit = window.setTimeout(() => setSettled(true), HOLD_LIMIT_MS);
+    return () => window.clearTimeout(limit);
+  }, [holding]);
   const audio = useRef(null);
   const narratorId = useRef(Symbol('feedback'));
   const requestVersion = useRef(0);
@@ -45,7 +56,7 @@ export default function FeedbackVoice({ session, message, language, action = fal
       if (version !== requestVersion.current) return;
       setNotice(e.message);
       setDeviceAvailable(Boolean(window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined'));
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setSettled(true); }
   };
   useEffect(() => {
     if (autoPlay) void read();
@@ -55,7 +66,8 @@ export default function FeedbackVoice({ session, message, language, action = fal
   }, [autoPlay, message.id, trackId]);
   useEffect(() => () => { requestVersion.current += 1; audio.current?.pause(); }, []);
   // The tutor's reply is simply heard; a small speaker repeats it.
-  return <div className="feedback-voice">
+  return <div className="feedback-voice" data-holding={holding || undefined}>
+    {holding && <span className="feedback-voice-thinking" role="status" aria-label="Your tutor is answering"><i /><i /><i /></span>}
     <button type="button" className="feedback-voice-button" data-busy={busy || undefined} disabled={busy} onClick={read}
       aria-label={busy ? 'Preparing voice…' : 'Read aloud'} title={busy ? 'Preparing voice…' : 'Read aloud (AI-generated voice)'}><Volume2 size={15} aria-hidden="true" /></button>
     {urls.length > 0 && <audio ref={audio} src={urls[index]} autoPlay onPlay={() => beginNarration(narratorId.current)} onEnded={() => { if (index + 1 < urls.length) setIndex(index + 1); }} />}

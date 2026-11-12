@@ -90,6 +90,17 @@ def gemini_workbook(prompt_text, images, models, replace_invalid=False, expected
     return gemini_turn(prompt_text, images, models, schema, **({"replace_invalid": True} if replace_invalid else {}))
 
 
+def attempt_start(db, session_id, action_id):
+    """The dialogue position where the current attempt at a step began: after "Start lesson over"
+    or "Go back one step", what was said before belongs to an earlier attempt. The screen hides it;
+    the grader and the tutor must not be told it either, or an old right answer vouches for a new one."""
+    playback = db.get("lesson_playback", session_id) or {}
+    fresh = ((playback.get("navigation_state") or {}).get("fresh_start") or {}).get("dialogue") or 0
+    replays = [i.get("dialogue_start_sequence") or 0 for i in db.find("activity_interactions", session_id=session_id, activity_id=action_id)
+               if i.get("is_replay")]
+    return max([fresh, *replays])
+
+
 class InteractiveTutor:
     def __init__(self, service):
         self.tutor = service
@@ -414,8 +425,9 @@ class InteractiveTutor:
         source_topic = self.db.get("topics", action["topic_id"])
         source = self._source(action)
         packet = self.tutor.context(session["child_id"], session["subject_id"])
-        history = sorted(self.db.find("lesson_dialogue", session_id=session["id"], action_id=action["action_id"]),
-                         key=lambda m: m["sequence"] or 0)[-16:]
+        started = attempt_start(self.db, session["id"], action["action_id"])
+        history = sorted((m for m in self.db.find("lesson_dialogue", session_id=session["id"], action_id=action["action_id"])
+                          if (m["sequence"] or 0) > started), key=lambda m: m["sequence"] or 0)[-16:]
         if support is not None:
             history = [m for m in history if m["id"] == message["id"] or (m["sequence"] or 0) <= support.get("dialogue_sequence", 0)]
         grading = None

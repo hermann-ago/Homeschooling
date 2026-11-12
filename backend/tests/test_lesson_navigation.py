@@ -129,3 +129,22 @@ def test_start_over_on_finished_lesson_starts_at_introduction_not_unfinished_car
     assert recovered['active_activity']['kind'] == 'read_source'
     assert recovered['active_activity']['interaction']['id'] == repeated['active_activity']['interaction']['id']
     with pytest.raises(TutorConflict): engine.repeat(state['session_id'], 'restart-finished-operation')
+
+
+def test_after_starting_over_the_grader_is_not_shown_the_earlier_attempt(harness, monkeypatch):
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    state = reach_question(engine, state)
+    seen = []
+    def grade(prompt, *args, **kwargs):
+        seen.append(prompt)
+        return {'feedback': 'Both parts are right now.', 'result': 'Correct', 'ready_to_continue': True}
+    monkeypatch.setattr(interactive, 'gemini_turn', grade)
+    state = event(engine, state, 'submit_response', {'response_id': 'first-time', 'text': 'Zebra answer from the first attempt'})
+    state = event(engine, state, 'assess', {'response_id': 'first-time'})
+    state = event(engine, state, 'restart_lesson')
+    state = reach_question(engine, state)
+    state = event(engine, state, 'submit_response', {'response_id': 'second-time', 'text': 'A different answer'})
+    state = event(engine, state, 'assess', {'response_id': 'second-time'})
+    assert len(seen) == 2 and 'A different answer' in seen[1]
+    # An old right answer and its praise must not vouch for the new answer.
+    assert 'Zebra answer' not in seen[1] and 'Both parts are right now.' not in seen[1]

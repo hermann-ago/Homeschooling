@@ -67,3 +67,25 @@ it('does not send a paid request if the lesson moved on during its estimate', as
   await Promise.resolve();await Promise.resolve();
   expect(tutorApi.feedbackAudio).toHaveBeenCalledTimes(1);
 });
+
+it('holds a new reply until its voice is ready, and never past the limit', async () => {
+  let finish;
+  tutorApi.feedbackAudio.mockResolvedValueOnce({ allowed: true }).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  tutorApi.audioManifest.mockResolvedValue({ tracks: [{}] }); tutorApi.audioPart.mockResolvedValue('blob:ready');
+  const { container } = render(<FeedbackVoice session="lesson" message={{ id: 'new', text: 'Nice.' }} autoPlay />);
+  expect(container.querySelector('.feedback-voice').dataset.holding).toBe('true');
+  expect(screen.getByRole('status', { name: 'Your tutor is answering' })).toBeTruthy();
+  await waitFor(() => expect(tutorApi.feedbackAudio).toHaveBeenCalledTimes(2));
+  finish({ track_id: 'ready' });
+  await waitFor(() => expect(container.querySelector('audio')?.src).toBe('blob:ready'));
+  expect(container.querySelector('.feedback-voice').dataset.holding).toBeUndefined();
+});
+
+it('shows the words at once when the voice cannot be prepared, and for earlier replies', async () => {
+  tutorApi.feedbackAudio.mockResolvedValue({ allowed: false, reason: 'Billing paused' });
+  const failed = render(<FeedbackVoice session="lesson" message={{ id: 'new', text: 'Nice.' }} autoPlay />);
+  await screen.findByText('Billing paused');
+  expect(failed.container.querySelector('.feedback-voice').dataset.holding).toBeUndefined();
+  const earlier = render(<FeedbackVoice session="lesson" message={{ id: 'old', text: 'Before.' }} />);
+  expect(earlier.container.querySelector('.feedback-voice').dataset.holding).toBeUndefined();
+});

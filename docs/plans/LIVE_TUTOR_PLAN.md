@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Steps 0–1 done (2026-11-11)**; Step 2 is next. Created 2026-11-11.
+Status: **Steps 0–1 done; Step 2 switched on 2026-11-12**, its speed work (2b) is next. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -253,3 +253,38 @@ the amounts are too small to matter (rule 5 stays as tracking only).
   - Still open in Step 2: the AI grader's own wait (median 8 s, F7) is
     untouched. Next: time a grading call with and without the attached book
     pages to see what makes it slow.
+- 2026-11-12 — **Step 2 switched on** (`ai.tutor_voice` in the host config) with the family's go-ahead.
+  - **Reply held until its voice is ready** (the family's idea): a new reply
+    shows three dots, then its words and voice together; never longer than 6 s,
+    and at once if the voice cannot be made. `FeedbackVoice.jsx`.
+  - **Bug found and fixed while testing:** after "Start lesson over" or "Go
+    back one step" the grader was still shown the earlier attempt's
+    conversation, so an old right answer and its praise vouched for a new wrong
+    one (182,561 accepted for 400,000 − 217,438). The grader and the tutor
+    voice now see only the current attempt (`interactive.attempt_start`).
+  - Tried end to end in test mode on Lesson 20: a wrong answer to a keyed
+    exercise got a spoken hint that did not state the answer.
+  - **Measured, click to first spoken word: 6.6 s** for that keyed answer. The
+    AI line took 1.7 s and the narrator 1.2 s; the other ~3.7 s is the app's own
+    work around them (the answer request took 3.3 s in all, the voice request
+    2.8 s). The prompt builder, state and key lookup were timed and are fast
+    (0.1–0.3 s), so the cause is still unknown. **Open: find it** — profile one
+    answer request and one feedback-audio request on the running server.
+  - **Why the AI grader is slow (F7), measured** by sending saved grading
+    requests again with and without the attached book pages:
+
+    | Lesson | With pages | Without pages |
+    |---|---|---|
+    | Lucas Portuguese 6 (0.4 MB of pages) | 6.0 s, 6.5 s | 3.3 s, 3.0 s — same grades |
+    | Lucas Math 19 (5.4 MB of pages) | 14.4 s, 16.4 s, 17.9 s | 3.0 s, 4.4 s, 3.4 s — one grade wrong |
+
+    The pages cost 3–14 s per answer. But in Math they also carry the answer
+    key: without them the fast model doubted a correct 9-digit sum. So the
+    pages cannot simply be dropped.
+  - What follows for **Step 2b**: an exercise whose answer is already in the
+    script (the key's answer, or a proposed answer a grown-up approved) can be
+    graded without the pages, or checked by the app at once. Lesson 20's video
+    exercise had correct proposed answers waiting unapproved, which is why the
+    slow grader was used at all. The fast path is more answers settled ahead
+    of the lesson — "facts ahead" again — and pages attached only when an
+    exercise has no settled answer or needs the picture.

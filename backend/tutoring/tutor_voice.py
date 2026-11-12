@@ -70,10 +70,10 @@ def reveals(line, key_answers, child_answer):
     return False
 
 
-def lesson_so_far(db, session_id, before_sequence=None, limit=10):
+def lesson_so_far(db, session_id, before_sequence=None, limit=10, after_sequence=0):
     """The lesson up to now, one short line per finished step, for the tutor's eyes only."""
     messages = [m for m in db.find("lesson_dialogue", session_id=session_id)
-                if before_sequence is None or (m["sequence"] or 0) < before_sequence]
+                if (m["sequence"] or 0) > after_sequence and (before_sequence is None or (m["sequence"] or 0) < before_sequence)]
     results = {}
     for message in sorted(messages, key=lambda m: m["sequence"] or 0):
         result = (message.get("assessment") or {}).get("result") if message["role"] == "student" else None
@@ -90,10 +90,11 @@ def lesson_so_far(db, session_id, before_sequence=None, limit=10):
     return lines[-limit:]
 
 
-def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5):
+def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5, after_sequence=0):
     """The tutor's own recent replies, and how many times the child has already tried this step."""
     messages = sorted((m for m in db.find("lesson_dialogue", session_id=session_id)
-                       if before_sequence is None or (m["sequence"] or 0) < before_sequence), key=lambda m: m["sequence"] or 0)
+                       if (m["sequence"] or 0) > after_sequence and (before_sequence is None or (m["sequence"] or 0) < before_sequence)),
+                      key=lambda m: m["sequence"] or 0)
     said = [" ".join(m["text"].split())[:220] for m in messages if m["role"] == "teacher" and m.get("text")]
     tries = sum(1 for m in messages if m["role"] == "student" and m["action_id"] == action_id)
     return said[-limit:], tries + 1
@@ -140,13 +141,16 @@ def reply(ctx, db, session, action, message, assessment, answer, key):
     subject = db.get("subjects", session["subject_id"])
     topic = db.get("topics", session["topic_id"])
     key = key or {}
-    said, attempt = earlier_lines(db, session["id"], action["action_id"], message.get("sequence"))
+    from .interactive import attempt_start
+    lesson_start = ((db.get("lesson_playback", session["id"]) or {}).get("navigation_state") or {}).get("fresh_start") or {}
+    said, attempt = earlier_lines(db, session["id"], action["action_id"], message.get("sequence"),
+                                  after_sequence=attempt_start(db, session["id"], action["action_id"]))
     checked = assessment.get("blank_results") or {}
     not_yet = [box.get("label") or box["id"] for box in (action.get("activity_content") or {}).get("blanks") or []
                if checked.get(box["id"]) is False]
     line = compose(ctx, child=child.get("nickname") or child["name"], grade=subject.get("grade") or child.get("grade_year"),
         language=language_of(db, subject), family_style=instructions(packet(db, session["child_id"])),
-        lesson=topic["title"], so_far=lesson_so_far(db, session["id"], message.get("sequence")),
+        lesson=topic["title"], so_far=lesson_so_far(db, session["id"], message.get("sequence"), after_sequence=lesson_start.get("dialogue") or 0),
         step=action.get("prompt"), answer=answer, result=assessment["result"],
         note="\n".join(filter(None, [assessment.get("feedback"), assessment.get("help")])),
         follow_up=assessment.get("follow_up"), said=said, attempt=attempt, not_yet=not_yet, key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))

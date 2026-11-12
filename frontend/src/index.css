@@ -287,6 +287,14 @@
 .feedback-voice { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; margin-top: .3rem; }
 .feedback-voice-button { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border-radius: 50%; color: var(--color-muted); }
 .feedback-voice-button:hover:not(:disabled) { background: var(--color-surface); color: var(--color-action); }
+/* Until its voice is ready, a new reply shows only that the tutor is answering. */
+:is(.tutor-reply, .tutor-message):has(> .feedback-voice[data-holding]) > p { display: none; }
+.feedback-voice[data-holding] { margin-top: 0; }
+.feedback-voice[data-holding] > :not(.feedback-voice-thinking) { display: none; }
+.feedback-voice-thinking { display: inline-flex; gap: .3rem; padding: .25rem .1rem; }
+.feedback-voice-thinking > i { width: .4rem; height: .4rem; border-radius: 50%; background: var(--color-muted); animation: feedback-voice-wait 1s ease-in-out infinite; }
+.feedback-voice-thinking > i:nth-child(2) { animation-delay: .15s; }
+.feedback-voice-thinking > i:nth-child(3) { animation-delay: .3s; }
 .feedback-voice-button[data-busy] { color: var(--color-action); animation: feedback-voice-wait 1s ease-in-out infinite; }
 @keyframes feedback-voice-wait { 50% { opacity: .35; } }
 .tutor-device-passage-button { flex-shrink: 0; padding: .65rem .85rem; border-radius: .75rem; background: var(--color-action); color: white; font-size: .8rem; font-weight: 600; }
