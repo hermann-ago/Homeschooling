@@ -688,6 +688,14 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                 if assessment['result'] == 'Correct' and assessment['ready_to_continue']:
                     # A correct, finished answer moves on: no follow-up and no extra task.
                     assessment.update(follow_up=None, activity_requests=[])
+                if keyed:
+                    # The app checked this against the key at once and has only a fixed line to
+                    # offer; the child's tutor words what they hear. An AI grader's reply is
+                    # already written for this child.
+                    from . import tutor_voice
+                    from .page_script import answer_for as pinned_key
+                    assessment = tutor_voice.reply(self.ctx, self.db, session, action, message, assessment,
+                        capture.get('confirmed_text') or message['text'], pinned_key(self.ctx, action))
                 with self.db.transaction(operation_id=f"turn:{message_id}:assessment", kind="tutor.feedback") as tx:
                     self.tutor.guard(tx, session_id, based_revision)
                     self._apply(tx, session, action, message, assessment, based_revision)

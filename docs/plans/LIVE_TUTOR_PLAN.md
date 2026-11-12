@@ -222,3 +222,34 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     cents each. A repeated line reuses its recording at no cost.
   - The voice adds 1–2 s; the wait is almost all in the AI call. Step 2 has to
     bring that call under about 2 s to meet the 3-second aim.
+- 2026-11-11 — **Step 2 built, switched off, waiting for the family's go-ahead.**
+  - `tutoring/tutor_voice.py`: after the grade is settled, one small fast call
+    words what the child hears. It gets the family style, the lesson so far,
+    its own last lines, the try number, the checker's note, the exact parts
+    still wrong and (privately) the book's answer. The code withholds any line
+    that states a key answer the child has not given, and falls back to the
+    earlier words if the call fails. Setting: `ai.tutor_voice` (off).
+  - `tools/live_tutor.py replay` writes the saved replies of a lesson beside
+    the new ones. Replayed: Lucas Math 19, Lucas Portuguese 6, Mila Letra K.
+  - What the replays showed, and what changed because of it:
+    - First version was formulaic ("You did X… Nice work"), praised things it
+      could not see, and repeated one hint through five misses. Fixed in the
+      instructions: brief for easy answers, varied openings, only what the
+      answer shows, a different approach on each miss.
+    - Examples in the instructions were copied ("Yes, exactly" five times);
+      removed.
+    - The fast model twice said a part was "right now" when it was not, and
+      once named the wrong place value. A rule did not fix it; giving it the
+      exact list of parts still wrong and the book's answer did. Lesson:
+      give the fast model facts, not rules, wherever accuracy matters.
+    - Where the AI grader already writes the reply (97 of 136), the new line
+      was only a shorter rewording at a cost of 2 more seconds. So the tutor
+      voice applies **only to answers the app checks itself** (the fixed
+      "Correct!" / "0 of 1 right" lines, F6). The grader's replies stay.
+  - Numbers: 17 app-checked replies in Math 19, written in a median 2.1 s
+    (longest 3.8 s), none withheld. With the narrator's 1–2 s, the child hears
+    the first word about 3–4 s after answering, where the fixed line used to
+    appear at once. Each line costs well under a cent.
+  - Still open in Step 2: the AI grader's own wait (median 8 s, F7) is
+    untouched. Next: time a grading call with and without the attached book
+    pages to see what makes it slow.
