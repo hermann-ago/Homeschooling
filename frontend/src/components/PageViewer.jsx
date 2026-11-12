@@ -8,7 +8,7 @@ import AnnotationLayer from './pdfAnnotations/AnnotationLayer';
 import AnnotationToolbar from './pdfAnnotations/AnnotationToolbar';
 import { usePageAnnotations } from './pdfAnnotations/usePageAnnotations';
 import { toPhysicalPage } from './pdfAnnotations/annotationGeometry';
-import { followScroll, highlightItemIndices } from '../utils/readAlong';
+import { followScroll, highlightItemIndices, sentenceForItem } from '../utils/readAlong';
 import { useConfirm } from '../ui/useFeedback';
 import { printLessonPages } from '../utils/printLessonPages';
 import { pauseNarration } from '../utils/narration';
@@ -30,7 +30,7 @@ function escapeHtml(text) {
  * The book pages of a lesson with handwriting, used by the Lesson screen
  * (which shows the subject and title in its own header).
  */
-const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = null, boundaryNote = null }) => {
+const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = null, boundaryNote = null, readableSentences = null, onReadFrom = null }) => {
   const start = slot?.page_from || 1;
   const end = slot?.page_to || start;
   const offset = slot?.pdf_page_offset || 0;
@@ -127,12 +127,21 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
     () => highlightItemIndices(textItems, highlightSentence),
     [textItems, highlightSentence],
   );
+  // A lesson reading can be heard again from any of its lines: each piece of text carries its index.
+  const readable = Boolean(onReadFrom && readableSentences?.length);
   const renderText = useMemo(() => {
-    if (!highlighted.size) return undefined;
-    return ({ str, itemIndex }) => (highlighted.has(itemIndex)
-      ? `<mark class="readalong-mark">${escapeHtml(str)}</mark>`
-      : escapeHtml(str));
-  }, [highlighted]);
+    if (!highlighted.size && !readable) return undefined;
+    return ({ str, itemIndex }) => {
+      const text = highlighted.has(itemIndex) ? `<mark class="readalong-mark">${escapeHtml(str)}</mark>` : escapeHtml(str);
+      return readable ? `<span data-readable-item="${itemIndex}">${text}</span>` : text;
+    };
+  }, [highlighted, readable]);
+  const readFromTap = (event) => {
+    const item = event.target.closest?.('[data-readable-item]');
+    if (!item || !readable || window.getSelection?.()?.toString()) return; // a drag selects text instead
+    const key = sentenceForItem(textItems, Number(item.dataset.readableItem), readableSentences);
+    if (key !== null) onReadFrom(key);
+  };
 
   useEffect(() => {
     if (!requestedPage || requestedPage === page || !pdfData) return;
@@ -289,7 +298,7 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
             onLoadError={(loadError) => setPdfError(loadError.message)}
           >
             <div className="min-w-max flex justify-center">
-              <div ref={pageSurfaceRef} className="relative inline-block shadow-lg bg-white leading-none">
+              <div ref={pageSurfaceRef} className="relative inline-block shadow-lg bg-white leading-none" data-readable={readable || undefined} onClick={readFromTap}>
                 <Page
                   // The loaded PDF holds only the assigned pages, starting at physicalStart.
                   pageNumber={page - physicalStart + 1}

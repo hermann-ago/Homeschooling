@@ -118,6 +118,9 @@
   color: transparent;
   border-radius: 2px;
 }
+/* During a reading, any line of the page can be tapped to hear it again. */
+[data-readable] .react-pdf__Page__textContent [data-readable-item] { cursor: pointer; border-radius: 2px; }
+[data-readable] .react-pdf__Page__textContent [data-readable-item]:hover { background: rgba(250, 204, 21, 0.18); }
 
 .activity-introduction { font-family: var(--font-introduction); }
 /* The tutor's own words, kept visibly apart from the author's: a soft yellow note. */

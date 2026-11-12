@@ -1,3 +1,4 @@
+/* @vitest-environment jsdom */
 import { describe, expect, it } from 'vitest';
 import { followScroll, highlightItemIndices, locateSentences, locateText, partForSentence, passageOnPages, sentenceAt } from './readAlong';
 
@@ -73,5 +74,25 @@ describe('following the book page instead of the panel text', () => {
     expect(followScroll(view, { top: 200, bottom: 240, left: 900, right: 1100 }, { top: 0, left: 0 })).toEqual({ top: 0, left: 750 });
     // Taller than the view: its top lands at the margin.
     expect(followScroll(view, { top: 50, bottom: 900, left: 50, right: 450 }, { top: 300, left: 0 })).toEqual({ top: 218, left: 0 });
+  });
+});
+
+describe('tapping the book page', () => {
+  it('finds the reading sentence a tapped line belongs to', async () => {
+    const { sentenceForItem } = await import('./readAlong');
+    const items = [{ str: 'Henry V led his army to France.' }, { str: 'The French army was larger,' }, { str: 'but rain turned the field to mud.' }];
+    const sentences = [{ key: 4, text: 'Henry V led his army to France.' }, { key: 5, text: 'The French army was larger, but rain turned the field to mud.' }];
+    expect(sentenceForItem(items, 0, sentences)).toBe(4);
+    expect(sentenceForItem(items, 2, sentences)).toBe(5);
+    expect(sentenceForItem(items, 2, [{ key: 9, text: 'Something not on this page at all.' }])).toBeNull();
+  });
+  it('sends a read-from request to whoever listens', async () => {
+    const { onReadFrom, requestReadFrom } = await import('./readAlong');
+    const heard = [];
+    const stop = onReadFrom((index) => heard.push(index));
+    requestReadFrom(7);
+    stop();
+    requestReadFrom(8);
+    expect(heard).toEqual([7]);
   });
 });

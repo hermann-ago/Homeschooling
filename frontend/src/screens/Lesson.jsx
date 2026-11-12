@@ -25,7 +25,7 @@ import { keys, useInserts, useSetLessonDone } from '../api/queries';
 import { useLearner } from '../app/learnerContext';
 import { Button, IconButton, SegmentedControl, useConfirm, useToast } from '../ui';
 import { learnerTones } from '../utils/colors';
-import { locateSentences, locateText, passageOnPages } from '../utils/readAlong';
+import { locateSentences, locateText, passageOnPages, requestReadFrom } from '../utils/readAlong';
 
 /** Book and tutor side by side (the workspace's lg layout); narrower screens show one at a time. */
 const SIDE_BY_SIDE = '(min-width: 1024px)';
@@ -280,6 +280,11 @@ export default function Lesson() {
   const spoken = mode === 'guide' && guideIndex !== null && sourceIndex === null && guide?.sentences[guideIndex]?.kind === 'book'
     ? guide.sentences[guideIndex].text : null;
   const highlight = sourceIndex !== null ? passage.sentences[sourceIndex]?.text : spoken;
+  // A tap on a line of the book page reads again from that sentence of the guided reading.
+  const readableSentences = mode === 'guide' && guide?.sentences
+    ? guide.sentences.map((sentence, index) => sentence.kind === 'book'
+      ? { key: index, text: sentence.source !== null && sentence.source !== undefined ? passage.sentences[sentence.source]?.text || sentence.text : sentence.text } : null).filter(Boolean)
+    : null;
   const spokenPage = spoken ? locateText(bookTexts, spoken)?.page ?? null : null;
   const pages = passage.printed_pages.start === passage.printed_pages.end
     ? `page ${passage.printed_pages.start}` : `pages ${passage.printed_pages.start}–${passage.printed_pages.end}`;
@@ -351,7 +356,8 @@ export default function Lesson() {
           {viewerSlot?.document_id ? (
             <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
               highlightSentence={!viewing && hasText && !passageVoice ? highlight : null}
-              requestedPage={viewing ? null : sourceIndex !== null ? sentencePages[sourceIndex] : spokenPage} />
+              requestedPage={viewing ? null : sourceIndex !== null ? sentencePages[sourceIndex] : spokenPage}
+              readableSentences={viewing ? null : readableSentences} onReadFrom={requestReadFrom} />
           ) : (
             <div className="h-full grid place-items-center p-8 text-center">
               <div className="flex flex-col items-center gap-3 max-w-sm">

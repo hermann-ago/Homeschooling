@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Pause, Play, RotateCcw, VolumeX } from 'lucide-react';
 import { tutorApi } from '../api/tutor';
-import { partForSentence, sentenceAt } from '../utils/readAlong';
+import { onReadFrom, partForSentence, sentenceAt } from '../utils/readAlong';
 import { beginNarration, isNarrating, registerNarrator } from '../utils/narration';
 import { NARRATION_SPEEDS, narrationVoiceLabel } from '../utils/narrationSettings';
 
@@ -324,6 +324,12 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   }, [autoPlayRequest, recordedPart, held, unsafePassages]);
 
   const replay = () => seekTo(activeIndex ?? 0);
+  // A tap on the book page asks to read again from a sentence: the reading that holds it answers.
+  const readFrom = useRef(null);
+  readFrom.current = (index) => {
+    if (!headless && !disabled && index >= rangeStart && index <= lastSentence) seekTo(index, true);
+  };
+  useEffect(() => onReadFrom((index) => readFrom.current?.(index)), []);
   replayRef.current = replay;
   useEffect(() => { resumeRef.current = () => seekTo(activeIndex ?? 0, true, true); });
   useEffect(() => {

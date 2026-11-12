@@ -73,7 +73,9 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
       onCursorChange={changed} onPassageModeChange={onPassageModeChange}
       settingsInHeader selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage}
       externalControls headless={headless} autoPlayRequest={autoPlayRequest} onTransport={transportChanged}
-      disabled={state.on_break || activity.status !== 'pending'} onReadingEnd={complete} />
+      // A finished reading can still be heard again (a tap on a sentence or on the book page); it only
+      // reports its end once, while it is the lesson's pending step.
+      disabled={state.on_break} onReadingEnd={activity.status === 'pending' ? complete : undefined} />
   </div>;
 }
 

@@ -147,3 +147,25 @@ export function followScroll(view, box, scroll, margin = 32) {
   left = Math.max(0, Math.round(left));
   return top === scroll.top && left === scroll.left ? null : { top, left };
 }
+
+/** The reading sentence a tapped piece of page text belongs to: the first candidate
+ *  ({ key, text }) whose highlight on this page includes that text item, or null. */
+export function sentenceForItem(items, itemIndex, candidates) {
+  for (const candidate of candidates || []) {
+    if (highlightItemIndices(items, candidate.text).has(itemIndex)) return candidate.key;
+  }
+  return null;
+}
+
+const READ_FROM = 'readalong:read-from';
+
+/** Ask the reading in progress to read again from one of its sentences (a tap on the book page). */
+export function requestReadFrom(index) {
+  window.dispatchEvent(new CustomEvent(READ_FROM, { detail: { index } }));
+}
+
+export function onReadFrom(handler) {
+  const listener = (event) => handler(event.detail.index);
+  window.addEventListener(READ_FROM, listener);
+  return () => window.removeEventListener(READ_FROM, listener);
+}
