@@ -59,6 +59,11 @@ class TestConfig(HostConfig):
         return super().update(**changes)
 
 
+# Paid voice recordings, named by their content: shared with the real folder so that the
+# usage record (shared too) never points to a recording only one test copy can see.
+RECORDINGS = ("narration-", "inworld-", "elevenlabs-")
+
+
 class TestFiles(DriveFolder):
     """Read originals; copy a file lazily before returning a path that could be edited."""
     def __init__(self, directory, live):
@@ -90,7 +95,7 @@ class TestFiles(DriveFolder):
 
     def write_new(self, folder, name, data):
         # Audio is immutable by content hash. Never share photos, handwriting or uploads.
-        if folder in self.voice_folders and name.startswith("narration-"):
+        if folder in self.voice_folders and name.startswith(RECORDINGS):
             path, sha, _ = self.base.write_new(folder, name, data)
             return path, sha, False  # A rehearsal rollback cannot delete a shared recording.
         return self.local.write_new(folder, name, data)

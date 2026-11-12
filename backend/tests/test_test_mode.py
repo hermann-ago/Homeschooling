@@ -310,3 +310,24 @@ def test_paid_invalid_response_is_cached_instead_of_purchased_again(ready, monke
         with pytest.raises(StructuredResponseError):
             h.ctx.ai.generate("Invalid but paid response", schema=SmallResponse)
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("name", ["narration-abc-part-0.mp3", "inworld-0123456789abcdef01234567.wav", "elevenlabs-0123456789abcdef.wav"])
+def test_every_paid_recording_made_in_test_mode_is_readable_from_the_next_test_copy(ready, name):
+    from storage import layout
+    h, s = ready
+    folder = layout.for_subject(h.ctx.store, s["genghis"]["subject_id"], layout.AUDIO)
+    first = manager(h.ctx).get(enter(h))
+    path, sha, _ = first.files.write_new(folder, name, b"voice bytes")
+    second = manager(h.ctx).get(manager(h.ctx).create())
+    assert second.files.read(path, sha) == b"voice bytes" and h.ctx.files.read(path, sha) == b"voice bytes"
+
+
+def test_a_test_copys_own_work_stays_private(ready):
+    from storage import layout
+    h, s = ready
+    folder = layout.for_subject(h.ctx.store, s["genghis"]["subject_id"], layout.AUDIO)
+    first = manager(h.ctx).get(enter(h))
+    path, sha, _ = first.files.write_new(folder, "photo-of-work.jpg", b"child work")
+    with pytest.raises(Exception):
+        h.ctx.files.read(path, sha)

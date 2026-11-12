@@ -7,6 +7,7 @@ plain text and structured data; no HTML, styling or executable code is accepted.
 from __future__ import annotations
 
 import copy
+import functools
 import re
 from typing import Literal, Union
 
@@ -413,7 +414,13 @@ def validate_activity(kind: str, content: dict) -> dict:
 
 
 def definitions() -> list[dict]:
-    """JSON-serializable shared planner/live-tutor tool and renderer catalog."""
+    """JSON-serializable shared planner/live-tutor tool and renderer catalog. A fresh copy each
+    time: building the schemas is slow, and the catalog never changes while the server runs."""
+    return copy.deepcopy(_definitions())
+
+
+@functools.cache
+def _definitions() -> list[dict]:
     return [{"type": kind, "kind": kind, "title": kind.replace("_", " ").capitalize(),
              "version": CONTRACT_VERSION, "renderer": renderer, "child_facing": visible,
              "input_schema": model.model_json_schema(), "result_schema": ActivityResult.model_json_schema(),

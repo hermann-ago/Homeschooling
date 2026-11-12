@@ -39,9 +39,13 @@ export default function FeedbackVoice({ session, message, language, action = fal
     setBusy(true); setNotice(''); setDeviceAvailable(false);
     try {
       const requestAudio = action ? tutorApi.actionAudio : tutorApi.feedbackAudio;
-      const estimate = await requestAudio(session, message.id, true, ...(trackId ? [trackId] : []));
-      if (!estimate.allowed) throw new Error(estimate.reason || 'The voice provider is unavailable.');
-      if (version !== requestVersion.current) return;
+      // A live reply is spoken at once: the server refuses a voice it may not buy, so the
+      // separate price check would only add a round trip while the child waits.
+      if (action) {
+        const estimate = await requestAudio(session, message.id, true, ...(trackId ? [trackId] : []));
+        if (!estimate.allowed) throw new Error(estimate.reason || 'The voice provider is unavailable.');
+        if (version !== requestVersion.current) return;
+      }
       const result = await requestAudio(session, message.id, false, ...(trackId ? [trackId] : []));
       const manifest = await tutorApi.audioManifest(result.track_id);
       if (manifest.tracks.some((part) => part.fallback)) throw new Error('This reply uses device speech.');
