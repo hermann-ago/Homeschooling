@@ -178,6 +178,7 @@ def replay(session_id, out):
             language=language, family_style=style, lesson=topic["title"], so_far=tutor_voice.lesson_so_far(db, session_id, message["sequence"]),
             step=action.get("prompt"), answer=message["text"], result=result, note=note, follow_up=follow_up,
             said=spoken[-5:], attempt=tries,
+            next_step=tutor_voice.coming_next(db, session_id, action, pending_only=False) if result == "Correct" and not follow_up else None,
             not_yet=[part.strip() for marker in ("Take another look at: ", "Confira de novo: ") if marker in note
                      for part in note.split(marker, 1)[1].split(";") if part.strip()],
             key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))

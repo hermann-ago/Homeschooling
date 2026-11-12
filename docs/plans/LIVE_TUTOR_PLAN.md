@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Steps 0–1 done; Step 2 on since 2026-11-12; 2b (speed) partly done**, streaming (2c) is the open decision. Created 2026-11-11.
+Status: **Steps 0–3 done (2026-11-12)**; streaming (2c) postponed by the family; Step 4 is next. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -113,7 +113,8 @@ measurements below written into the progress log, commit and push.
   *Done when* the side-by-side on the "before" lesson reads clearly warmer and
   more specific, with no key revealed and no grade changed.
 
-- [ ] **Step 3 — Live bridges, with the prepared line as a safety net.**
+- [x] **Step 3 — Live bridges, with the prepared line as a safety net.** (done 2026-11-12, built
+  differently than first written: see the progress log)
   After an exercise, the tutor says one or two sentences about what just
   happened before the prepared explanation plays. If the live line is not ready
   within the agreed wait, or the AI is unreachable, the lesson simply goes on
@@ -311,3 +312,30 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     the first sentence while the rest is still being written. The remaining
     app overhead (the separate voice estimate, the state refresh before the
     voice is requested) is worth about 1 s and can be trimmed either way.
+- 2026-11-12 — Family decision: 5–6 s with the dots is fine for now; **streaming
+  (2c) is postponed** to a later time.
+- 2026-11-12 — **Last-second trim.** The live reply's voice is requested at once
+  (no separate price check; the server still refuses a voice it may not buy);
+  the activity catalog is built once. Fresh replies measured at 4.9–5.6 s, the
+  app's own share now 1.2–1.5 s (was 1.3–2.6 s). Tried and reverted: building
+  the grading request only when the AI is asked; an app-checked answer must
+  still freeze which key it was checked against.
+  - Bug found: test mode shared only `narration-*` recordings with the real
+    folder, so Inworld/ElevenLabs recordings made in one test copy were missing
+    in the next while the shared usage record said they existed. All three
+    name patterns are shared now (`services/test_mode.py: RECORDINGS`).
+- 2026-11-12 — **Step 3 done, as a lead-in inside the reply.** A separate live
+  sentence when Continue is pressed would add 4–5 s to every step after an
+  exercise. Instead, when an answer finishes a step and the lesson changes gear
+  next (a reading, an explanation or the end), the tutor's reply ends with one
+  short sentence turning the page toward it. No extra call, no extra wait; with
+  the AI unreachable the lesson plays exactly as before. Both the tutor voice
+  and the AI grader get the next step (`tutor_voice.coming_next`).
+  - Replays: asked to lead in "only sometimes", the fast model did it on every
+    right answer, mostly "Now let's…" into the next exercise. Fixed with facts,
+    not rules: the code passes a next step only where the lesson changes gear,
+    and otherwise says "the next exercise appears by itself". Result in Lucas
+    Math 19: two lead-ins, both where an explanation follows; between exercises
+    short clean replies. AI-graded examples: Portuguese ("Agora vamos observar
+    o som de S e SS entre vogais"), History ("That's the last question—nice
+    work finishing this lesson").

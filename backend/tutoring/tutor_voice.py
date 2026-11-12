@@ -37,6 +37,9 @@ Sound like a person, not a form:
 - When the answer is not yet right, help them get there without stating the answer. First miss: say
   what to look at again. Second miss: give a more concrete clue. Third miss or later: change approach
   and walk into the first small step with them, for example by asking what one digit or word is.
+- When you are told what plays right after your words, close with one short sentence that turns
+  the page toward it, in your own words: no teaching it, no summary of it, none of its words, and
+  not the same turn of phrase as your earlier lines.
 - No grades, scores or counts of right answers. No lists, markdown or emoji. Plain spoken words in
   the lesson's language.
 
@@ -90,6 +93,28 @@ def lesson_so_far(db, session_id, before_sequence=None, limit=10, after_sequence
     return lines[-limit:]
 
 
+# A lead-in helps where the lesson changes gear: into a reading, an explanation or the end.
+KINDS = {"read_source": "a reading from the book", "explain_or_observe": "the tutor's explanation",
+         "close_lesson": "the end of the lesson"}
+
+
+def coming_next(db, session_id, action, pending_only=True):
+    """What plays after this step, in a few words, so the tutor can turn the page toward it.
+    (A replay of a finished lesson has nothing pending: it asks by position alone.)"""
+    later = sorted((a for a in db.find("lesson_actions", session_id=session_id)
+                    if (a["status"] == "pending" or not pending_only) and not a.get("parent_activity_id") and a["id"] != action["id"]
+                    and (a.get("activity_order") or 0) > (action.get("activity_order") or 0)),
+                   key=lambda a: (a.get("activity_order") or 0, a["id"]))
+    if not later:
+        return None
+    step = later[0]
+    if step.get("activity_kind") not in KINDS or step.get("activity_kind") == "request_book_work":
+        return None  # another exercise follows: it presents itself, a lead-in would only repeat it
+    kind = KINDS[step["activity_kind"]]
+    text = " ".join(str(step.get("prompt") or "").split())[:280]
+    return f"{kind}: {text}" if text and step.get("activity_kind") != "close_lesson" else kind
+
+
 def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5, after_sequence=0):
     """The tutor's own recent replies, and how many times the child has already tried this step."""
     messages = sorted((m for m in db.find("lesson_dialogue", session_id=session_id)
@@ -101,7 +126,7 @@ def earlier_lines(db, session_id, action_id, before_sequence=None, limit=5, afte
 
 
 def compose(ctx, *, child, grade, language, family_style, lesson, so_far, step, answer, result, note,
-            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None):
+            follow_up=None, key_answers=(), said=(), attempt=1, not_yet=None, next_step=None):
     """The spoken reply, or None when it cannot be used (the caller keeps the grader's words)."""
     if result not in SPOKEN_RESULTS:
         return None
@@ -119,6 +144,7 @@ The checker's note (private): {json.dumps(str(note or "")[:1500], ensure_ascii=F
 {"Parts the checker found NOT yet right on this try (the truth; never call one of these right, fixed or improved): " + json.dumps(list(not_yet), ensure_ascii=False) if not_yet else ""}
 The book's answer (private, so that your hints are accurate; never say it or any part of it that the child has not written): {json.dumps(list(key_answers), ensure_ascii=False) if key_answers else "not supplied"}
 {"After your words the child will see this follow-up question; lead into it without repeating it: " + json.dumps(follow_up, ensure_ascii=False) if follow_up else "Do not add a new task; a small guiding question about this same step is fine."}
+{"This finishes the step. What plays right after your words (private; do not teach or repeat it): " + json.dumps(next_step, ensure_ascii=False) if next_step else "The next exercise appears by itself right after your words: say nothing about what comes next."}
 """
     try:
         text = Line.model_validate(ctx.ai.generate(prompt, schema=Line, instructions=RULES, max_output=400)).text.strip()
@@ -148,10 +174,12 @@ def reply(ctx, db, session, action, message, assessment, answer, key):
     checked = assessment.get("blank_results") or {}
     not_yet = [box.get("label") or box["id"] for box in (action.get("activity_content") or {}).get("blanks") or []
                if checked.get(box["id"]) is False]
+    finished = assessment["result"] == "Correct" and assessment.get("ready_to_continue") and not assessment.get("follow_up")
     line = compose(ctx, child=child.get("nickname") or child["name"], grade=subject.get("grade") or child.get("grade_year"),
         language=language_of(db, subject), family_style=instructions(packet(db, session["child_id"])),
         lesson=topic["title"], so_far=lesson_so_far(db, session["id"], message.get("sequence"), after_sequence=lesson_start.get("dialogue") or 0),
         step=action.get("prompt"), answer=answer, result=assessment["result"],
         note="\n".join(filter(None, [assessment.get("feedback"), assessment.get("help")])),
-        follow_up=assessment.get("follow_up"), said=said, attempt=attempt, not_yet=not_yet, key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
+        follow_up=assessment.get("follow_up"), said=said, attempt=attempt, not_yet=not_yet,
+        next_step=coming_next(db, session["id"], action) if finished else None, key_answers=key.get("answer_items") or ([key["answer_key"]] if key.get("answer_key") else []))
     return {**assessment, "feedback": line, "grader_note": assessment.get("feedback")} if line else assessment

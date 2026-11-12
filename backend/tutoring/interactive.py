@@ -485,6 +485,8 @@ class InteractiveTutor:
         capture_target = capture_content(self.ctx, action)
         from .source_key import original_refs
         original_questions = original_refs(action)
+        from .tutor_voice import coming_next
+        next_step = coming_next(self.db, session["id"], action)
         text = f'''You are the student's patient homeschool tutor. Respond in the curriculum's language.
 {family_instructions(family)}
 
@@ -540,6 +542,7 @@ Do not say progress was saved; the server validates and saves it after this resp
 Requests for help or clarification are not incorrect attempts; use Unanswered until there is an answer.
 Set ready_to_continue only when this action is sufficiently addressed; the student must manually continue.
 If correct, avoid unnecessary further questions. A follow_up means the action remains pending.
+{('What plays right after this step, when it is finished (private; do not teach or repeat it): ' + next_step + chr(10) + 'When this answer finishes the step, close the feedback with one short sentence that turns the page toward it, in your own words.') if next_step else ''}
 You may request at most one supported teaching activity in activity_requests, using kind and content.
 Use a worked_example, visual_demonstration, check_prerequisite, explain_thinking or other shared
 activity only when the actual response makes it useful. The engine validates and renders it, keeps
