@@ -161,7 +161,7 @@ def test_duplicate_complete_plans_recover_cached_response_without_provider_call(
     harness.restart()
     harness.ctx.ai.http = httpx.Client(transport=httpx.MockTransport(lambda request: pytest.fail('Cached lesson sent again')))
     assert harness.ctx.ai.generate('Duplicate lesson plan', schema=guide_mod.GuidePlan) == normalized
-    assert len(calls) == 2
+    assert len(calls) == 1  # one generation (not marked as preparation, so not counted first); never sent again
     # Grading and all other schemas must not inherit lesson-specific recovery.
     with pytest.raises(StructuredResponseError):
         validated('{"answer":"yes"}{"answer":"yes"}', SmallResponse)

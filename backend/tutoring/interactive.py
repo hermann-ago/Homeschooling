@@ -90,6 +90,18 @@ def gemini_workbook(prompt_text, images, models, replace_invalid=False, expected
     return gemini_turn(prompt_text, images, models, schema, **({"replace_invalid": True} if replace_invalid else {}))
 
 
+def settled_answer(ctx, action, capture, images):
+    """True when this answer can be graded without the book pages: the exercise's answer is pinned
+    (from the key, or approved by a grown-up) and the child typed or chose a reply."""
+    from .capture_policy import activity_content
+    from .page_script import answer_for
+    if images or (capture.get('evidence_ids') or []):
+        return False
+    if activity_content(ctx, action).get('evidence_requirement', 'answer') not in ('answer', 'spelling'):
+        return False  # handwriting, diagrams and written methods are judged against the page
+    return bool((answer_for(ctx, action) or {}).get('answer_key'))
+
+
 def attempt_start(db, session_id, action_id):
     """The dialogue position where the current attempt at a step began: after "Start lesson over"
     or "Go back one step", what was said before belongs to an earlier attempt. The screen hides it;
@@ -688,11 +700,18 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                         response = {"feedback": "Your work is saved. The assigned question pages are unavailable, so I cannot check this answer yet. Please ask for the question pages to be added, or skip for now.",
                                     "result": "Source disputed", "ready_to_continue": False}
                     else:
-                        prompt_text, source_pdf = with_original_pages(prompt_text)
-                        response = gemini_turn(prompt_text, images, models,
-                            **({'schema': assessment_schema} if choices_only else {}),
-                            **({"replace_invalid": True} if replace_invalid else {}),
-                            **({'pdf': source_pdf} if source_pdf is not None else {}))
+                        def graded(text, pdf=None):
+                            return gemini_turn(text, images, models,
+                                **({'schema': assessment_schema} if choices_only else {}),
+                                **({"replace_invalid": True} if replace_invalid else {}),
+                                **({'pdf': pdf} if pdf is not None else {}))
+                        # A typed answer to an exercise whose answer is settled is graded from
+                        # that answer alone: the book pages add seconds, not accuracy. The pages
+                        # still decide anything the grader cannot settle without them.
+                        response = graded(prompt_text) if settled_answer(self.ctx, action, capture, images) else None
+                        if response is None or response.get('result') in ('Source disputed', 'Unreadable'):
+                            prompt_text, source_pdf = with_original_pages(prompt_text)
+                            response = graded(prompt_text, source_pdf)
                 blank_results = response.pop('blank_results', None) if isinstance(response, dict) else None
                 assessment = assessment_schema.model_validate(response).model_dump()
                 if blank_results is not None:

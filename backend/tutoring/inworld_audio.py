@@ -117,7 +117,7 @@ def _generate(ctx, topic, passage, sections, ids, key, voice, rate, language, dr
         raise BudgetError('Connect and enable Inworld in Settings. No speech request sent.')
     if purchases:
         from .inworld_voices import catalog
-        if not any(v['id'] == voice and v['language'] == language for v in catalog(ctx)):
+        if not any(v['id'] == voice and v['language'] == language for v in catalog(ctx, max_age=12 * 3600)):
             raise ValueError('Choose an available Inworld narrator in the lesson language.')
     previous = next((j for j in ledger.jobs() if j['id'] == key), {})
     job = {**previous, 'provider': PROVIDER, 'model': model, 'voice': voice, 'topic_id': topic['id'],

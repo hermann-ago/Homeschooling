@@ -90,6 +90,27 @@ def provider_schema(schema,provider=None):
     return custom() if custom else schema.model_json_schema(by_alias=True)
 
 
+def estimated_input_tokens(prompt, instructions, schema, images, pdf):
+    """A generous local estimate of a request's size, for the spending reservation.
+
+    Asking the provider to count means sending the whole request twice. While a
+    child waits for a reply that second trip is the larger part of the wait, so
+    lesson-time requests are estimated here; the real usage replaces it on reply.
+    """
+    tokens = 200 + len((prompt + (instructions or "")).encode()) // 3
+    if schema:
+        tokens += len(json.dumps(strict_schema(schema))) // 3
+    tokens += sum(max(1500, len(data) // 500) for data, _ in images)
+    if pdf:
+        try:
+            import pymupdf
+            with pymupdf.open(stream=pdf, filetype="pdf") as document:
+                tokens += document.page_count * 2500
+        except Exception:
+            tokens += max(4000, len(pdf) // 100)
+    return tokens
+
+
 def strict_schema(schema):
     """OpenAI requires all properties (nullable defaults included) and closed objects."""
     value = provider_schema(schema)
@@ -383,6 +404,8 @@ class AIService:
             return validated(cached, schema)
         if self.ledger.completed(request_id):
             raise StructuredResponseError("This request was charged but its complete reply is unavailable. No automatic retry was sent; its source needs review.")
+        # Preparation keeps the provider's exact count; a reply a child is waiting for is sent once.
+        during_lesson = category == "teaching" and not _preparing_lesson.get()
         if provider == "openai":
             headers = {"Authorization": f"Bearer {key}"}
             content = [{"type": "input_text", "text": prompt}]
@@ -398,9 +421,11 @@ class AIService:
             if schema:
                 body["text"] = {"format": {"type": "json_schema", "name": schema.__name__, "strict": True,
                                            "schema": strict_schema(schema)}}
-            count_body = {k: v for k, v in body.items() if k not in ("store", "max_output_tokens")}
-            count = self._post("https://api.openai.com/v1/responses/input_tokens", headers, count_body)
-            input_tokens = count.get("input_tokens")
+            if during_lesson:
+                input_tokens = estimated_input_tokens(prompt, instructions, schema, images, pdf)
+            else:
+                count_body = {k: v for k, v in body.items() if k not in ("store", "max_output_tokens")}
+                input_tokens = self._post("https://api.openai.com/v1/responses/input_tokens", headers, count_body).get("input_tokens")
             if not isinstance(input_tokens, int) or not 0 <= input_tokens <= 200_000:
                 raise ValueError("Could not safely count this request, or its context is too large. No generation sent.")
             # Reserve the higher cache-write input rate even without requesting caching.
@@ -424,8 +449,8 @@ class AIService:
             if schema:
                 body["generationConfig"].update(responseMimeType="application/json", responseJsonSchema=provider_schema(schema,provider))
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
-            count = self._post(url + ":countTokens", headers, {"generateContentRequest": {"model": f"models/{model}", **body}})
-            input_tokens = count.get("totalTokens")
+            input_tokens = estimated_input_tokens(prompt, instructions, schema, images, pdf) if during_lesson else self._post(
+                url + ":countTokens", headers, {"generateContentRequest": {"model": f"models/{model}", **body}}).get("totalTokens")
             if not isinstance(input_tokens, int) or not 0 <= input_tokens <= 200_000:
                 raise ValueError("Could not safely count this request. No generation sent.")
             self.ledger.reserve(request_id, category, max(1, token_cost(input_tokens, max_output, *rates)), self.limits,

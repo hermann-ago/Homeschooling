@@ -260,7 +260,11 @@ def test_zero_legacy_limit_sends_one_generation_and_tracks_usage(harness, monkey
     harness.ctx.ai.http = httpx.Client(transport=httpx.MockTransport(respond))
     assert harness.ctx.ai.generate('hello') == 'Hello.'
     assert harness.ctx.ai.generate('hello') == 'Hello.'
-    assert called == ['/v1/responses/input_tokens', '/v1/responses']
+    # A lesson-time request is sent once: its size is estimated here, not counted by the provider.
+    assert called == ['/v1/responses']
+    with harness.ctx.ai.preparing_lesson():
+        assert harness.ctx.ai.generate('prepare this') == 'Hello.'
+    assert called == ['/v1/responses', '/v1/responses/input_tokens', '/v1/responses']
     assert harness.ctx.ai.ledger.summary({})['categories']['teaching']['used_usd'] > 0
 
 

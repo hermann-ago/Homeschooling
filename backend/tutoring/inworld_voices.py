@@ -25,14 +25,16 @@ CURATED = {
 _cache, _lock = {}, threading.RLock()
 
 
-def catalog(ctx):
+def catalog(ctx, max_age=300):
+    """The provider's voices. Browsing refreshes every five minutes; a caller that only confirms
+    a voice it already uses (speaking a line mid-lesson) passes a longer max_age and skips the trip."""
     key = ctx.ai.key('inworld')
     if not key:
         raise ValueError('Save an Inworld key in Settings to browse voices.')
     identity = (id(ctx), hashlib.sha256(key.encode()).hexdigest())
     with _lock:
         previous = _cache.get(identity)
-        if previous and previous[0] > time.monotonic():
+        if previous and time.monotonic() - previous[0] < max_age:
             return previous[1]
         rows, token, seen = [], None, set()
         for _ in range(10):
@@ -68,7 +70,7 @@ def catalog(ctx):
             token = data.get('nextPageToken')
             if not token:
                 break
-        _cache[identity] = (time.monotonic() + 300, rows)
+        _cache[identity] = (time.monotonic(), rows)
         return rows
 
 

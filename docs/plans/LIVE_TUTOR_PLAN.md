@@ -1,6 +1,6 @@
 # Live tutor plan
 
-Status: **Steps 0–1 done; Step 2 switched on 2026-11-12**, its speed work (2b) is next. Created 2026-11-11.
+Status: **Steps 0–1 done; Step 2 on since 2026-11-12; 2b (speed) partly done**, streaming (2c) is the open decision. Created 2026-11-11.
 
 The working reference for making the tutor feel like a person teaching this
 child, without giving up what the prepared lesson guarantees. Each step is a
@@ -288,3 +288,26 @@ the amounts are too small to matter (rule 5 stays as tracking only).
     slow grader was used at all. The fast path is more answers settled ahead
     of the lesson — "facts ahead" again — and pages attached only when an
     exercise has no settled answer or needs the picture.
+- 2026-11-12 — **Step 2b, speed work.**
+  - Lesson-time AI requests are sent once. Before, every request was sent
+    twice: once to have the provider count its size for the spending record,
+    then for real. The size is now estimated locally (generously) for teaching
+    requests; preparation keeps the exact count. `services/ai_provider.py`.
+  - A typed or chosen answer to an exercise whose answer is settled (from the
+    key, or approved by a grown-up) is graded **without the book pages**; the
+    pages are added back if the grader cannot decide (`Source disputed`,
+    `Unreadable`), and always for photos, handwriting and written methods.
+    Re-grading 12 real AI-graded answers this way: 12 of 12 same results,
+    median 2.9 s, where the same requests with pages took 5–18 s.
+    `interactive.settled_answer`.
+  - The narrator's voice list is kept 12 hours for speaking a line (still 5
+    minutes for browsing voices): saved 0.8 s per spoken reply.
+  - Measured end to end again (test mode, Lesson 20, wrong answers to the
+    Martha problem, steady state): **4.9 s and 6.4 s** from click to words and
+    voice. The provider calls alone are about 3.5 s in sequence (line 1.9–2.2 s,
+    voice 1.6 s); the app's own work around them is 1.3–2.6 s.
+  - **Open decision (2c):** the 3-second aim cannot be met while the line is
+    written in full and then voiced in full. Meeting it needs streaming: speak
+    the first sentence while the rest is still being written. The remaining
+    app overhead (the separate voice estimate, the state refresh before the
+    voice is requested) is worth about 1 s and can be trimmed either way.

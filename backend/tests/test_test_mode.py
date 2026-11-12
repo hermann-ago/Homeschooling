@@ -156,7 +156,7 @@ def test_ai_is_shared_paid_and_identical_inputs_reuse_across_mode_and_restart(re
     assert test.ai is h.ctx.ai
     assert test.ai.generate("Exact preparation", schema=SmallResponse)["answer"] == "saved"
     assert h.ctx.ai.generate("Exact preparation", schema=SmallResponse)["answer"] == "saved"
-    assert len(calls) == 2
+    assert len(calls) == 1  # one generation; a lesson-time request is not counted first
     charge = h.ctx.ai.ledger.summary(h.ctx.ai.limits)["categories"]["teaching"]["used_usd"]
     assert charge > 0
     restarted = AppContext(h.config, start_worker=False)
@@ -283,7 +283,7 @@ def test_real_ai_answer_and_lesson_finish_record_only_practice_evidence(ready, m
     action = prepared["actions"][0]
     change("playback", sentence_index=action["resume_index"], action_id=action["id"])
     change("answer", action_id=action["id"], message_id="practice-answer", text="He united them.")
-    assert len(calls) == 4  # Review and feedback, each with token count and mocked generation.
+    assert len(calls) == 3  # Review (token count, then generation) and one lesson-time feedback generation.
     assert prepared['script_review']['status']=='approved'
     assert ctx.store.find("attempts", session_id=state["session_id"])
     change("continue")
@@ -309,4 +309,4 @@ def test_paid_invalid_response_is_cached_instead_of_purchased_again(ready, monke
     for _ in range(2):
         with pytest.raises(StructuredResponseError):
             h.ctx.ai.generate("Invalid but paid response", schema=SmallResponse)
-    assert len(calls) == 2
+    assert len(calls) == 1
