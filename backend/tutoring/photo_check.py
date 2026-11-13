@@ -94,7 +94,16 @@ def _task(engine, tx, action):
     from .capture_policy import activity_content
     from .source_key import original_refs
     content = activity_content(engine.ctx, action)
+    from .tutor_voice import earlier_lines
+    # Fixing a photo answer reopens the step, and those earlier tries are exactly what counts here;
+    # only "Start lesson over" begins the count again.
+    playback = tx.get('lesson_playback', action['session_id']) or {}
+    started = ((playback.get('navigation_state') or {}).get('fresh_start') or {}).get('dialogue') or 0
+    said, attempt = earlier_lines(tx, action['session_id'], action['action_id'], after_sequence=started)
     return {'item_id': action['action_id'], 'prompt': action.get('next_prompt') or action['prompt'],
+        # How many times the child has already tried this task, and what they were told: a repeated
+        # miss needs a different kind of help, not the same sentence again.
+        'try_number': attempt, 'earlier_replies': said[-3:] if attempt > 1 else [],
         'original_question': original_refs(action),
         'pages': sorted({r['page'] for r in action.get('source_refs') or [] if r.get('page')}),
         'answer_format': content.get('answer_format', 'text'), 'evidence': content.get('evidence_requirement', 'answer'),
@@ -118,7 +127,10 @@ def _prompt(engine, job):
         'For each task: answer = the child\'s visible answer copied exactly as written, mistakes included (empty when '
         'none is visible); uncertain = true when you cannot read it with confidence. result: Correct; Partly correct; '
         'Not yet; Unanswered (nothing written for this task); Unreadable (cannot read it). feedback: one or two warm '
-        'sentences to the child; when it is not Correct, say what to look at again without giving the answer. '
+        'sentences to the child; when it is not Correct, help without giving the answer, by its try_number: '
+        'first try, say what to look at again; second, give a more concrete clue; third or later, change approach '
+        'and walk into the first small step with the child (for example ask what one digit or word is). Never repeat '
+        'the wording of earlier_replies. '
         'Keep feedback brief and do not request new activities. Return every item_id exactly once. '
         + TASKS + json.dumps(snapshot['tasks'], ensure_ascii=False, default=str))
 

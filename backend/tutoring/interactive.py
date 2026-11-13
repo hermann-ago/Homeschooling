@@ -539,7 +539,9 @@ do not turn a minor source clarification into a compulsory parent task or extra 
 Give one short response and at most one follow-up question. For essential errors needing correction,
 try a second look, then a small clue, then a source pointer or explanation as needed. Do not apply
 this retry sequence to minor omissions in generated discussions. Put substantive clues into help.
-For a free student question, answer it; do not grade the question as knowledge. For an activity
+For a free student question, answer it; do not grade the question as knowledge. A message in the
+chat box is never an exercise answer: if it lists answers, do not confirm, correct or complete them and never
+state an answer from the key; say that answers are checked in the exercise itself. For an activity
 acknowledgment, record the acknowledgment, not independent understanding.
 Do not say progress was saved; the server validates and saves it after this response.
 Requests for help or clarification are not incorrect attempts; use Unanswered until there is an answer.
@@ -726,6 +728,20 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                 if assessment['result'] == 'Correct' and assessment['ready_to_continue']:
                     # A correct, finished answer moves on: no follow-up and no extra task.
                     assessment.update(follow_up=None, activity_requests=[])
+                if action['kind'] == 'question':
+                    # The child typed in the chat box. Whatever the model wrote, a reply may not state a
+                    # settled answer the child has not written: answers are checked in the exercise itself.
+                    from . import tutor_voice
+                    from .page_script import key_answers
+                    if tutor_voice.reveals(' '.join(filter(None, [assessment['feedback'], assessment.get('help'), assessment.get('follow_up')])),
+                                           key_answers(self.ctx, session_id), message['text']):
+                        logger.warning("Chat reply withheld in session %s: it stated a key answer", session_id)
+                        topic = self.db.get('topics', session['topic_id'])
+                        portuguese = str((topic or {}).get('language') or '').lower().startswith('pt')
+                        assessment.update(result='Unanswered', help=None, follow_up=None, activity_requests=[], feedback=(
+                            'Aqui eu não posso dar nem confirmar respostas. Escreva a sua resposta no próprio exercício e eu confiro lá.'
+                            if portuguese else
+                            "I can't give or confirm answers here. Put your answer in the exercise itself and I'll check it there."))
                 if keyed:
                     # The app checked this against the key at once and has only a fixed line to
                     # offer; the child's tutor words what they hear. An AI grader's reply is

@@ -76,6 +76,11 @@ def test_a_wrong_answer_waits_in_the_tracker_and_can_be_fixed_then_returns(harne
     row = harness.ctx.store.get('lesson_actions', question['id'])
     assert row['status'] == 'answered' and not row['return_cursor']
     assert len(harness.ctx.store.find('activity_responses', session_id=state['session_id'])) == 2
+    # The second check knows it is a second try and what was said the first time.
+    tasks = [job['input_snapshot']['tasks'][0] for job in sorted(harness.ctx.store.find('activity_jobs', session_id=state['session_id']),
+             key=lambda j: str(j['created_at'])) if (job.get('input_snapshot') or {}).get('tasks')]
+    assert [t['try_number'] for t in tasks] == [1, 2]
+    assert tasks[0]['earlier_replies'] == [] and 'Look again at the tribes.' in tasks[1]['earlier_replies'][-1]
 
 
 def test_fix_later_returns_without_changing_the_result(harness, monkeypatch):

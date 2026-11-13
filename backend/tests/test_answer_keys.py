@@ -164,3 +164,18 @@ def test_an_exercise_gets_its_own_notes(monkeypatch):
     assert notes('activity-1') == 'Checks naming shaded shapes.'
     assert notes('activity-2') == 'Usual mistake: shading only the fraction.'
     assert notes('activity-3') is None and notes('question-9') is None
+
+
+def test_settled_answers_are_listed_one_by_one_for_the_reveal_check():
+    from types import SimpleNamespace
+    from tutoring import tutor_voice
+    turns = [work(prompt='1. Subtract.', answer='1. 362,427; 3,719,018; 550,396; 2,253,797'),
+             {**work(prompt='4. Mental math.', answer='4. 46 + 22 = 68; 85 − 36 = 49'), 'answers': ['68', '49']},
+             work(prompt='3. Who?', answer='A = Mehmed the Conqueror')]
+    rows = {('lesson_playback', 's'): {'guide_id': 'g', 'context_snapshot': {'prepared_guide': {'teaching_script': {'script': {'turns': turns}}}}}}
+    ctx = SimpleNamespace(store=SimpleNamespace(get=lambda table, key: rows.get((table, key)), find=lambda *a, **k: []))
+    keys = page_script.key_answers(ctx, 's')
+    assert '2,253,797' in keys and 'Mehmed the Conqueror' in keys and '68' not in keys  # too short to recognise safely
+    said = 'All four subtraction answers are correct: 362,427; 3,719,018; 550,396; and 2,253,797.'
+    assert tutor_voice.reveals(said, keys, 'the problems are 362427 3719018 550396 3253797')
+    assert not tutor_voice.reveals('Check the millions digit of your fourth answer.', keys, '362427 3719018 550396 3253797')

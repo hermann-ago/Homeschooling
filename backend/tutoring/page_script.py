@@ -324,6 +324,22 @@ def approvals(ctx, guide_id):
     return ctx.store.find('answer_approvals', guide_id=guide_id)
 
 
+def key_answers(ctx, session_id):
+    """Every settled answer of the running lesson, one item each, for checking that a reply to the
+    child does not state one. Only items long enough to recognise: numbers of three digits or more
+    and answers of two words or more."""
+    playback = ctx.store.get('lesson_playback', session_id)
+    prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
+    turns = [t for t in ((prepared.get('teaching_script') or {}).get('script') or {}).get('turns', []) if t.get('type') == 'book_work']
+    granted = [answer for a in approvals(ctx, playback['guide_id']) for answer in a['answers']] if playback and turns else []
+    items = [*granted]
+    for turn in turns:
+        items += turn.get('answers') or re.split(r'[;\n]', turn.get('answer') or '')
+    cleaned = {re.sub(r'^\s*(?:\d+[.)]|[A-Za-z]\s*=)\s*', '', item).strip(' .') for item in items}
+    return sorted(item for item in cleaned
+                  if len(re.sub(r'\D', '', item)) >= 3 or len(re.findall(r'[^\W\d_]{2,}', item)) >= 2)
+
+
 def teaching_notes_for(ctx, action):
     """The writer's private notes for one book exercise (what it checks, the usual mistake),
     written beside the pages. None for older scripts and for exercises without notes."""
