@@ -385,3 +385,13 @@ the amounts are too small to matter (rule 5 stays as tracking only).
   we start fractions and mixed numbers." / "…na próxima aula, vamos ficar de
   olho juntos em como seguir as setas ao escrever o W." A first version did
   not know the next lesson and told Mila they would continue with K.
+- 2026-11-13 — **Voice started on the server** (`tutoring/reply_voice.py`). Once
+  a reply in a lesson has played by itself, the next replies start voicing the
+  moment they are saved, in the voice the screen used; the screen's own request
+  waits for that recording and buys nothing. Measured in test mode on Lesson 21:
+  about 0.3 s sooner, not the hoped-for 1 s — the screen already asked for the
+  voice within 40 ms of the reply, so only the server's state build overlaps.
+  The voice itself is ~1.0–1.6 s at Inworld plus ~0.2 s of saving. Photo
+  replies are not voiced ahead (the child has usually moved on).
+  Bigger finding: a question typed in the chat box waits 9–12 s, because the
+  grader reads the book pages for every question (8–10.6 s at gpt-6-luna).

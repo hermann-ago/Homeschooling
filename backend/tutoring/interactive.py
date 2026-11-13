@@ -761,6 +761,8 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                 with self.db.transaction(operation_id=f"turn:{message_id}:assessment", kind="tutor.feedback") as tx:
                     self.tutor.guard(tx, session_id, based_revision)
                     self._apply(tx, session, action, message, assessment, based_revision)
+                from . import reply_voice
+                reply_voice.start(session_id, f"{message_id}:reply")
                 return self.state(session_id)
             except Exception as exc:
                 from services.ai_provider import InvalidStructuredResponseError

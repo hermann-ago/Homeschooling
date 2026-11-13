@@ -1059,6 +1059,7 @@ class FeedbackAudioRequest(BaseModel):
     track_id:str | None=Field(default=None,min_length=1,max_length=100)
     maximum_usd:float=Field(default=.05,gt=0,le=.25)
     provider:Literal['configured','google-gemini']='configured'
+    autoplay: bool = False
 
 
 class ActionAudioRequest(BaseModel):
@@ -1087,6 +1088,18 @@ def action_audio(session_id: str, payload: ActionAudioRequest):
 
 @router.post("/sessions/{session_id}/feedback-audio", dependencies=[Depends(require_family)])
 def feedback_audio(session_id: str, payload: FeedbackAudioRequest):
+    result = speak_reply(session_id, payload.message_id, dry_run=payload.dry_run, track_id=payload.track_id,
+                         provider=payload.provider, maximum_usd=payload.maximum_usd)
+    if payload.autoplay and not payload.dry_run:
+        # The next replies in this lesson are voiced as soon as they are written.
+        from tutoring import reply_voice
+        reply_voice.remember(session_id, track_id=payload.track_id, provider=payload.provider, maximum_usd=payload.maximum_usd)
+    return result
+
+
+def speak_reply(session_id, message_id, *, dry_run=True, track_id=None, provider='configured', maximum_usd=.05):
+    """The voice of one saved tutor reply, in the lesson's narrator; a recording is never bought twice."""
+    payload = FeedbackAudioRequest(message_id=message_id, dry_run=dry_run, track_id=track_id, provider=provider, maximum_usd=maximum_usd)
     session = get_or_404(store(), "tutor_sessions", session_id, "Lesson")
     message = get_or_404(store(), "lesson_dialogue", payload.message_id, "Feedback")
     if message["session_id"] != session_id or message["role"] != "teacher" or not message["text"]:

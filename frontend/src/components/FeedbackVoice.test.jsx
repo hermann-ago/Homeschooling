@@ -20,7 +20,7 @@ it('requests saved feedback by message ID and plays its recording', async () => 
   const { container } = render(<FeedbackVoice session="lesson" message={{ id: 'reply', text: 'Well done.' }} language="en-US" />);
   fireEvent.click(screen.getByRole('button', { name: 'Read aloud' }));
   await waitFor(() => expect(container.querySelector('audio')?.src).toBe('blob:saved-feedback'));
-  expect(tutorApi.feedbackAudio.mock.calls).toEqual([['lesson', 'reply', false]]);
+  expect(tutorApi.feedbackAudio.mock.calls).toEqual([['lesson', 'reply', false, null, false]]);
   expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
 });
 
@@ -53,7 +53,7 @@ it('prepares a new reply once with the selected lesson voice and cancels late au
   await waitFor(()=>expect(tutorApi.feedbackAudio).toHaveBeenCalledTimes(1));
   view.rerender(<FeedbackVoice session="lesson" message={{id:'new-reply',text:'A clear answer.'}} trackId="lesson-google" autoPlay />);
   expect(tutorApi.feedbackAudio).toHaveBeenCalledTimes(1);
-  expect(tutorApi.feedbackAudio.mock.calls[0]).toEqual(['lesson','new-reply',false,'lesson-google']);
+  expect(tutorApi.feedbackAudio.mock.calls[0]).toEqual(['lesson','new-reply',false,'lesson-google',true]);
   view.unmount();finish({track_id:'late'});
   await waitFor(()=>expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:late'));
 });

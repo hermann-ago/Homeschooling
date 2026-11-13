@@ -31,7 +31,7 @@ export default function FeedbackVoice({ session, message, language, action = fal
     if (isNarrating(narratorId.current)) window.speechSynthesis?.cancel();
   }), []);
   useEffect(() => () => { urls.forEach((url)=>URL.revokeObjectURL(url)); }, [urls]);
-  const read = async () => {
+  const read = async (auto = false) => {
     beginNarration(narratorId.current);
     const version = ++requestVersion.current;
     audio.current?.pause(); window.speechSynthesis?.cancel();
@@ -46,7 +46,9 @@ export default function FeedbackVoice({ session, message, language, action = fal
         if (!estimate.allowed) throw new Error(estimate.reason || 'The voice provider is unavailable.');
         if (version !== requestVersion.current) return;
       }
-      const result = await requestAudio(session, message.id, false, ...(trackId ? [trackId] : []));
+      // A reply that plays by itself also lets the server voice the next ones as they are written.
+      const result = action ? await requestAudio(session, message.id, false, ...(trackId ? [trackId] : []))
+        : await requestAudio(session, message.id, false, trackId, auto);
       const manifest = await tutorApi.audioManifest(result.track_id);
       if (manifest.tracks.some((part) => part.fallback)) throw new Error('This reply uses device speech.');
       const next = [];
@@ -63,7 +65,7 @@ export default function FeedbackVoice({ session, message, language, action = fal
     } finally { setBusy(false); setSettled(true); }
   };
   useEffect(() => {
-    if (autoPlay) void read();
+    if (autoPlay) void read(true);
     return () => { requestVersion.current += 1; audio.current?.pause(); };
     // A saved teacher message has immutable text. Polling the same reply must
     // neither repurchase nor restart it. Changing the selected voice is explicit.
@@ -72,7 +74,7 @@ export default function FeedbackVoice({ session, message, language, action = fal
   // The tutor's reply is simply heard; a small speaker repeats it.
   return <div className="feedback-voice" data-holding={holding || undefined}>
     {holding && <span className="feedback-voice-thinking" role="status" aria-label="Your tutor is answering"><i /><i /><i /></span>}
-    <button type="button" className="feedback-voice-button" data-busy={busy || undefined} disabled={busy} onClick={read}
+    <button type="button" className="feedback-voice-button" data-busy={busy || undefined} disabled={busy} onClick={() => read()}
       aria-label={busy ? 'Preparing voice…' : 'Read aloud'} title={busy ? 'Preparing voice…' : 'Read aloud (AI-generated voice)'}><Volume2 size={15} aria-hidden="true" /></button>
     {urls.length > 0 && <audio ref={audio} src={urls[index]} autoPlay onPlay={() => beginNarration(narratorId.current)} onEnded={() => { if (index + 1 < urls.length) setIndex(index + 1); }} />}
     {notice && <p className="text-xs text-muted">{notice}</p>}

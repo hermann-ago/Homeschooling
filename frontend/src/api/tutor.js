@@ -12,8 +12,8 @@ export const tutorApi = {
   actionAudio: (session, actionId, dryRun = true) => fetchApi(`/tutor/sessions/${encodeURIComponent(session)}/action-audio`, {
     method: 'POST', body: JSON.stringify({ action_id: actionId, dry_run: dryRun }),
   }),
-  feedbackAudio: (session, messageId, dryRun = true, trackId = null) => fetchApi(`/tutor/sessions/${encodeURIComponent(session)}/feedback-audio`, {
-    method: 'POST', body: JSON.stringify({ message_id: messageId, dry_run: dryRun, ...(trackId ? {track_id:trackId} : {}) }),
+  feedbackAudio: (session, messageId, dryRun = true, trackId = null, autoplay = false) => fetchApi(`/tutor/sessions/${encodeURIComponent(session)}/feedback-audio`, {
+    method: 'POST', body: JSON.stringify({ message_id: messageId, dry_run: dryRun, ...(trackId ? {track_id:trackId} : {}), ...(autoplay ? { autoplay: true } : {}) }),
   }),
   startInteractive: (learner, topic, guideId, slotId, activityVersion = null) => fetchApi('/tutor/interactive/start', {
     method: 'POST', body: JSON.stringify({ learner: Number(learner), topic: Number(topic), guide_id: guideId, slot_id: slotId ? Number(slotId) : null,
