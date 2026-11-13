@@ -703,6 +703,14 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                         topic = self.db.get('topics', action['topic_id']) if action.get('topic_id') else None
                         keyed = checked_blanks_assessment((action.get('activity_content') or {}).get('blanks'),
                             key.get('answer_items'), blanks, (topic or {}).get('language'))
+                    chosen = (capture.get('original') or {}).get('choice_ids') or []
+                    if not keyed and len(chosen) == 1 and not images and not capture.get('reasoning'):
+                        # The tutor's own true/false or choice question: the writer recorded its answer.
+                        from .page_script import right_choice_for
+                        from .keyed_assessment import checked_choice_assessment
+                        right = right_choice_for(self.ctx, action)
+                        topic = self.db.get('topics', action['topic_id']) if action.get('topic_id') else None
+                        keyed = checked_choice_assessment(right, chosen[0], (topic or {}).get('language')) if right else None
                     if keyed:
                         response = keyed
                     elif missing_questions:

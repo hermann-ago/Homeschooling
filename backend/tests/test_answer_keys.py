@@ -179,3 +179,16 @@ def test_settled_answers_are_listed_one_by_one_for_the_reveal_check():
     said = 'All four subtraction answers are correct: 362,427; 3,719,018; 550,396; and 2,253,797.'
     assert tutor_voice.reveals(said, keys, 'the problems are 362427 3719018 550396 3253797')
     assert not tutor_voice.reveals('Check the millions digit of your fourth answer.', keys, '362427 3719018 550396 3253797')
+
+
+def test_the_writers_own_choice_questions_carry_their_answer_and_are_checked_at_once():
+    from tutoring.teaching_script import Ask
+    from tutoring.keyed_assessment import checked_choice_assessment
+    tf = Ask.model_validate({'type': 'ask', 'prompt': 'True or false: ten hundreds make one thousand.', 'response': {'format': 'true_false'}, 'answer': 'True'})
+    pick = Ask.model_validate({'type': 'ask', 'prompt': 'Which?', 'response': {'format': 'single_choice', 'choices': ['A fraction', 'A mixed number']}, 'answer': 'a mixed number.'})
+    assert tf.right_choice() == 'true' and pick.right_choice() == 'option-2'
+    assert checked_choice_assessment('true', 'true')['result'] == 'Correct'
+    assert checked_choice_assessment('true', 'false', 'pt-BR')['result'] == 'Not yet'
+    with pytest.raises(ValueError, match='exact text of one of its choices'):
+        compile_({'type': 'ask', 'prompt': 'Which?', 'response': {'format': 'single_choice', 'choices': ['A', 'B']}, 'answer': 'C'})
+    compile_({'type': 'ask', 'prompt': 'Which?', 'response': {'format': 'single_choice', 'choices': ['A', 'B']}, 'answer': 'B'})

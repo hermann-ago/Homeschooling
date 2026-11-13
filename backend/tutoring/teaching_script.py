@@ -87,6 +87,19 @@ class Ask(Content):
     prompt: str = Field(min_length=1,max_length=4000)
     purpose: Literal['discussion','retelling','reasoning'] = 'discussion'
     response: Response = Field(default_factory=Response)
+    # Teacher-only, for a true_false or single_choice question the writer made up: the right
+    # choice ("true"/"false", or the exact text of the right option), so the app checks it at once.
+    answer: str | None = Field(None, min_length=1, max_length=1000)
+
+    def right_choice(self):
+        """The id of the right option as the child's controls name it, or None."""
+        wanted=(self.answer or '').strip().strip('.').casefold()
+        if self.response.format=='true_false':
+            return {'true':'true','verdadeiro':'true','false':'false','falso':'false'}.get(wanted)
+        if self.response.format=='single_choice':
+            labels=[c.strip().strip('.').casefold() for c in self.response.choices]
+            return f'option-{labels.index(wanted)+1}' if labels.count(wanted)==1 else None
+        return None
 
 
 class BookItem(Content):

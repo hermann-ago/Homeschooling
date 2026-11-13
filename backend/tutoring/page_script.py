@@ -160,6 +160,8 @@ def compile_script(value, passage, context, language):
                 book_questions.validate_ask(turn)
             elif extra_questions.enabled(context):
                 extra_questions.validate_ask(turn)
+            if turn.answer and not turn.right_choice():
+                raise ValueError('A question\'s answer is "true" or "false", or the exact text of one of its choices.')
             kind = {'discussion': 'ask_question', 'retelling': 'tell_it_back', 'reasoning': 'explain_thinking'}[turn.purpose]
             if turn.response.format == 'observe':
                 kind, content = 'explain_or_observe', {'text': turn.prompt}
@@ -322,6 +324,28 @@ def answer_key(snapshot, approvals=()):
 
 def approvals(ctx, guide_id):
     return ctx.store.find('answer_approvals', guide_id=guide_id)
+
+
+QUESTION_KINDS = ('ask_question', 'tell_it_back', 'explain_thinking')
+
+
+def right_choice_for(ctx, action):
+    """The right option of one of the tutor's own true/false or choice questions, as the id the
+    child's controls use, when the writer recorded it. compile_script emits one question activity
+    per answerable ask turn, in order, so the frozen raw script lines up with the guide."""
+    from .teaching_script import Ask
+    playback = ctx.store.get('lesson_playback', action['session_id'])
+    prepared = ((playback or {}).get('context_snapshot') or {}).get('prepared_guide') or {}
+    asks = [t for t in ((prepared.get('teaching_script') or {}).get('script') or {}).get('turns', [])
+            if t.get('type') == 'ask' and (t.get('response') or {}).get('format') != 'observe']
+    if not any(t.get('answer') for t in asks):
+        return None
+    row = ctx.store.get('guides', playback['guide_id'])
+    guide = json.loads(ctx.file_bytes(row['guide_path'], row.get('guide_file_sha256')))
+    asked = [a['id'] for a in guide.get('activities', []) if a.get('origin') == 'adaptive' and a['kind'] in QUESTION_KINDS]
+    if len(asked) != len(asks) or action['action_id'] not in asked:
+        return None
+    return Ask.model_validate(asks[asked.index(action['action_id'])]).right_choice()
 
 
 def key_answers(ctx, session_id):

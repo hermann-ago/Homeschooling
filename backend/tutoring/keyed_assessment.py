@@ -128,3 +128,13 @@ def checked_blanks_assessment(boxes, expected, observed, language=None):
     return {'feedback': feedback, 'result': 'Correct' if not wrong else 'Partly correct' if right else 'Not yet',
         'transcription': None, 'help': None, 'assistance_used': False, 'follow_up': None,
         'ready_to_continue': not wrong, 'concept': None, 'activity_requests': [], 'blank_results': results}
+
+
+def checked_choice_assessment(right, chosen, language=None):
+    """A choice checked against the right option the lesson writer recorded for its own question."""
+    correct = chosen == right
+    portuguese = (language or '').lower().startswith('pt')
+    feedback = ('Isso mesmo!' if portuguese else 'Correct!') if correct else (
+        'Ainda não. Leia a pergunta de novo e escolha outra vez.' if portuguese else 'Not yet. Read the question again and choose again.')
+    return {'feedback': feedback, 'result': 'Correct' if correct else 'Not yet', 'transcription': None, 'help': None,
+            'assistance_used': False, 'follow_up': None, 'ready_to_continue': correct, 'concept': None, 'activity_requests': []}

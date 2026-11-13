@@ -95,7 +95,9 @@ Turns:
   short lines, the one idea this explanation must land, one example that makes it concrete, and the
   mistake a child of this age usually makes here. The child never hears the notes.
 - read: assigned reading only, never worksheet directions. READ_FORMS
-- ask: your own question, with purpose discussion, retelling or reasoning.
+- ask: your own question, with purpose discussion, retelling or reasoning. For a true_false or
+  single_choice question, answer is the right choice: "true" or "false", or the exact text of
+  the right option. It is teacher-only and lets the app check the child's choice at once.
 - book_work: an original exercise, with document_id and its PDF page; one
   turn can group the parts of one exercise. items lists the printed labels of
   the items the turn covers, as printed (for example ["10", "11"]). answer and answer_page are
