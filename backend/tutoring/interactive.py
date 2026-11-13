@@ -90,13 +90,21 @@ def gemini_workbook(prompt_text, images, models, replace_invalid=False, expected
     return gemini_turn(prompt_text, images, models, schema, **({"replace_invalid": True} if replace_invalid else {}))
 
 
+WITHOUT_PAGES = ('The book pages are not attached to this reply; the lesson text above is. If the question can '
+                 'only be answered from a picture, diagram or table on the pages, return result Source disputed '
+                 'with a short holding line: the pages will be attached and you will be asked again.')
+
+
 def settled_answer(ctx, action, capture, images):
     """True when this answer can be graded without the book pages: the exercise's answer is pinned
-    (from the key, or approved by a grown-up) and the child typed or chose a reply."""
+    (from the key, or approved by a grown-up) and the child typed or chose a reply. A question typed
+    in the chat box is answered from the lesson text first."""
     from .capture_policy import activity_content
     from .page_script import answer_for
     if images or (capture.get('evidence_ids') or []):
         return False
+    if action.get('kind') == 'question':
+        return True
     if activity_content(ctx, action).get('evidence_requirement', 'answer') not in ('answer', 'spelling'):
         return False  # handwriting, diagrams and written methods are judged against the page
     return bool((answer_for(ctx, action) or {}).get('answer_key'))
@@ -725,7 +733,11 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
                         # A typed answer to an exercise whose answer is settled is graded from
                         # that answer alone: the book pages add seconds, not accuracy. The pages
                         # still decide anything the grader cannot settle without them.
-                        response = graded(prompt_text) if settled_answer(self.ctx, action, capture, images) else None
+                        # A chat question is answered from the lesson text the same way.
+                        if settled_answer(self.ctx, action, capture, images):
+                            response = graded(prompt_text + ('\n' + WITHOUT_PAGES if action['kind'] == 'question' else ''))
+                        else:
+                            response = None
                         if response is None or response.get('result') in ('Source disputed', 'Unreadable'):
                             prompt_text, source_pdf = with_original_pages(prompt_text)
                             response = graded(prompt_text, source_pdf)

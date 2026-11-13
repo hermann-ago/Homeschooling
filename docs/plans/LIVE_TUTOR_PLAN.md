@@ -395,3 +395,11 @@ the amounts are too small to matter (rule 5 stays as tracking only).
   replies are not voiced ahead (the child has usually moved on).
   Bigger finding: a question typed in the chat box waits 9–12 s, because the
   grader reads the book pages for every question (8–10.6 s at gpt-6-luna).
+- 2026-11-13 — **Chat questions answered from the lesson text first.** The
+  grader gets the lesson text without the book pages (`settled_answer` now
+  covers questions, with `WITHOUT_PAGES` telling it the pages can be asked for).
+  When the answer is on a picture, diagram or table it returns Source disputed
+  and is asked again with the pages. Test mode, Lesson 21: "What is a mixed
+  number?" 5.5 s to the reply (grader 4.8 s), was 9–11 s; "How many parts are
+  shaded in the circles?" 3.0 s + 9.1 s with the pages, 15 s in all, about 3 s
+  slower than before for questions about pictures. Both replies were right.
