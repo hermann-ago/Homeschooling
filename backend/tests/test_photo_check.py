@@ -92,10 +92,11 @@ def test_fix_later_returns_without_changing_the_result(harness, monkeypatch):
     state = event(engine, state, 'fix_later')
     assert state['active_activity']['id'] == closing
     assert harness.ctx.store.get('lesson_actions', question['id'])['status'] == 'fix'
-    # Finishing with something left to fix is allowed; it is recorded to practise, not owed later.
+    # Finishing with something left to fix is allowed; it stays to practise and can be continued later.
     state = event(engine, state, 'finish')
     summary = harness.ctx.store.get('tutor_sessions', state['session_id'])['completion_summary']
-    assert summary['pending_work'] == [] and summary['photo_checks']['to_practise'] == [question['action_id']]
+    assert [w['activity_id'] for w in summary['pending_work']] == [question['action_id']]
+    assert summary['photo_checks']['to_practise'] == [question['action_id']]
     assert state['progress']['items'][0]['outcome'] == 'practise'
 
 
@@ -173,3 +174,17 @@ def test_paced_lessons_and_other_steps_do_not_take_photo_answers(harness, monkey
     with pytest.raises(TutorError):
         event(engine, state, 'snap_work', {'evidence_ids': ['x']})
     assert PNG
+
+
+def test_a_photo_answer_still_to_fix_is_where_continuing_the_lesson_starts(harness, monkeypatch):
+    engine, state, question = lesson(harness, monkeypatch)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader('Not yet', 'He fought them', feedback='Look again at the tribes.'))
+    state = snap(harness, engine, state)
+    for _ in range(10):
+        if state['active_activity'] and state['active_activity']['kind'] == 'close_lesson':
+            break
+        state = event(engine, state, 'continue')
+    state = event(engine, state, 'finish')
+    assert [w['activity_id'] for w in state['learning_summary']['pending_work']] == [question['action_id']]
+    continued = engine.repeat(state['session_id'], 'continue-the-fix', unfinished_only=True)
+    assert continued['active_activity']['id'] == question['action_id']

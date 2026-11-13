@@ -151,7 +151,8 @@ class TutorService:
             "family_tutoring": family_packet(self.store, child_id),
             "pending_assignments": [a for a in self.store.find("assignments", child_id=child_id)
                                     if a["topic_id"] in subject_topics and a["status"] == "assigned"],
-            "pending_actions": [a for a in subject_actions if a["status"] in ("pending", "skipped") and a["id"] not in replaced_actions
+            # Work owed from earlier lessons, including a photo answer still waiting for its fix.
+            "pending_actions": [a for a in subject_actions if a["status"] in ("pending", "skipped", "fix") and a["id"] not in replaced_actions
                                 and (self.store.get('tutor_sessions', a['session_id']) or {}).get('status') != 'superseded'
                                 and (self.store.get('tutor_sessions', a['session_id']) or {}).get('completion_source') not in ('manual','topic_completion')],
             "preferences": {p["key"]: p["value"] for p in self.store.find("preferences", child_id=child_id)},
@@ -636,6 +637,14 @@ class TutorService:
         return {"path": self.reader_path(session), "session_id": session['id'], "revision": session['revision'],
                 "earlier_version": bool(newer), **({"updated_guide_id": newer['id']} if newer else {})}
 
+    def _finished(self, child_id: int, topic_id: int) -> dict | None:
+        done = sorted((s for s in self.store.find("tutor_sessions", child_id=child_id, topic_id=topic_id) if s["status"] == "completed"),
+                      key=lambda s: str(s.get("updated_at") or s["id"]), reverse=True)
+        if not done:
+            return None
+        pending = (done[0].get("completion_summary") or {}).get("pending_work") or []
+        return {"path": self.reader_path(done[0]), "session_id": done[0]["id"], "date": done[0].get("date"), "unfinished": len(pending)}
+
     def reader(self, child_id: int, topic_id: int, session_id: str | None) -> dict:
         topic = self.store.get("topics", topic_id)
         subject = self.store.get("subjects", topic["subject_id"]) if topic else None
@@ -660,6 +669,8 @@ class TutorService:
                 "session_id": session_id,
                 "interactive": bool(playback), "resume_lesson": resume_lesson,
                 "resume_current_lesson": self._resume_same(same_lesson, guide),
+                # The last time this lesson was finished: its whole thread can be opened again.
+                "finished_lesson": None if session_id else self._finished(child_id, topic_id),
                 "newer_version": self._newer_for_open(session_id, playback),
                 "reader_state": self.reader_state(session_id) if session_id else "open",
                 "passage": package,

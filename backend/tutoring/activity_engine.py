@@ -369,10 +369,11 @@ class ActivityEngine:
                 # A premature/adaptive recap must not reveal unreached prompts.
                 continue
             reason = (latest or {}).get("status")
-            if action["status"] in ("pending", "skipped"):
+            # A photo answer the check found not yet right still waits for the child's fix.
+            if action["status"] in ("pending", "skipped", "fix"):
                 pending.append({"activity_id": action["action_id"], "prompt": action["next_prompt"] or action["prompt"],
-                    "reason": "skipped" if action["status"] == "skipped" else reason or "awaiting_input",
-                    "has_response": bool(captured), "can_revisit": action["status"] == "skipped"})
+                    "reason": {"skipped": "skipped", "fix": "fix"}.get(action["status"]) or reason or "awaiting_input",
+                    "has_response": bool(captured), "can_revisit": action["status"] in ("skipped", "fix")})
         return {"lesson_title": topic["title"], "reading": {"reached": sum(a["status"] == "answered" for a in reading), "total": len(reading)},
             "answers": {"captured": len(responses) if responses else len(legacy_captures),
                         "checked": len({r["id"] for r in responses if r["status"] == "assessed"}) if responses else sum((a.get("after_help_result") or a.get("first_result")) in ("Correct", "Partly correct", "Not yet", "With help") for a in legacy_captures)},
@@ -1006,6 +1007,8 @@ class ActivityEngine:
             return None
         saved = (original.get('completion_summary') or {}).get('pending_work') or []
         source_ids = {f"{original['id']}:{item['activity_id']}" for item in saved}
+        # A photo answer still waiting for its fix counts too, also in lessons finished before it did.
+        source_ids |= {a['id'] for a in self.db.find('lesson_actions', session_id=original['id']) if a['status'] == 'fix'}
         targets = [a for a in actions if a.get('source_action_id') in source_ids]
         if not targets:
             return None
@@ -1017,7 +1020,7 @@ class ActivityEngine:
         playback = self.db.get('lesson_playback', session['id']) or {}
         return {'source_session_id': original['id'], 'original_path': self.tutor.reader_path(original),
             'focused': bool((playback.get('navigation_state') or {}).get('catch_up')),
-            'remaining': sum(a['status'] in ('pending', 'skipped') for a in targets), 'total': len(targets),
+            'remaining': sum(a['status'] in ('pending', 'skipped', 'fix') for a in targets), 'total': len(targets),
             'items': [{'activity_id': a['action_id'], 'prompt': a['prompt'], 'status': a['status']} for a in targets]}
 
     def _focus_unfinished(self, tx, session):
@@ -1817,7 +1820,7 @@ class ActivityEngine:
                 "understanding": tx.get("topics", session["topic_id"])["understanding"] or "Not assessed",
                 "attempt_ids": [a["id"] for a in tx.find("attempts", session_id=session_id)],
                 "pending_work": [{"activity_id": a["action_id"], "prompt": a["prompt"], "origin": a.get("origin"), "status": a["status"]}
-                    for a in actions if a["status"] in ("pending", "skipped")],
+                    for a in actions if a["status"] in ("pending", "skipped", "fix")],
                 **({"book_work": book_check.summary(tx, session_id, actions)} if _paced(tx.get("lesson_playback", session_id)) else {}),
                 **({"photo_checks": photo_check.summary(tx, session_id, actions)}
                    if any(a["status"] in ("fix", "checking") for a in actions) else {})}})

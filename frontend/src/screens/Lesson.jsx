@@ -332,6 +332,10 @@ export default function Lesson() {
             : <Button variant="primary" icon={Check} onClick={() => markDone(true)}>Mark lesson done</Button>
         )}
       </header>
+      {lesson.finished_lesson && !session && <div className="px-4 py-3 bg-action-soft text-sm flex flex-wrap gap-3">
+        <span>{lesson.finished_lesson.unfinished ? `This lesson was finished with ${lesson.finished_lesson.unfinished === 1 ? 'one thing' : `${lesson.finished_lesson.unfinished} things`} left to do.` : 'This lesson was finished.'}</span>
+        <Link to={lesson.finished_lesson.path} className="font-semibold underline">See the finished lesson</Link>
+      </div>}
       {lesson.resume_lesson && <div className="px-4 py-3 bg-attention-soft text-sm flex flex-wrap gap-3">
         <span>Your place in {lesson.resume_lesson.title} is saved. You can start this lesson now.</span>
         <Link to={lesson.resume_lesson.path} className="font-semibold underline">Resume unfinished lesson</Link>

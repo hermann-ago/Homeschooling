@@ -57,3 +57,12 @@ def test_without_the_tutor_voice_no_note_is_written(harness, monkeypatch):
     harness.ctx.config.update(ai={**harness.ctx.config.get("ai", {}), "tutor_voice": False})
     tutor_voice.remember_in_background(harness.ctx, "any-session")
     assert not started
+
+
+def test_a_finished_lesson_page_links_to_its_thread(harness, monkeypatch):
+    engine, state = finished_lesson(harness, monkeypatch)
+    session = harness.ctx.store.get("tutor_sessions", state["session_id"])
+    page = harness.ctx.tutor.reader(session["child_id"], session["topic_id"], None)
+    assert page["finished_lesson"]["session_id"] == state["session_id"]
+    assert page["finished_lesson"]["path"].endswith("session=" + state["session_id"])
+    assert harness.ctx.tutor.reader(session["child_id"], session["topic_id"], state["session_id"])["finished_lesson"] is None
