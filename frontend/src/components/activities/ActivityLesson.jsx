@@ -386,7 +386,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {response.transcription_status === 'failed' && <Button size="sm" disabled={working} onClick={() => event('retry_transcription', { response_id: response.id })}>Retry saved photo transcription</Button>}
       {response.evidence_ids?.length > 0 && <Button size="sm" variant="quiet" disabled={working} onClick={() => event('request_parent_review', { response_id: response.id })}>Ask a parent to inspect this photo</Button>}
     </> : null;
-  const composer = state.status !== 'completed' && state.status !== 'superseded' && <TutorComposer sessionId={sessionId} language={language} canAsk={canAsk} busy={working} onPauseNarration={onPauseNarration}
+  const composer = state.status !== 'completed' && state.status !== 'superseded' && <TutorComposer sessionId={sessionId} language={language} canAsk={canAsk} answersHere={activity?.kind === 'request_book_work' && activity.status === 'pending'} busy={working} onPauseNarration={onPauseNarration}
     answering={plainAnswer && !askInstead && !state.on_break} onAnswerSlot={setAnswerSlot} onToolsSlot={setToolsSlot}
     onAsk={(text) => event('request_followup', { prompt: text })} />;
   return <section ref={lessonPanel} aria-label="Tutor activities" className="tutor-chat">
@@ -525,7 +525,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
 
 /** The always-ready text box, as in a chat: a question for the tutor at any step.
  *  Enter sends; Shift+Enter starts a new line. */
-function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarration, answering = false, onAnswerSlot, onToolsSlot }) {
+function TutorComposer({ sessionId, language, canAsk, answersHere = false, busy, onAsk, onPauseNarration, answering = false, onAnswerSlot, onToolsSlot }) {
   const key = storageKey(sessionId, 'composer-question');
   const [text, setText] = useState(() => readSaved(key)?.text || '');
   const box = useRef(null);
@@ -544,7 +544,8 @@ function TutorComposer({ sessionId, language, canAsk, busy, onAsk, onPauseNarrat
   if (answering) return <div className="tutor-composer-box" data-answering><div ref={onAnswerSlot} className="tutor-composer-slot" />{tools}</div>;
   return <form aria-label="Message your tutor" className="tutor-composer-box" onSubmit={(formEvent) => { formEvent.preventDefault(); void send(); }}>
     <textarea ref={box} rows={1} lang={language} maxLength={2000} value={text} disabled={!canAsk} aria-label="Ask your tutor"
-      placeholder={canAsk ? 'Ask your tutor anything…' : 'You can ask a question during a lesson step'}
+      // During book work a plain message is taken as the answer (the server decides; a "?" stays a question).
+      placeholder={!canAsk ? 'You can ask a question during a lesson step' : answersHere ? 'Type your answer, or ask your tutor…' : 'Ask your tutor anything…'}
       onChange={(change) => setText(change.target.value)}
       onKeyDown={(keyEvent) => {
         if (keyEvent.key !== 'Enter' || keyEvent.shiftKey || keyEvent.nativeEvent.isComposing || keyEvent.keyCode === 229) return;

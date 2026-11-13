@@ -66,6 +66,32 @@ def _text(value, limit=4000):
     return value.strip()
 
 
+NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
+
+
+def answer_in_chat(content, action, interaction, payload, operation_id):
+    """A message typed in the chat box while a book exercise waits for its answer is that answer,
+    unless it asks something (a question mark). Returns the typed answer to submit, or None to treat
+    the message as a question for the tutor. Answer boxes are filled in order when the message holds
+    one answer per box, split by lines or semicolons, else one number per box; when it cannot be
+    split exactly, it stays a question rather than a guessed answer."""
+    text = (payload.get("prompt") or payload.get("text") or "").strip() if isinstance(payload.get("prompt") or payload.get("text") or "", str) else ""
+    if (not text or "?" in text or action.get("activity_kind") != "request_book_work" or action["status"] != "pending"
+            or (interaction or {}).get("status") not in ("awaiting_work", "awaiting_input", "awaiting_followup")):
+        return None
+    answer = {"response_id": "chat-" + _hash([action["id"], operation_id])[:24], "method": "typed", "text": text[:4000],
+              "reasoning": "", "choice_ids": [], "matches": {}, "evidence_ids": [], "assess_after_save": True, "from_chat": True}
+    boxes = content.get("blanks") or []
+    if not boxes:
+        return answer if not content.get("matching") else None
+    parts = [p.strip() for p in re.split(r"[;\n]", text) if p.strip()]
+    if len(parts) != len(boxes):
+        parts = NUMBER.findall(text)
+    if len(parts) != len(boxes) or any(len(p) > 100 for p in parts):
+        return None
+    return {**answer, "blanks": {box["id"]: part for box, part in zip(boxes, parts)}}
+
+
 def response_content(action, interaction):
     """A new spoken follow-up must not inherit the original question's options."""
     content = dict(action.get("activity_content") or {})
@@ -764,6 +790,8 @@ class ActivityEngine:
                 if event_type == "assess" or event_type == "submit_response" and payload.get("assess_after_save") is True or event_type == 'confirm_response' and payload.get('assess_after_confirm') is True:
                     return self._assess(session_id, activity_id, payload.get("response_id"), replace_invalid=payload.get("replace_invalid_reply") is True)
                 if event_type == "request_followup":
+                    if not self.db.get("activity_jobs", "support-" + _hash([session_id, operation_id])[:24]):
+                        return self.state(session_id)  # it was taken as the exercise's answer
                     return self._support_question(session_id, operation_id)
                 if event_type == "finish":
                     return self._finish(session_id)
@@ -784,6 +812,12 @@ class ActivityEngine:
                 raise TutorError("A response must identify the exact interaction")
             if playback.get("on_break") and event_type not in ("resume", "save_cursor", "go_back", "restart_lesson"):
                 raise TutorConflict("Return from the saved break before continuing")
+            if event_type == "request_followup":
+                # Typed in the chat box while a book exercise waits for its answer: unless it asks
+                # something, it is the answer, checked as if typed in the answer box.
+                typed = answer_in_chat(capture_content(self.ctx, action), action, interaction, payload, operation_id)
+                if typed:
+                    event_type, payload, interaction_id = "submit_response", typed, interaction["id"]
             with self.db.transaction(operation_id=f"activity:{session_id}:{operation_id}", kind="activity." + event_type) as tx:
                 if event_type in ("save_cursor", "save_draft"):
                     if session["revision"] != expected_revision:
@@ -797,7 +831,7 @@ class ActivityEngine:
                 elif event_type in ("go_back", "restart_lesson"):
                     self._navigate(tx, session, action, event_type, payload)
                 elif event_type == "submit_response":
-                    if interaction['status']=='awaiting_work' and direct_text_capture(capture_content(self.ctx,action)):
+                    if interaction['status']=='awaiting_work' and (direct_text_capture(capture_content(self.ctx,action)) or payload.get('from_chat')):
                         interaction=tx.update('activity_interactions',interaction['id'],{'status':'awaiting_input','stage':'capture'})
                     response = self._response(tx, session_id, action, interaction, payload)
                     if payload.get("assess_after_save") is True and (response["status"] != "confirmed" or
