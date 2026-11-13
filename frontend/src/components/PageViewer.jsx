@@ -30,7 +30,7 @@ function escapeHtml(text) {
  * The book pages of a lesson with handwriting, used by the Lesson screen
  * (which shows the subject and title in its own header).
  */
-const PageViewer = ({ slot, childId, highlightSentence = null, requestedPage = null, boundaryNote = null, readableSentences = null, onReadFrom = null }) => {
+const PageViewer = ({ slot, childId, highlightSentence = null, highlightAfter = null, requestedPage = null, boundaryNote = null, readableSentences = null, onReadFrom = null }) => {
   const start = slot?.page_from || 1;
   const end = slot?.page_to || start;
   const offset = slot?.pdf_page_offset || 0;
@@ -124,8 +124,8 @@ const initialFit = () => (typeof window !== 'undefined' && window.innerWidth < 6
   useEffect(() => () => { flushRef.current(); }, []);
 
   const highlighted = useMemo(
-    () => highlightItemIndices(textItems, highlightSentence),
-    [textItems, highlightSentence],
+    () => highlightItemIndices(textItems, highlightSentence, highlightAfter),
+    [textItems, highlightSentence, highlightAfter],
   );
   // A lesson reading can be heard again from any of its lines: each piece of text carries its index.
   const readable = Boolean(onReadFrom && readableSentences?.length);

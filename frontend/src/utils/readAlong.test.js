@@ -96,3 +96,13 @@ describe('tapping the book page', () => {
     expect(heard).toEqual([7]);
   });
 });
+
+describe('repeated phrases', () => {
+  it('highlights the occurrence that follows the sentence read just before', () => {
+    const items = [{ str: 'Jonathan looked at the sea and waited.' }, { str: 'The men argued about the price.' }, { str: 'Jonathan looked at the sea and waited.' }];
+    expect([...highlightItemIndices(items, 'Jonathan looked at the sea and waited.')]).toEqual([0]);
+    expect([...highlightItemIndices(items, 'Jonathan looked at the sea and waited.', 'The men argued about the price.')]).toEqual([2]);
+    // Without a usable earlier sentence on this page it falls back to the first place.
+    expect([...highlightItemIndices(items, 'The men argued about the price.', 'Something from the page before.')]).toEqual([1]);
+  });
+});

@@ -285,7 +285,14 @@ export default function Lesson() {
     ? guide.sentences.map((sentence, index) => sentence.kind === 'book'
       ? { key: index, text: sentence.source !== null && sentence.source !== undefined ? passage.sentences[sentence.source]?.text || sentence.text : sentence.text } : null).filter(Boolean)
     : null;
-  const spokenPage = spoken ? locateText(bookTexts, spoken)?.page ?? null : null;
+  // The book sentence read just before: a repeated phrase is found after it, not at its first appearance.
+  const before = (index) => { for (let i = index - 1; i >= 0; i -= 1) if (guide?.sentences[i]?.kind === 'book') return guide.sentences[i]; return null; };
+  const previousSpoken = mode === 'guide' && guideIndex !== null ? before(guideIndex) : null;
+  const highlightAfter = sourceIndex !== null
+    ? (mode === 'guide' ? (previousSpoken ? passage.sentences[previousSpoken.source]?.text ?? previousSpoken.text : null) : passage.sentences[sourceIndex - 1]?.text ?? null)
+    : previousSpoken?.text ?? null;
+  const previousPage = previousSpoken ? locateText(bookTexts, previousSpoken.text) : null;
+  const spokenPage = spoken ? (locateText(bookTexts, spoken, previousPage?.index ?? 0) ?? locateText(bookTexts, spoken))?.page ?? null : null;
   const pages = passage.printed_pages.start === passage.printed_pages.end
     ? `page ${passage.printed_pages.start}` : `pages ${passage.printed_pages.start}–${passage.printed_pages.end}`;
 
@@ -355,7 +362,7 @@ export default function Lesson() {
         <>
           {viewerSlot?.document_id ? (
             <PageViewer key={viewing?.id ?? 'lesson'} slot={viewerSlot} childId={Number(learner)}
-              highlightSentence={!viewing && hasText && !passageVoice ? highlight : null}
+              highlightSentence={!viewing && hasText && !passageVoice ? highlight : null} highlightAfter={highlightAfter}
               requestedPage={viewing ? null : sourceIndex !== null ? sentencePages[sourceIndex] : spokenPage}
               readableSentences={viewing ? null : readableSentences} onReadFrom={requestReadFrom} />
           ) : (

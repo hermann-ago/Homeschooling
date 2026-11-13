@@ -21,6 +21,22 @@ def characters(text):
     return len(text.encode('utf-16-le')) // 2
 
 
+CLOSED = ".!?:;…\"”’')]»"
+
+
+def spoken(sentences):
+    """The sentences as the voice should say them: a heading or title (a line with no closing
+    punctuation before a new paragraph) gets a full stop, so the narrator pauses after it instead
+    of reading it into the next sentence. The text shown to the child is not changed."""
+    result = []
+    for index, sentence in enumerate(sentences):
+        text = sentence['text'].rstrip()
+        following = sentences[index + 1] if index + 1 < len(sentences) else None
+        new_paragraph = following is None or following.get('paragraphIndex') != sentence.get('paragraphIndex')
+        result.append({**sentence, 'text': text + '.'} if text and new_paragraph and text[-1] not in CLOSED and len(sentences) > 1 else sentence)
+    return result
+
+
 def blocks(sentences):
     result, current, first = [], [], 0
     for index, sentence in enumerate(sentences):
@@ -77,6 +93,7 @@ def recording(ctx, result, sentences, language):
 def generate(ctx, topic, passage, *, voice=None, rate=.9, language='en-US', dry_run=False,
              purpose='lesson', maximum_usd=None):
     from .elevenlabs_reuse import sections as activity_sections
+    passage = {**passage, 'sentences': spoken(passage['sentences'])}
     subject = ctx.store.get('subjects', topic['subject_id'])
     voice = voice or narrator(ctx, language, subject['child_id'])
     if language not in ('en-US', 'pt-BR') or not math.isfinite(rate) or not .5 <= rate <= 1.5:

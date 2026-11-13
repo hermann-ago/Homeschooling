@@ -289,3 +289,12 @@ def test_portuguese_lessons_use_inworld_tts2_and_its_price(harness):
     assert {c['modelId'] for c in calls} == {'inworld-tts-2'} and {c['language'] for c in calls} == {'pt-BR'}
     manifest = json.loads(harness.ctx.file_bytes(harness.ctx.store.get('audio_tracks', made['track_id'])['manifest_path']))
     assert manifest['model'] == 'inworld-tts-2'
+
+
+def test_a_title_gets_a_pause_before_the_text_that_follows():
+    from tutoring.inworld_audio import spoken
+    sentences = [{'text': 'Mini Lesson', 'paragraphIndex': '3:0'}, {'text': 'Sometimes we must regroup.', 'paragraphIndex': '3:1'},
+                 {'text': 'First, subtract', 'paragraphIndex': '3:1'}, {'text': 'the digits.', 'paragraphIndex': '3:1'}, {'text': 'Quick Tip!', 'paragraphIndex': '3:2'}]
+    assert [s['text'] for s in spoken(sentences)] == ['Mini Lesson.', 'Sometimes we must regroup.', 'First, subtract', 'the digits.', 'Quick Tip!']
+    assert sentences[0]['text'] == 'Mini Lesson'  # what the child sees is untouched
+    assert spoken([{'text': 'Yes'}]) == [{'text': 'Yes'}]  # a single line is said as written

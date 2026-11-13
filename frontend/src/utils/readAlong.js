@@ -80,7 +80,7 @@ export function locateSentences(pageTexts, sentences) {
 }
 
 /** Indices of text items on this page that belong to the sentence. */
-export function highlightItemIndices(items, sentence) {
+export function highlightItemIndices(items, sentence, after = null) {
   if (!sentence || !items?.length) return new Set();
   const ranges = [];
   let joined = '';
@@ -93,7 +93,11 @@ export function highlightItemIndices(items, sentence) {
   const full = compact(sentence);
   const needle = full.slice(0, PROBE);
   if (needle.length < MIN_PROBE) return new Set();
-  let start = joined.indexOf(needle);
+  // A book repeats phrases: the sentence being read comes after the one read just before it.
+  const previous = after ? compact(after).slice(0, PROBE) : '';
+  const from = previous.length >= MIN_PROBE ? joined.indexOf(previous) : -1;
+  let start = from >= 0 ? joined.indexOf(needle, from + 1) : -1;
+  if (start < 0) start = joined.indexOf(needle);
   let end;
   if (start >= 0) {
     end = start + full.length;
@@ -151,8 +155,10 @@ export function followScroll(view, box, scroll, margin = 32) {
 /** The reading sentence a tapped piece of page text belongs to: the first candidate
  *  ({ key, text }) whose highlight on this page includes that text item, or null. */
 export function sentenceForItem(items, itemIndex, candidates) {
+  let previous = null;
   for (const candidate of candidates || []) {
-    if (highlightItemIndices(items, candidate.text).has(itemIndex)) return candidate.key;
+    if (highlightItemIndices(items, candidate.text, previous).has(itemIndex)) return candidate.key;
+    previous = candidate.text;
   }
   return null;
 }
