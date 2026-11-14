@@ -1327,7 +1327,7 @@ class ActivityEngine:
                        else "done" if action["status"] in ("answered", "in_book")
                        else "pending")
             items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt"),
-                **({"check": {**{k: check.get(k) for k in ("read", "result", "feedback", "error") if check.get(k)},
+                **({"check": {**{k: check.get(k) for k in ("read", "result", "feedback", "error", "reply_id") if check.get(k)},
                               "prompt": action.get("prompt")}} if check and outcome in ("fix", "unchecked", "checking", "practise") else {})})
         graded = [i for i in items if i["outcome"] in ("first_try", "again", "practise", "fix")]
         return {"items": [{k: i[k] for k in ("id", "outcome", "check") if k in i} for i in items],

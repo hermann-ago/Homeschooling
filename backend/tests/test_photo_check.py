@@ -61,6 +61,9 @@ def test_a_wrong_answer_waits_in_the_tracker_and_can_be_fixed_then_returns(harne
     state = snap(harness, engine, state)
     item = state['progress']['items'][0]
     assert item['outcome'] == 'fix' and item['check']['read'] == 'He fought them' and item['check']['feedback'] == 'Look again at the tribes.'
+    # The tracker can voice the tutor's saved reply for this exercise.
+    reply = harness.ctx.store.get('lesson_dialogue', item['check']['reply_id'])
+    assert reply['role'] == 'teacher' and reply['text'] == 'Look again at the tribes.'
     assert harness.ctx.store.get('lesson_actions', question['id'])['status'] == 'fix'
     closing = state['active_activity']['id']
     state = event(engine, state, 'fix_work', {'activity_id': question['action_id']})

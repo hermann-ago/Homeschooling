@@ -392,7 +392,8 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   return <section ref={lessonPanel} aria-label="Tutor activities" className="tutor-chat">
     <header className="tutor-chat-header">
       <LessonPosition state={state} header busy={working} canFix={Boolean(activity) && !activity.fix && !state.on_break && state.status !== 'completed'}
-        onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} />
+        onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })}
+        renderVoice={(message) => renderFeedback?.({ message, play: true })} />
       <div className="tutor-header-actions">
         {activity && !state.on_break && <button type="button" className="tutor-icon-button" aria-label="Take a break" title="Take a break" disabled={working} onClick={() => event('take_break')}><Coffee size={18} aria-hidden="true" /></button>}
         <LessonOptions>

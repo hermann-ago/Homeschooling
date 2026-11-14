@@ -327,7 +327,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   // A tap on the book page asks to read again from a sentence: the reading that holds it answers.
   const readFrom = useRef(null);
   readFrom.current = (index) => {
-    if (!headless && !disabled && index >= rangeStart && index <= lastSentence) seekTo(index, true);
+    if (!disabled && index >= rangeStart && index <= lastSentence) seekTo(index, true);
   };
   useEffect(() => onReadFrom((index) => readFrom.current?.(index)), []);
   replayRef.current = replay;

@@ -18,7 +18,8 @@ import LessonOptions from './LessonOptions';
 import FeedbackVoice from '../FeedbackVoice';
 import SessionNarrationControls from './SessionNarrationControls';
 import { operationId, readSaved, storageKey, writeSaved } from './durable';
-import { narrationPlace, narrationRange, spokenParts } from './narrationRange';
+import { narrationPlace, narrationRange, sentencePieces } from './narrationRange';
+import { requestReadFrom } from '../../utils/readAlong';
 
 function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, language,
   onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed, bookOnPage = false }) {
@@ -215,13 +216,18 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     onChange={changeSettings} onReplay={() => transport?.replay?.()}
     canReplay={Boolean(!busy && !state.on_break && transport?.place === narrationPlace(activity) && transport.available && transport.replay)}
     error={transport?.place === narrationPlace(activity) ? transport.error : null} />;
-  // Any text of the step on screen marks the sentence being spoken.
+  // Any text of the step on screen marks the sentence being spoken, and a tap on a
+  // sentence plays the step's voice from there, as on the book page.
   const spokenText = (activity, text) => {
     const range = narrationRange(guide, activity);
-    if (!range || transport?.place !== narrationPlace(activity) || !transport.playing
-      || activeIndex < range.start || activeIndex > range.end) return null;
-    const parts = spokenParts(text, guide.sentences.slice(range.start, activeIndex + 1).map((sentence) => sentence.text));
-    return parts && <>{parts.before}<mark className="spoken-now" aria-current="true">{parts.spoken}</mark>{parts.after}</>;
+    if (!range || transport?.place !== narrationPlace(activity) || !transport.available) return null;
+    const pieces = sentencePieces(text, guide.sentences.slice(range.start, range.end + 1).map((sentence) => sentence.text));
+    if (!pieces) return null;
+    const speaking = transport.playing && activeIndex >= range.start && activeIndex <= range.end ? activeIndex - range.start : null;
+    return <>{pieces.map((piece, i) => piece.index === null ? piece.text
+      : <span key={i} className="readable-sentence" role="button" tabIndex={-1} title="Read from here"
+          onClick={(event) => { event.stopPropagation(); requestReadFrom(range.start + piece.index); }}>
+          {piece.index === speaking ? <mark className="spoken-now" aria-current="true">{piece.text}</mark> : piece.text}</span>)}</>;
   };
   const narration = ({ activity, state, busy }) => {
     if (!activity || state.status === 'completed') return null;
@@ -307,7 +313,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
       onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderSpokenText={spokenText} renderNarration={narration} renderSessionControls={sessionControls}
-      renderFeedback={({message,history=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local','inworld'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
+      renderFeedback={({message,history=false,play=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local','inworld'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={play || (!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id)} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;
 }

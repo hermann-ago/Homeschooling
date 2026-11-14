@@ -69,8 +69,17 @@ def overview(db, session_id):
         for item in job['input_snapshot']['items']:
             checked = results.get(item)
             seen[item] = {'job_id': job['id'], 'status': job['status'], 'error': job.get('error'),
-                **({'read': checked['answer'], 'result': checked['result'], 'feedback': checked['feedback']} if checked else {})}
+                **({'read': checked['answer'], 'result': checked['result'], 'feedback': checked['feedback'],
+                    'reply_id': _reply_id(db, session_id, job['id'], item)} if checked else {})}
     return seen
+
+
+def _reply_id(db, session_id, job_id, item_id):
+    """The tutor's saved reply for one checked exercise, which the screen can voice."""
+    from .activity_engine import _hash
+    rid = 'photo-answer-' + _hash([job_id, item_id])[:32]
+    reply = 'response-' + _hash([session_id, rid])[:32] + ':reply'
+    return reply if db.get('lesson_dialogue', reply) else None
 
 
 def running(db, session_id):

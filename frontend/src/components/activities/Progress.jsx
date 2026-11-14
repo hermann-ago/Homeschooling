@@ -10,7 +10,7 @@ const MARK = { fix: '!', unchecked: '?' };
 const short = (text) => { const line = (text || '').trim(); return line.length > 400 ? `${line.slice(0, 400)}…` : line; };
 
 /** What a photo check found for one exercise, with the way to fix it. */
-function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose }) {
+function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose, renderVoice }) {
   const check = item.check || {};
   const fix = item.outcome === 'fix';
   const failed = item.outcome === 'unchecked';
@@ -25,6 +25,8 @@ function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose }) {
       {item.outcome === 'checking' && <p role="status" className="text-muted">Your photo is being checked. Keep going with the lesson.</p>}
       {check.read && <p className="rounded-xl bg-paper p-3"><span className="block text-xs text-muted">I read in your photo</span>{check.read}</p>}
       {check.feedback && <p className="whitespace-pre-wrap">{check.feedback}</p>}
+      {/* Opening an exercise with something to fix reads the tutor's reply aloud. */}
+      {fix && check.feedback && check.reply_id && renderVoice?.({ id: check.reply_id, text: check.feedback })}
       {failed && <p className="text-attention">{check.error || 'This photo could not be checked yet. Nothing was marked wrong.'}</p>}
       {(fix || failed) && !canFix && <p className="text-xs text-muted">Finish the answer you are fixing first.</p>}
     </div>
@@ -32,7 +34,7 @@ function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose }) {
 }
 
 /** One chip per exercise. A chip with a photo check opens what the check found. */
-export function ProgressDots({ progress, currentId, canFix = true, busy = false, onFix, onRetry }) {
+export function ProgressDots({ progress, currentId, canFix = true, busy = false, onFix, onRetry, renderVoice }) {
   const items = progress?.items || [];
   const greens = items.filter((i) => i.outcome === 'first_try').map((i) => i.id).join(',');
   // Dots that were already green when the lesson opened do not pop.
@@ -60,7 +62,7 @@ export function ProgressDots({ progress, currentId, canFix = true, busy = false,
       {checking > 0 && <span className="text-muted">Checking {checking} answer{checking === 1 ? '' : 's'}…</span>}
       {toFix.length > 0 && <button type="button" className="progress-fix" onClick={() => setOpen(toFix[0].id)}>{toFix.length} to look at</button>}
     </p>}
-    {opened && <CheckDetail item={opened} number={items.indexOf(opened) + 1} canFix={canFix} busy={busy} onFix={onFix} onRetry={onRetry} onClose={() => setOpen(null)} />}
+    {opened && <CheckDetail item={opened} number={items.indexOf(opened) + 1} canFix={canFix} busy={busy} onFix={onFix} onRetry={onRetry} onClose={() => setOpen(null)} renderVoice={renderVoice} />}
   </div>;
 }
 

@@ -40,3 +40,25 @@ export function spokenParts(text, spoken) {
   if (!match) return null;
   return { before: text.slice(0, match.index), spoken: match[0], after: text.slice(from) };
 }
+
+/** The text on screen cut at the step's sentences, in order: each recorded sentence
+ *  keeps its index, so a tap can play from it. Text between sentences has no index.
+ *  Null when a sentence is not found, so the text is shown as it is. */
+export function sentencePieces(text, sentences) {
+  if (!text || !sentences?.length) return null;
+  const pieces = [];
+  let from = 0;
+  for (let index = 0; index < sentences.length; index += 1) {
+    const words = normalize(sentences[index]).split(' ').filter(Boolean).map(escape);
+    if (!words.length) continue;
+    const pattern = new RegExp(words.join('\\s+'), 'g');
+    pattern.lastIndex = from;
+    const match = pattern.exec(text);
+    if (!match) return null;
+    if (match.index > from) pieces.push({ text: text.slice(from, match.index), index: null });
+    pieces.push({ text: match[0], index });
+    from = match.index + match[0].length;
+  }
+  if (from < text.length) pieces.push({ text: text.slice(from), index: null });
+  return pieces;
+}

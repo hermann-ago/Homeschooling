@@ -27,3 +27,12 @@ it('cheers a perfect lesson and a lesson of grown-up checks', () => {
   render(<Celebration progress={{ items: [], first_try: 0, graded: 0, practise: [] }} />);
   expect(screen.getByText('You finished today’s lesson!')).toBeTruthy();
 });
+
+it('reads the tutor reply aloud when an exercise to fix is opened', async () => {
+  const { fireEvent } = await import('@testing-library/react');
+  const voiced = [];
+  const fix = { items: [{ id: 'a', outcome: 'fix', check: { read: '12', feedback: 'Look at the tens again.', reply_id: 'r-1:reply' } }, { id: 'b', outcome: 'pending' }] };
+  render(<ProgressDots progress={fix} currentId="b" renderVoice={(message) => { voiced.push(message); return <span>voice</span>; }} />);
+  fireEvent.click(screen.getByText('Exercise 1: something to fix').closest('button'));
+  expect(voiced.at(-1)).toEqual({ id: 'r-1:reply', text: 'Look at the tens again.' });
+});

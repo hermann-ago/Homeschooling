@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { narrationRange, spokenParts } from './narrationRange';
+import { narrationRange, sentencePieces, spokenParts } from './narrationRange';
 
 const activity = { id: 'question', kind: 'ask_question', content: { prompt: 'What changed?' }, interaction: { prompt: 'What changed?', sequence: 1 } };
 const guide = { sentences: [{ text: 'What changed?' }], activities: [{ id: 'question', kind: 'ask_question', start_sentence: 0, end_sentence: 0 }] };
@@ -33,5 +33,17 @@ describe('spokenParts', () => {
   it('gives nothing when the text does not contain it', () => {
     expect(spokenParts('Something else entirely.', ['Not here.'])).toBeNull();
     expect(spokenParts('', ['Anything.'])).toBeNull();
+  });
+});
+
+describe('sentencePieces', () => {
+  it('cuts the text at each recorded sentence so a tap knows where to read from', () => {
+    expect(sentencePieces('Hi, Lucas. Today we compare.\n\nLook closely.', ['Hi, Lucas.', 'Today we compare.', 'Look closely.']))
+      .toEqual([{ text: 'Hi, Lucas.', index: 0 }, { text: ' ', index: null }, { text: 'Today we compare.', index: 1 },
+        { text: '\n\n', index: null }, { text: 'Look closely.', index: 2 }]);
+  });
+  it('keeps a repeated sentence in its own place and gives up when a sentence is missing', () => {
+    expect(sentencePieces('Try again. Look. Try again.', ['Try again.', 'Look.', 'Try again.']).map((p) => p.index)).toEqual([0, null, 1, null, 2]);
+    expect(sentencePieces('Something else.', ['Not here.'])).toBeNull();
   });
 });
