@@ -192,3 +192,12 @@ def test_the_writers_own_choice_questions_carry_their_answer_and_are_checked_at_
     with pytest.raises(ValueError, match='exact text of one of its choices'):
         compile_({'type': 'ask', 'prompt': 'Which?', 'response': {'format': 'single_choice', 'choices': ['A', 'B']}, 'answer': 'C'})
     compile_({'type': 'ask', 'prompt': 'Which?', 'response': {'format': 'single_choice', 'choices': ['A', 'B']}, 'answer': 'B'})
+
+
+def test_a_grown_up_check_of_drawn_lines_keeps_no_copied_columns():
+    from tutoring.teaching_script import Response
+    checked = Response.model_validate({'format': 'parent_check', 'matching_items': ['neutral', 'circulation'],
+                                       'matching_options': ['no positive or negative side', 'blood moving']})
+    assert checked.matching_items == [] and checked.matching_options == []
+    with pytest.raises(ValueError):  # a typed answer with columns is still a mistake
+        Response.model_validate({'format': 'text', 'matching_items': ['a', 'b'], 'matching_options': ['c', 'd']})

@@ -47,6 +47,10 @@ class Response(Content):
         if self.format in ('single_choice','multiple_select'):
             if len(self.choices)<2:raise ValueError('A choice question needs its full options.')
         elif self.choices:raise ValueError('Only choice questions supply choices; true/false labels are supplied by the app.')
+        if self.format=='parent_check':
+            # Lines drawn in the book are judged by a grown-up looking at the page; the printed
+            # columns a writer copied out are not used.
+            self.matching_items,self.matching_options,self.allow_reuse=[],[],False
         if self.format=='matching':
             if len(self.matching_items)<2 or len(self.matching_options)<2:
                 raise ValueError('Matching needs both complete columns.')
