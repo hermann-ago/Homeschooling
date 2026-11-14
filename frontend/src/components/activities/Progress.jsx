@@ -75,7 +75,7 @@ export function ToFix({ progress, checking, busy, onFix, onRetry }) {
       <p className="font-semibold">Exercise {item.number}</p>
       <p className="whitespace-pre-wrap">{short(item.check?.prompt).split('\n').slice(0, 3).join('\n')}</p>
       {item.check?.read && <p className="text-muted">I read: {item.check.read}</p>}
-      {item.outcome === 'fix' ? item.check?.feedback && <p>{item.check.feedback}</p> : <p className="text-attention">This photo could not be checked yet.</p>}
+      {item.outcome === 'fix' ? item.check?.feedback && <p>{item.check.feedback}</p> : <p className="text-attention">{item.check?.error || 'This photo could not be checked yet.'}</p>}
       <div className="flex flex-wrap gap-2 mt-1">
         <Button size="sm" variant="primary" disabled={busy} onClick={() => onFix(item.id)}>{item.outcome === 'fix' ? 'Fix it now' : 'Take the photo again'}</Button>
         {item.outcome === 'unchecked' && <Button size="sm" disabled={busy} onClick={() => onRetry(item.id)}>Try the check again</Button>}

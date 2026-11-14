@@ -8,6 +8,7 @@ never owed in a later lesson. An unsure reading is "couldn't read", not wrong.
 """
 import hashlib
 import json
+import logging
 import threading
 from contextlib import nullcontext
 from typing import Literal
@@ -15,6 +16,8 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .service import TutorConflict, TutorError
+
+logger = logging.getLogger(__name__)
 
 EVENTS = {'snap_work', 'retry_photo_check', 'fix_work', 'fix_later'}
 RUNS_AFTER = {'snap_work', 'retry_photo_check'}
@@ -253,10 +256,14 @@ def run(engine, job_id):
         with engine.lock(session_id):
             with engine.db.transaction(kind='activity.photo_check_result') as tx:
                 _save(engine, tx, job, [_settle(snapshot, item) for item in reply['items']])
-    except Exception:
+    except Exception as exc:
+        logger.exception('Photo check %s failed', job_id)
+        no_credit = getattr(exc, 'code', None) == 'provider_quota'
         with engine.db.transaction(kind='activity.photo_check_failed') as tx:
-            tx.update('activity_jobs', job_id, {'status': 'failed',
-                'error': 'The photo is saved but could not be checked yet. Nothing was marked wrong.'})
+            tx.update('activity_jobs', job_id, {'status': 'failed', 'error': (
+                'The photo is saved, but the AI account has run out of credits, so it cannot be checked yet. '
+                'Ask a grown-up to add API credits, then try the check again. Nothing was marked wrong.' if no_credit else
+                'The photo is saved but could not be checked yet. Nothing was marked wrong.')})
             tx.touch('tutor_sessions', session_id)
 
 
