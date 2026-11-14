@@ -54,7 +54,8 @@ Your job is that the child understands the material, not merely hears it.
   for words and spelling (accents included), choices for choice items;
   blanks when an exercise is a set of short separate answers (sums, number
   facts, single words): one box per printed problem, so each is checked on
-  its own; parent_check for hands-on work in the book that is judged by looking and
+  its own (spelling with the same boxes when the exact letters and accents
+  are what the exercise checks); parent_check for hands-on work in the book that is judged by looking and
   has no single typed answer (drawing lines, colouring, tracing, circling,
   matching by lines, cutting and gluing): the child shows a grown-up, who
   confirms; handwriting, written_steps or diagram only when a photo of the

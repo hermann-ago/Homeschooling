@@ -201,3 +201,12 @@ def test_a_grown_up_check_of_drawn_lines_keeps_no_copied_columns():
     assert checked.matching_items == [] and checked.matching_options == []
     with pytest.raises(ValueError):  # a typed answer with columns is still a mistake
         Response.model_validate({'format': 'text', 'matching_items': ['a', 'b'], 'matching_options': ['c', 'd']})
+
+
+def test_a_spelling_exercise_can_have_one_box_per_word():
+    from tutoring.teaching_script import Response, _response
+    spec = Response.model_validate({'format': 'spelling', 'blanks': ['S____ Paulo', 'Avi____']})
+    content = _response(spec, 'pt-BR')
+    assert content['evidence_requirement'] == 'spelling' and [b['label'] for b in content['blanks']] == ['S____ Paulo', 'Avi____']
+    with pytest.raises(ValueError):
+        Response.model_validate({'format': 'text', 'blanks': ['a', 'b']})

@@ -41,7 +41,7 @@ class Response(Content):
             raise ValueError('Answer labels must contain bounded plain text.')
         if self.format=='blanks':
             if not self.blanks:raise ValueError('Blanks list each printed problem that gets its own answer box.')
-        elif self.blanks:raise ValueError('Only blanks supply answer-box labels.')
+        elif self.blanks and self.format!='spelling':raise ValueError('Only blanks and spelling supply answer-box labels.')
         if self.format=='true_false' and self.choices and {c.strip().strip('.').casefold() for c in self.choices} <= TRUE_FALSE_LABELS:
             self.choices=[]  # the plain True/False pair; the app supplies these labels itself
         if self.format in ('single_choice','multiple_select'):
@@ -160,8 +160,8 @@ def _response(spec,language,task=None):
     content={'answer_format':'text','evidence_requirement':evidence,'response_modes':['text']}
     if form in ('handwriting','diagram'):content['response_modes']=['photo','parent_review']
     elif form=='written_steps':content['response_modes']=['written_steps','photo','parent_review']
-    elif form=='spelling':content['response_modes']=['text','photo']
-    elif form=='blanks':
+    elif form=='spelling' and not spec.blanks:content['response_modes']=['text','photo']
+    elif form in ('blanks','spelling'):
         content['response_modes']=['text','photo']
         content['blanks']=[{'id':f'blank-{i+1}','label':v} for i,v in enumerate(spec.blanks)]
     elif form not in ('matching','observe'):content['response_modes']=['text','device_dictation','photo']

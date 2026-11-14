@@ -73,7 +73,7 @@ class BookWork(Content):
     @model_validator(mode='after')
     def answers_match_blanks(self):
         for values in (self.answers, self.proposed_answers):
-            if values and (self.response.format != 'blanks' or len(values) != len(self.response.blanks)
+            if values and (not self.response.blanks or len(values) != len(self.response.blanks)
                            or any(not a.strip() or len(a) > 200 for a in values)):
                 raise ValueError('Answers give one short key answer per blank, in order.')
         if self.answers and self.proposed_answers:
