@@ -118,7 +118,9 @@ def test_saved_teacher_error_can_be_amended_once_without_revising_child_answer(h
     attempts = db.find('attempts', session_id=state['session_id'])
     assert len(attempts) == 2
     amended = next(a for a in attempts if a.get('amends_attempt_id'))
-    assert amended['first_result'] == 'Correct' and amended['first_answer'] == 'F'
+    # A typed "F" is saved as the option False; what the child typed stays the original answer.
+    assert amended['first_result'] == 'Correct' and amended['first_answer'] == 'False'
+    assert capture['original']['text'] == 'F'
     assert amended['independence'] == 'independent'
     assert db.get('reviews', db.get('lesson_actions', action['id'])['review_id'])['status'] == 'Withdrawn'
     harness.restart()

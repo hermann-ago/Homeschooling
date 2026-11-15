@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import threading
+import unicodedata
 from contextlib import nullcontext
 
 from pydantic import BaseModel, Field
@@ -67,6 +68,35 @@ def _text(value, limit=4000):
 
 
 NUMBER = re.compile(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?")
+
+
+CHOICE_LETTER = re.compile(r"\s*(?:(?:letter|option|answer|the answer is|it's|it is|é|e|a resposta é|a resposta e|letra)\s+)?"
+                           r"\(?([a-z])\)?[.)!]*\s*", re.I)
+
+
+def typed_choice(content, text):
+    """The one option a typed answer clearly names, as the choice controls would send it: the
+    printed letter ("a", "(b)", "letter c"), the option's own words, or for true/false a clear
+    true or false ("t", "F", "verdadeiro"). None when it names no single option."""
+    choices = content.get("choices") or []
+    if not choices or not text or content.get("answer_format") not in ("single_choice", "true_false"):
+        return None
+    normalize = lambda value: " ".join(re.sub(r"[^\w\s']", " ", unicodedata.normalize("NFKC", value).casefold()).split())
+    if content["answer_format"] == "true_false":
+        from .keyed_assessment import _binary
+        verdict = _binary(text)
+        if verdict is None:
+            return None
+        named = [c for c in choices if c["id"] == ("true" if verdict else "false")]
+        return named[0]["id"] if len(named) == 1 else None
+    letter = CHOICE_LETTER.fullmatch(text)
+    if letter:
+        named = [c for c in choices if re.match(rf"\(?{letter[1]}[.)]\s", (c.get("label") or "").strip() + " ", re.I)]
+        return named[0]["id"] if len(named) == 1 else None
+    words = normalize(text)
+    named = [c for c in choices if words and words in (normalize(c.get("label") or ""),
+             normalize(re.sub(r"^\(?[a-z][.)]\s+", "", (c.get("label") or "").strip(), flags=re.I)))]
+    return named[0]["id"] if len(named) == 1 else None
 
 
 def answer_in_chat(content, action, interaction, payload, operation_id):
@@ -713,6 +743,7 @@ class ActivityEngine:
                 raise TutorError('Attach a photo, or choose Type an answer to check the words.')
             if not shared_page:
                 text = ''
+        choices = []
         if method == "choice":
             choices = payload.get("choice_ids") or []
             available = {c["id"]: c.get("label", c.get("text", c["id"])) for c in content.get("choices", [])}
@@ -725,6 +756,12 @@ class ActivityEngine:
             # Canonical source order, regardless of the order checkboxes were clicked.
             choices = [c for c in available if c in choices]
             text = "; ".join(available[c] for c in choices)
+        typed = text
+        if method == "typed" and not content.get("blanks") and not matches and (picked := typed_choice(content, text)):
+            # "a" or "t" typed for a question with printed options is that option, as if it were
+            # tapped; what the child typed stays the original answer.
+            choices = [picked]
+            text = next(c.get("label") or c["id"] for c in content["choices"] if c["id"] == picked)
         if not text and not evidence_ids and method != "parent_review":
             raise TutorError("Capture an answer or attach the learner's work")
         # These prompts elicit the explanation in the answer itself. Accept the
@@ -738,7 +775,7 @@ class ActivityEngine:
         status = "parent_review" if method == "parent_review" else "awaiting_confirmation" if confirmation else "confirmed"
         response = tx.insert("activity_responses", {"id": rid, "session_id": session_id, "child_id": action["child_id"],
             "activity_id": action["action_id"], "interaction_id": interaction["id"], "method": method,
-            "original": {"text": text, "reasoning": reasoning, "choice_ids": choices if method == "choice" else [], "evidence_ids": evidence_ids,
+            "original": {"text": typed, "reasoning": reasoning, "choice_ids": choices if method in ("choice", "typed") and choices else [], "evidence_ids": evidence_ids,
                          **({'page_work_id': payload['page_work_id']} if shared_page else {}),
                          **({'matches':matches} if method=='typed' and matches else {}),
                          **({'blanks': blanks} if method == 'typed' and content.get('blanks') else {})},

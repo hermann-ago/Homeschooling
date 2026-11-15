@@ -44,6 +44,35 @@ def test_explanation_is_captured_in_answer_without_duplicate_reasoning(harness, 
     assert not harness.ctx.store.all('attempts')  # Capturing an explanation does not grade it.
 
 
+FRANCE = [{'id': 'option-1', 'label': 'a. They could not agree about who should be the new king.'},
+          {'id': 'option-2', 'label': 'b. They did not all speak the same language.'}, {'id': 'option-3', 'label': 'c. Orleans'}]
+
+
+@pytest.mark.parametrize('typed,picked', [('a', 'option-1'), ('B', 'option-2'), ('(c)', 'option-3'), ('letter a', 'option-1'),
+    ('a.', 'option-1'), ('orleans', 'option-3'), ('d', None), ('a and b', None), ('They argued.', None)])
+def test_a_typed_letter_or_the_option_words_name_that_option(typed, picked):
+    from tutoring.activity_engine import typed_choice
+    assert typed_choice({'answer_format': 'single_choice', 'choices': FRANCE}, typed) == picked
+
+
+@pytest.mark.parametrize('typed,picked', [('t', 'true'), ('T', 'true'), ('true', 'true'), ('F', 'false'), ('false.', 'false'),
+    ('v', 'true'), ('falso', 'false'), ('maybe', None)])
+def test_a_typed_t_or_f_answers_true_or_false(typed, picked):
+    from tutoring.activity_engine import typed_choice
+    content = {'answer_format': 'true_false', 'choices': [{'id': 'true', 'label': 'True'}, {'id': 'false', 'label': 'False'}]}
+    assert typed_choice(content, typed) == picked
+
+
+def test_a_typed_letter_is_saved_as_that_option_keeping_what_was_typed(harness, monkeypatch):
+    engine, state, _ = engine_lesson(harness, monkeypatch)
+    state = invoke(engine, state, content={'prompt': '10. Why were the people of France divided?', 'answer_format': 'single_choice',
+        'response_modes': ['choice', 'text'], 'choices': FRANCE})
+    event(engine, state, 'submit_response', {'response_id': 'typed-letter', 'method': 'typed', 'text': 'a'})
+    saved = harness.ctx.store.get('activity_responses', 'typed-letter')
+    assert saved['original']['text'] == 'a' and saved['original']['choice_ids'] == ['option-1']
+    assert saved['confirmed_text'] == 'a. They could not agree about who should be the new king.'
+
+
 def test_choice_still_needs_explicit_reasoning(harness, monkeypatch):
     engine, state, _ = engine_lesson(harness, monkeypatch)
     state = invoke(engine, state, kind='explain_thinking', content={'prompt': 'Choose and explain.',
