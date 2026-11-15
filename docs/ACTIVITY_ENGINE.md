@@ -262,8 +262,13 @@ Rehearse offline with `backend/dev/activity_demo.py --practice-sections --paced-
 
 In a subject whose book exercises are checked by the tutor, a required book
 exercise shows one main button, **Photo of my work** (`active_activity.snap`).
-The camera opens in the card, Space takes the picture and it is sent after a
-moment (`snap_work`, 1–3 photos attached to that exercise). The exercise, and
+The camera preview opens in the card as soon as the step appears, Space takes
+the picture and it is sent after a moment (`snap_work`, 1–3 photos attached to
+that exercise). The camera (`sharedCamera.js`) is shared by consecutive photo
+steps and turns off two minutes after the last one; while the preview shows it
+locks the focus once the page is still and sharp (where the camera allows it),
+waits up to 1.5 s for a sharp frame when pressed, offers a retake for a blurry
+photo, and crops to the page when the page stands out clearly from the table. The exercise, and
 the still-pending rest of its practice section, become `checking` and the
 lesson moves on at once. **Answer here instead** keeps the typed/choice flow.
 

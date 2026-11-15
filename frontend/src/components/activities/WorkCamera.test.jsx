@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import WorkCamera from './WorkCamera';
+import { stopCamera } from './sharedCamera';
 import ResponseCapture from './ResponseCapture';
 
 let stop;
@@ -12,7 +13,7 @@ beforeEach(() => {
   media = { getTracks: () => [{ stop }] };
   vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn().mockResolvedValue(media) } });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); stopCamera(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 it('opens the webcam with no microphone and cancels without uploading', async () => {
   const upload = vi.fn(); const close = vi.fn();
@@ -46,9 +47,9 @@ it('captures a readable frame, stops the webcam, and uploads only after confirma
   Object.defineProperties(video, { videoWidth: { value: 1920 }, videoHeight: { value: 1080 } });
   fireEvent.loadedData(video);
   fireEvent.click(screen.getByRole('button', { name: 'Take photo', exact: true }));
+  expect(await screen.findByAltText('Preview of your work')).toBeTruthy();
   expect(draw).toHaveBeenCalledWith(video, 0, 0, 1920, 1080);
   expect(stop).toHaveBeenCalledOnce();
-  expect(screen.getByAltText('Preview of your work')).toBeTruthy();
   expect(upload).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
@@ -66,7 +67,7 @@ it('keeps the captured picture available when saving fails', async () => {
   await waitFor(() => expect(video.srcObject).toBe(media));
   Object.defineProperties(video, { videoWidth: { value: 640 }, videoHeight: { value: 480 } });
   fireEvent.loadedData(video); fireEvent.click(screen.getByRole('button', { name: 'Take photo', exact: true }));
-  fireEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Use this photo' }));
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('not saved'));
   expect(screen.getByAltText('Preview of your work')).toBeTruthy();
   expect(close).not.toHaveBeenCalled();
