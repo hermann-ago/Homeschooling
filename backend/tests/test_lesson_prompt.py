@@ -116,6 +116,25 @@ def test_learning_memory_keeps_learning_without_record_identifiers():
     assert 'attempt:1' not in text and 'review:1' not in text and '"map_id"' not in text
 
 
+def test_recent_lessons_in_other_subjects_reach_the_writer(harness, monkeypatch):
+    from tests.test_tutoring import seed_history
+    from tutoring.lesson_context import studied_elsewhere
+    from datetime import datetime, timezone
+    s = seed_history(harness)
+    db = harness.ctx.store
+    with db.transaction() as tx:
+        other = tx.insert('subjects', {'child_id': s['lucas']['id'], 'name': 'Reading Book', 'weight': 1, 'slot_type': 'core'})
+        tx.insert('topics', {'subject_id': s['history']['id'], 'title': 'Henry V and the Battle of Agincourt', 'page_start': 1, 'page_end': 2,
+                             'completed': 1, 'completed_at': datetime.now(timezone.utc).isoformat()})
+        tx.insert('topics', {'subject_id': s['history']['id'], 'title': 'Long ago', 'page_start': 1, 'page_end': 2,
+                             'completed': 1, 'completed_at': '2020-01-01T00:00:00Z'})
+        lesson = tx.insert('topics', {'subject_id': other['id'], 'title': 'Opportunity Lost', 'page_start': 1, 'page_end': 2})
+    recent = studied_elsewhere(db, s['lucas']['id'], lesson)
+    assert recent == [{'subject': s['history']['name'], 'lesson': 'Henry V and the Battle of Agincourt'}]
+    assert studied_elsewhere(db, s['lucas']['id'], db.get('topics', s['genghis']['id'])) == []
+    assert '"lesson": "Henry V and the Battle of Agincourt"' in prompt(studied_elsewhere=recent)
+
+
 def test_read_along_block_only_for_book_reading():
     assert 'READ-ALONG BOOK' not in prompt(visual_source=VISUAL)
     assert lesson_prompt.READ_ALONG_QUIZ in prompt(visual_source=VISUAL, book_question_policy=READ_ALONG_POLICY)

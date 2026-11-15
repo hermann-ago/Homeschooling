@@ -67,7 +67,11 @@ checked with the eval set — not by adding another prohibition to the prompt.
    (`library.teaching_template`, first written for Jonathan Gullible): warm
    explanations, concrete examples, the book taught as it presents itself, and
    an end-of-chapter check.
-6. What the app knows about the learner (preferences, learning memory).
+6. What the app knows about the learner (preferences, learning memory, and the
+   lessons recently finished in their other subjects, so a lesson can link to
+   the same person, event or idea). Extra reading books get this too unless
+   `library.reuse_prepared_lessons` is on; a lesson saved for the next child
+   is written for "the reader" without any learner context.
 7. Page map (with each page's printed number), boundaries, this lesson's items
    on shared exercise pages, answer-key pages (teacher-only), source notes,
    revision feedback, output format, numbered page text.

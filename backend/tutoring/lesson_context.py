@@ -26,4 +26,18 @@ def preparation(ctx, child_id, topic, passage):
     # Only a set policy or a video joins the fingerprint, so other guides stay current.
     return {"selected_source_pages": selected_pages, "subject_sources": sources, "source_requirements":source_requirements, "learning_memory": memory, "adaptive_warmup": warmup,
             "source_annotations":notes,"family_tutoring": family, **extra,
+            # Not in the fingerprint: finishing a lesson elsewhere leaves saved lessons current.
+            "studied_elsewhere": studied_elsewhere(ctx.store, child_id, topic),
             "fingerprint": sha256_text([sources,source_requirements,memory,warmup,family['sha256'],notes, *([extra] if extra else [])])}
+
+
+def studied_elsewhere(db, child_id, topic, *, days=28, limit=8):
+    """The learner's most recently finished lessons in their other subjects, so a lesson can
+    link to what the child just met there (the same person, event or idea)."""
+    from datetime import datetime, timedelta, timezone
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    subjects = {s["id"]: s["name"] for s in db.find("subjects", child_id=child_id) if s["id"] != topic["subject_id"]}
+    finished = [t for t in db.all("topics") if t["subject_id"] in subjects and t.get("completed") and t.get("completed_at")
+                and str(t["completed_at"]) >= since]
+    finished.sort(key=lambda t: str(t["completed_at"]), reverse=True)
+    return [{"subject": subjects[t["subject_id"]], "lesson": t["title"]} for t in finished[:limit]]

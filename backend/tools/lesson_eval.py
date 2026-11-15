@@ -129,6 +129,8 @@ def evaluate(guide, packet=None, expected=None, pdf_text=''):
         'reading_words': len(words(reading)),
         'explanations': len(explanations),
         'explanation_words': sum(len(words(s.get('text'))) for s in explanations),
+        # A closing that only says the lesson is over ties nothing together.
+        'closing_words': sum(len(words(s.get('text'))) for s in segments if s['type'] == 'recap'),
         'explanations_between_readings': sum(
             1 for i, k in enumerate(kinds) if k == 'explain' and 'read' in kinds[:i] and 'read' in kinds[i + 1:]),
         'activities': len(activities),
@@ -219,11 +221,11 @@ def row(r):
     found = f"{r['exercises_found']}/{r['exercises_expected']}" if 'exercises_expected' in r else '—'
     return (f"| {r['eval']} | {'—' if cov is None else f'{cov:.0%}'} | {found} | {len(r.get('answer_leaks', []))} | "
             f"{len(r['narration_questions'])} | {r['explanations']} ({r['explanations_between_readings']} between) | "
-            f"{r['explanation_words']} | {r['reading_words']} | {r['activities']} | {r.get('prompt_characters', '—')} |")
+            f"{r['explanation_words']} | {r['closing_words']} | {r['reading_words']} | {r['activities']} | {r.get('prompt_characters', '—')} |")
 
 
 HEADER = ('| Eval | Reading covered | Exercises found | Answer leaks | Narration questions | Explanations | '
-          'Explanation words | Reading words | Activities | Prompt chars |\n|---|---|---|---|---|---|---|---|---|---|')
+          'Explanation words | Closing words | Reading words | Activities | Prompt chars |\n|---|---|---|---|---|---|---|---|---|---|---|')
 
 
 def main(argv=None):

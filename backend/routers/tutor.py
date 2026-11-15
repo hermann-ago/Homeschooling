@@ -773,8 +773,15 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
     from tutoring import library_materials
     shared_book = library_materials.book_for(store(), subject['id'])
     if shared_book:
-        learner_context = library_materials.neutral_context(context(), learner_context)
-        child = {'name': 'the reader'}
+        own = learner_context
+        learner_context = library_materials.neutral_context(context(), own)
+        if library_materials.reuse_enabled(context()):
+            child = {'name': 'the reader'}
+        else:
+            # Each child gets a lesson of their own, so it is written for this child, as in
+            # any other subject. Only a lesson saved for the next child stays neutral.
+            learner_context.update({k: own[k] for k in ('preferences', 'learning_memory', 'studied_elsewhere', 'family_tutoring')
+                                    if own.get(k)})
     from tutoring import page_script as teaching_script
     learner_context['preparation_policy']=teaching_script.VERSION
     from tutoring.navigation import checked_selections, selections

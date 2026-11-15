@@ -100,6 +100,19 @@ def test_read_along_explanations_and_review_generate_once_for_future_children(fa
     assert get_book(h, learner=second['id'])['readings'][0]['completed_topics'] == 1
 
 
+def test_a_book_lesson_prepared_fresh_for_each_child_is_written_for_that_child(family):
+    """With reuse off (the family's default), nothing is shared, so the writer gets the child's
+    name and what the app knows about them, as in any other subject."""
+    h, first, _, readings, prompts = family
+    h.ctx.config.update(library={'reuse_prepared_lessons': False})
+    with h.ctx.store.transaction() as tx:
+        tx.insert('preferences', {'id': 'first-own', 'child_id': first['id'], 'key': 'teaching_style', 'value': 'LIKES-DRAWING-EXAMPLES'})
+    made = make_guide(h, first, readings[0])
+    assert made['current'] and len(prompts) == 1
+    assert first['name'] in prompts[0] and 'LIKES-DRAWING-EXAMPLES' in prompts[0]
+    assert not [r for r in h.ctx.store.all('library_materials') if r['kind'] == 'guided_lesson']
+
+
 def test_first_shared_lesson_can_be_estimated_without_private_learning_context_or_generation(family):
     h, first, _, readings, prompts = family
     estimate = make_guide(h, first, readings[0], dry_run=True)

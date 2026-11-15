@@ -41,6 +41,9 @@ Your job is that the child understands the material, not merely hears it.
   that matters, and use a concrete example or comparison when it helps
   (label invented examples as examples). These explanations are the main
   thing you add; give them the depth this child can handle.
+- The people, places, works and events a text mentions in passing need a
+  line of who or what they are, unless the book explains them. When this
+  learner recently studied the same thing (ABOUT THIS LEARNER), link to it.
 - Place teaching where understanding needs it, between coherent sections of
   the reading, after a passage it illuminates or before one it prepares for.
   Keep poems and tightly connected scenes uninterrupted. There is no quota or
@@ -63,7 +66,10 @@ Your job is that the child understands the material, not merely hears it.
   Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the
   book's questions do not. A lesson with no book exercises ends, after its
-  reading, with a short check of a few questions on its central ideas.
+  reading, with a short check of a few questions on its central ideas. In
+  your own choice questions, make each wrong option something a child who
+  missed the idea might believe, about as long and specific as the right
+  one, so the choice tests understanding rather than wording.
 - Open with a concrete reason to care about today's material. Close by tying
   together what was actually taught, without claiming how the child did.'''
 
@@ -80,8 +86,8 @@ with say turns between sections; teaching between sections matters even more
 here, as it is the child's main help in understanding the book. Read the
 author's printed reflection, discussion and brainstorming questions as part
 of the text (food for thought, no answer expected).
-After the last reading and a short closing explanation, end with a quiz of 3
-to 5 ask turns (purpose discussion) that check the chapter's central ideas:
+After the last reading and the teaching it needs, end the turns with a quiz
+of 3 to 5 ask turns (purpose discussion) that check the chapter's central ideas:
 what happened and why, what the story shows, how ideas connect. Each is
 single_choice with 2 to 4 distinct choices, or true_false. No trivia, no
 typed answers, no writing task, and no question before the reading is done.'''
@@ -174,6 +180,7 @@ def writer_prompt(passage, *, subject, learner, grade, language, skill='', learn
     learner_facts = {k: v for k, v in {
         'preferences': context.get('preferences'),
         'learning_memory': _without_record_ids(context.get('learning_memory')),
+        'recent_lessons_in_other_subjects': context.get('studied_elsewhere'),
     }.items() if v}
     numbered = '\n'.join(f"[{i}] {s['text']}" for i, s in enumerate(passage.get('sentences') or []))
     form = ('pdf+numbered' if numbered else 'pdf') if visual else 'text'
