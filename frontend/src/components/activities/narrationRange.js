@@ -14,10 +14,20 @@ export function narrationRange(guide, activity) {
   const start = planned.start_sentence;
   const end = planned.end_sentence;
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end >= guide.sentences.length) return null;
-  const recorded = normalize(guide.sentences.slice(start, end + 1).map((item) => item.text).join(' '));
+  const recordedText = (from, to) => normalize(guide.sentences.slice(from, to + 1).map((item) => item.text).join(' '));
   const current = normalize(activity.interaction?.prompt || activity.content?.prompt || activity.content?.text);
-  if (activity.kind !== 'read_source' && recorded !== current) return null;
-  return { start, end };
+  if (activity.kind !== 'read_source' && recordedText(start, end) !== current) return null;
+  // Questions one photo covers together are voiced together, while their
+  // recordings follow on unchanged; each keeps its own part for highlighting.
+  const parts = [{ id: activity.id, start, end }];
+  for (const item of activity.together || []) {
+    const next = guide.activities?.find((planned) => planned.id === item.id);
+    const last = parts[parts.length - 1];
+    if (!next || next.start_sentence !== last.end + 1 || !Number.isInteger(next.end_sentence) || next.end_sentence < next.start_sentence
+      || next.end_sentence >= guide.sentences.length || recordedText(next.start_sentence, next.end_sentence) !== normalize(item.prompt)) break;
+    parts.push({ id: item.id, start: next.start_sentence, end: next.end_sentence });
+  }
+  return parts.length > 1 ? { start, end: parts[parts.length - 1].end, parts } : { start, end };
 }
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

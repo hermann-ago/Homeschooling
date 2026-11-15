@@ -19,6 +19,17 @@ describe('Exact saved step narration', () => {
     expect(narrationRange(guide, { ...activity, messages: [{ text: 'A fresh hint' }] })).toBeNull();
     expect(narrationRange(guide, { ...activity, id: 'adaptive-question' })).toBeNull();
   });
+  it('voices the questions one photo covers together, each with its own part', () => {
+    const work = (id, prompt) => ({ id, kind: 'request_book_work', content: { prompt }, interaction: { prompt, sequence: 1 } });
+    const book = { sentences: [{ text: '10.' }, { text: 'Why?' }, { text: '11.' }, { text: 'Where?' }, { text: 'Later words.' }, { text: '12.' }, { text: 'Who?' }],
+      activities: [{ id: 'a1', kind: 'request_book_work', start_sentence: 0, end_sentence: 1 }, { id: 'a2', kind: 'request_book_work', start_sentence: 2, end_sentence: 3 },
+        { id: 'a3', kind: 'request_book_work', start_sentence: 5, end_sentence: 6 }] };
+    expect(narrationRange(book, { ...work('a1', '10. Why?'), together: [{ id: 'a2', prompt: '11. Where?' }] }))
+      .toEqual({ start: 0, end: 3, parts: [{ id: 'a1', start: 0, end: 1 }, { id: 'a2', start: 2, end: 3 }] });
+    // A recording that does not follow on, or no longer matches its question, is left out.
+    expect(narrationRange(book, { ...work('a1', '10. Why?'), together: [{ id: 'a2', prompt: '11. Where?' }, { id: 'a3', prompt: '12. Who?' }] }).end).toBe(3);
+    expect(narrationRange(book, { ...work('a1', '10. Why?'), together: [{ id: 'a2', prompt: '11. Changed?' }] })).toEqual({ start: 0, end: 1 });
+  });
 });
 
 describe('spokenParts', () => {

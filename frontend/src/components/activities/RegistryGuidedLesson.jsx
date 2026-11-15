@@ -218,9 +218,11 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     error={transport?.place === narrationPlace(activity) ? transport.error : null} />;
   // Any text of the step on screen marks the sentence being spoken, and a tap on a
   // sentence plays the step's voice from there, as on the book page.
-  const spokenText = (activity, text) => {
-    const range = narrationRange(guide, activity);
-    if (!range || transport?.place !== narrationPlace(activity) || !transport.available) return null;
+  const spokenText = (activity, text, partId) => {
+    const whole = narrationRange(guide, activity);
+    if (!whole || transport?.place !== narrationPlace(activity) || !transport.available) return null;
+    // A question shown with the ones a single photo covers marks only its own sentences.
+    const range = whole.parts?.find((part) => part.id === (partId || activity.id)) || whole;
     const pieces = sentencePieces(text, guide.sentences.slice(range.start, range.end + 1).map((sentence) => sentence.text));
     if (!pieces) return null;
     const speaking = transport.playing && activeIndex >= range.start && activeIndex <= range.end ? activeIndex - range.start : null;

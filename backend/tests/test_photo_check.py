@@ -145,6 +145,9 @@ def test_one_photo_covers_a_whole_true_or_false_set_with_separate_results(harnes
         return {'items': [{'item_id': row['action_id'], 'answer': 'T', 'uncertain': False,
                            'result': 'Not yet' if index == 1 else 'Correct', 'feedback': 'Checked.'} for index, row in enumerate(rows)]}
     monkeypatch.setattr(harness.ctx.ai, 'generate', read)
+    # The child is shown every question the one photo covers, not just the first.
+    assert state['active_activity']['id'] == rows[0]['action_id']
+    assert state['active_activity']['together'] == [{'id': row['action_id'], 'prompt': row['prompt']} for row in rows[1:]]
     state = snap(harness, engine, state)
     statuses = [harness.ctx.store.get('lesson_actions', row['id'])['status'] for row in rows]
     assert statuses == ['answered', 'fix', 'answered']

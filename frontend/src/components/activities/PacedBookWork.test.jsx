@@ -17,13 +17,15 @@ beforeEach(() => { vi.resetAllMocks(); window.localStorage.clear(); });
 afterEach(cleanup);
 
 it('reads the exercise and moves on with one Done press, without an answer box or skip', async () => {
-  api.state.mockResolvedValue(state(exercise({ practice_section: { id: 'p1', kind: 'true_false', title: 'True or false', item: 1, total: 8, completed: 0 } })));
+  api.state.mockResolvedValue(state(exercise({ practice_section: { id: 'p1', kind: 'true_false', title: 'True or false', item: 1, total: 8, completed: 0 },
+    together: Array.from({ length: 7 }, (_, i) => ({ id: `a${i + 2}`, prompt: `Statement ${i + 2}.` })) })));
   api.event.mockResolvedValue(state(exercise({ id: 'a9', kind: 'introduce', paced: false, content: { text: 'Next part.' },
     interaction: { id: 'i9', status: 'ready_to_continue' } }), { revision: 2 }));
   render(<ActivityLesson sessionId="s1" />);
   const done = await screen.findByRole('button', { name: 'Done · all 8 in my book' });
   await waitFor(() => expect(document.activeElement).toBe(done));
-  expect(screen.getByText(/Do this in your book/)).toBeTruthy();
+  expect(screen.getByText(/Do all 8 questions in your book/)).toBeTruthy();
+  expect(screen.getByRole('list', { name: 'Also done together' }).textContent).toContain('Statement 8.');
   expect(screen.queryByRole('button', { name: 'Skip for now' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'I have finished writing in my book' })).toBeNull();
   expect(screen.queryByRole('textbox', { name: /answer/i })).toBeNull();

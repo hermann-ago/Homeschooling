@@ -38,6 +38,18 @@ it('answers book work with one photo and moves on without an answer box', async 
   expect(screen.getByText('Next part.')).toBeTruthy();
 });
 
+it('shows every question one photo covers, and what to do with them', async () => {
+  api.state.mockResolvedValue(state(exercise({ content: { prompt: '10. Why were the people of France divided?', response_modes: ['text', 'photo'] },
+    together: [{ id: 'a2', prompt: '11. The two sides were fighting over the city of .' }, { id: 'a3', prompt: '12. Who came to help the French prince?' }] })));
+  render(<ActivityLesson sessionId="s1" />);
+  expect(await screen.findByRole('button', { name: /Photo of all 3/ })).toBeTruthy();
+  expect(screen.getByText('10. Why were the people of France divided?')).toBeTruthy();
+  const also = screen.getByRole('list', { name: 'Also in this photo' });
+  expect(also.textContent).toContain('11. The two sides were fighting over the city of .');
+  expect(also.textContent).toContain('12. Who came to help the French prince?');
+  expect(screen.getByText(/Do all 3 questions in your book, then take one photo of them/)).toBeTruthy();
+});
+
 it('lets the child answer on screen instead, and switch back to the photo', async () => {
   api.state.mockResolvedValue(state(exercise({ interaction: { id: 'i1', status: 'awaiting_input', stage: 'capture' } })));
   render(<ActivityLesson sessionId="s1" />);

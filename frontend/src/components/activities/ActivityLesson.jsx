@@ -320,6 +320,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   const directCapture = activity?.direct_capture ?? (activity?.content?.evidence_requirement === 'spelling' && activity.content.response_modes?.includes('text'));
   const physicalReady = directCapture || activity?.kind !== 'request_book_work' || ['capture', 'response', 'awaiting_confirmation', 'ready_to_assess', 'completed'].includes(String(stage)) || activity.physical_complete;
   const paced = Boolean(activity?.paced);
+  // One photo (or one Done) covers this question and the rest of its section.
+  const together = activity?.together || [];
+  const coveredCount = 1 + together.length;
   const snapKey = activity ? `${activity.id}.${activity.interaction?.id || ''}` : null;
   // Book work is answered with a photo unless the child chooses to answer here.
   const snapMode = Boolean(activity?.snap) && typing !== snapKey && !state.page_work?.id && !state.on_break;
@@ -442,7 +445,10 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
               {pageWorkInDock ? <div className="tutor-bubble">{workGroup.instruction && <p className="font-semibold whitespace-pre-wrap">{workGroup.instruction}</p>}<p className={workGroup.instruction ? 'mt-2 text-sm' : undefined}>Answer {workGroup.items.length === 1 ? 'it' : `all ${workGroup.items.length} parts`} in the box below.</p></div> : pageWork}</> : activity && !definition.internal ? <article key={sectionPlace} aria-label="Current tutor activity" className="tutor-current">
               {activity.practice_section && !snapMode && <progress className="tutor-step-progress" max={activity.practice_section.total} value={activity.practice_section.completed} aria-label={`${activity.practice_section.completed} of ${activity.practice_section.total} items saved`} />}
               {!ownQuestion && <p className="tutor-step-label"><span ref={activeHeading} tabIndex={-1} className="focus-visible:outline-action">{activity.content?.video ? 'Video lesson' : definition.label}</span>{activity.practice_section && <span> · {activity.practice_section.title} {activity.practice_section.item} of {activity.practice_section.total}</span>}{needsResponse(activity) && !['required_book', 'required', 'book'].includes(activity.origin) && <span> · {activity.origin === 'review' ? 'Review' : 'Extra practice'}</span>}</p>}
-              {!ownQuestion && <div className="tutor-bubble"><ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderSpokenText={renderSpokenText} docked /></div>}
+              {!ownQuestion && <div className="tutor-bubble"><ActivityCard activity={activity} state={state} language={language} busy={working} onEvent={event} onSource={onSource} renderReading={renderReading} renderSpokenText={renderSpokenText} docked />
+                {(snapMode || paced) && together.length > 0 && !activity.fix && <ul className="mt-3 flex flex-col gap-3" aria-label={paced ? 'Also done together' : 'Also in this photo'}>
+                  {together.map((item) => <li key={item.id} className="font-semibold whitespace-pre-wrap">{renderSpokenText?.(activity, item.prompt, item.id) || item.prompt}</li>)}
+                </ul>}</div>}
               {activity.review_after_video && activity.status === 'pending' && <div className="tutor-note flex flex-col gap-2">
                 <p className="text-sm">You watched the video. This is the book's mini lesson on the same idea: read it as a quick review, or skip ahead.</p>
                 <Button size="sm" className="self-start" disabled={working} onClick={() => event('reading_done')}>Skip the review</Button>
@@ -459,9 +465,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           {activity.fix.read && <p>I read in your photo: {activity.fix.read}</p>}
           {activity.fix.feedback && <p className="whitespace-pre-wrap">{activity.fix.feedback}</p>}
         </div>}
-        {snapMode && <p role="status" className="tutor-hint">{activity.fix ? 'Fix it in your book, then take a new photo.' : 'Do this in your book, then take a photo. It is checked while you keep going.'}</p>}
+        {snapMode && <p role="status" className="tutor-hint">{activity.fix ? 'Fix it in your book, then take a new photo.' : coveredCount > 1 ? `Do all ${coveredCount} questions in your book, then take one photo of them. It is checked while you keep going.` : 'Do this in your book, then take a photo. It is checked while you keep going.'}</p>}
         {!snapMode && state.page_work?.available_count > 1 && <div className="tutor-note flex flex-col gap-2"><p className="text-sm">You can photograph these {state.page_work.available_count} book questions together.</p><Button disabled={working} onClick={() => event('open_page_work')}>Send this page together</Button></div>}
-        {paced && <p role="status" className="tutor-hint">Do this in your book, then press <strong>Done</strong>. A grown-up checks the book later.</p>}
+        {paced && <p role="status" className="tutor-hint">{coveredCount > 1 ? `Do all ${coveredCount} questions in your book, then press ` : 'Do this in your book, then press '}<strong>Done</strong>. A grown-up checks the book later.</p>}
         {!paced && !snapMode && activity.kind === 'request_book_work' && !physicalReady && activity.status === 'pending' && <Button data-lesson-primary variant="primary" disabled={working} onKeyDown={blockRepeat} onClick={() => event('physical_complete')}>I have finished writing in my book</Button>}
         {awaitingAssessment && response && <div className="flex flex-col gap-2">
           <p className="text-sm text-muted">{response.feedback_failure === 'invalid_reply'
@@ -508,9 +514,9 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
           <div ref={setSubmitSlot} className="contents" />
           {snapMode && <SnapWork key={snapKey} busy={working} onSnap={snap} viewSlot={snapSlot} onType={() => setTyping(snapKey)}
             {...(parentCheck ? { typeLabel: 'A grown-up checked it instead', TypeIcon: UserCheck } : {})}
-            label={activity.fix ? 'New photo' : activity.practice_section?.total > 1 ? `Photo of all ${activity.practice_section.total - activity.practice_section.item + 1}` : 'Photo of my work'} />}
+            label={activity.fix ? 'New photo' : coveredCount > 1 ? `Photo of all ${coveredCount}` : 'Photo of my work'} />}
           {paced && !state.on_break && <Button data-lesson-primary variant="primary" disabled={working} onKeyDown={blockRepeat} onClick={() => event('done_in_book')}>
-            {activity.practice_section?.total > 1 ? `Done · all ${activity.practice_section.total - activity.practice_section.item + 1} in my book` : 'Done in my book'}
+            {coveredCount > 1 ? `Done · all ${coveredCount} in my book` : 'Done in my book'}
           </Button>}
           {parentCheck && !snapMode && !state.on_break && <>
             <Button variant="primary" disabled={working} onClick={() => event('parent_check', { result: 'checked' })}>✓ Looks good</Button>

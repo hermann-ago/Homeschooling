@@ -338,6 +338,13 @@ class ActivityEngine:
             active["paced"] = bool(_paced(playback) and _exercise(active_row) and active_row["status"] == "pending")
             waiting = (active.get("interaction") or {}).get("status") in ("awaiting_work", "awaiting_input", "awaiting_followup")
             active["snap"] = bool(not _paced(playback) and photo_check.snappable(active_row) and waiting)
+            if active["snap"] or active["paced"]:
+                # One photo (or one Done) covers the rest of the practice section too, so the
+                # child is shown, and told, every question it covers, not just the first.
+                together = self._section_group(self.db, session, active_row)[1:]
+                if together:
+                    active["together"] = [{"id": a["action_id"], "prompt": capture_content(self.ctx, a).get("prompt") or a["prompt"]}
+                                          for a in together]
             if photo_check.fixing(active_row):
                 active["fix"] = {k: v for k, v in (checks.get(active_row["action_id"]) or {}).items() if k in ("read", "result", "feedback")}
         legacy = self.tutor.interactive.state(session_id)
