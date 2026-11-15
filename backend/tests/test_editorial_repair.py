@@ -95,3 +95,31 @@ def test_repair_tracks_all_usage_without_enforcing_the_legacy_job_cap(harness, m
     assert h.ctx.ai.ledger.scope_summary(calls[0])['used_usd'] == .12
     assert len(h.ctx.ai.ledger.requests()) == 4
     assert not h.ctx.store.all('attempts')
+
+
+def test_the_family_can_keep_a_script_the_review_wanted_changed(harness, monkeypatch):
+    h = harness
+    seed, _ = prepare(h, monkeypatch)
+    def planner(text, models, **kwargs):
+        return {'mode': 'expand', 'segments': [
+            {'type': 'intro', 'text': 'Let us read together.'}, {'type': 'read', 'from': 0, 'to': 99},
+            {'type': 'action', 'text': 'What changed?', 'action_kind': 'answer'},
+            {'type': 'recap', 'text': 'We have reached our stopping place.'}]}, 'synthetic'
+    finding = {'category': 'task', 'severity': 'blocking', 'activity_ids': [],
+               'detail': 'The quiz should be run by a grown-up.', 'suggestion': 'Use parent_check.'}
+    monkeypatch.setattr(guide, 'write_plan', planner)
+    monkeypatch.setattr(h.ctx.ai, 'generate', lambda *a, **k: {'findings': [finding]})
+    saved = h.call('POST', '/api/tutor/reader/guide', json={'learner': seed['lucas']['id'], 'topic': seed['genghis']['id'],
+                                                            'rewrite': True, 'prepare_voice': False, 'maximum_usd': .1}).json()
+    assert saved['script_review']['status'] == 'needs_changes'
+    row = h.ctx.store.get('guides', saved['guide_id'])
+    digest = script_review.identity(script_review.inputs(h.ctx, row))
+    url = f"/api/tutor/guides/{saved['guide_id']}/review/approve"
+    assert h.call('POST', url, json={'expected_input_sha256': '0' * 64}).status_code == 409
+    approved = h.call('POST', url, json={'expected_input_sha256': digest, 'note': 'Typed boxes record the misses.'})
+    assert approved.status_code == 200, approved.text
+    latest = script_review.latest(h.ctx, row['id'])
+    assert latest['status'] == 'approved' and latest['method'] == 'family_review'
+    assert latest['data']['overridden_findings'] == [finding]
+    script_review.require_audio(h.ctx, {'guide_id': row['id']})  # the voice can now be prepared
+    assert h.call('POST', url, json={'expected_input_sha256': digest}).status_code == 400  # nothing left to approve

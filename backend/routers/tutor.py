@@ -673,6 +673,23 @@ def retry_script_review(guide_id:str,payload:ScriptReviewRequest):
     return script_review_details(guide_id)
 
 
+class FamilyApprovalRequest(BaseModel):
+    expected_input_sha256:str=Field(pattern=r'^[0-9a-f]{64}$')
+    note:str=Field(default='',max_length=1000)
+
+
+@router.post('/guides/{guide_id}/review/approve',dependencies=[Depends(require_family)])
+def approve_script_by_family(guide_id:str,payload:FamilyApprovalRequest):
+    """The family keeps a script the AI review wanted changed; then its voice can be prepared."""
+    from tutoring import script_review
+    row=get_or_404(store(),'guides',guide_id,'Guide')
+    if script_review.identity(script_review.inputs(context(),row))!=payload.expected_input_sha256:
+        raise HTTPException(409,'The review inputs changed. Reopen the saved review.')
+    try:script_review.approve_by_family(context(),row,payload.note)
+    except ValueError as exc:raise HTTPException(400,str(exc)) from exc
+    return script_review_details(guide_id)
+
+
 @router.post('/reader/guide/import',dependencies=[Depends(require_family)])
 def import_reviewed_guide(payload:ReviewedGuideRequest,background_tasks:BackgroundTasks):
     """Codex/family-reviewed scripts use the same source and coverage checks as AI."""

@@ -184,6 +184,18 @@ def save(ctx,row,data,result,method):
     return saved
 
 
+def approve_by_family(ctx, row, note=''):
+    """A grown-up read the saved script and approves it although the AI review asked for
+    changes. The AI review stays in the history; the family's decision becomes the latest.
+    Factual or source disagreements still go through source review."""
+    data = inputs(ctx, row)
+    report = latest(ctx, row['id'])
+    if not report or report['input_sha256'] != identity(data) or report['status'] != 'needs_changes':
+        raise ValueError('Only a current review that asked for changes can be approved by the family.')
+    return save(ctx, row, data, {'findings': [], 'note': str(note or '')[:1000],
+                                 'overridden_findings': report['data'].get('findings', [])}, 'family_review')
+
+
 def run(ctx,row,*,human=False,retry=False):
     with ctx.ai.preparing_lesson():
         return _run(ctx,row,human=human,retry=retry)
