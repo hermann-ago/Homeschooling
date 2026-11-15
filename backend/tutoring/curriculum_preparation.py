@@ -117,11 +117,23 @@ def enqueue(ctx, payload):
 
 
 def recover(ctx):
+    """Preparation a restart cut off continues by itself once the server is up (resume). It
+    picks up from what is saved; a request that was in flight is never sent again (the AI
+    ledger refuses it), so such a job stops and waits for an explicit retry. Rehearsal (test
+    mode) jobs still wait for a retry."""
     rows=[j for j in ctx.store.all('lesson_preparation_jobs') if j['status'] in ACTIVE]
     if rows:
         with ctx.store.transaction(kind='lesson.preparation.recover') as tx:
             for row in rows:tx.update('lesson_preparation_jobs',row['id'],{'status':'paused',
-                'error':'Preparation was interrupted by a server restart. Retry explicitly; saved materials are kept.'})
+                'error':'Preparation was interrupted by a server restart. Retry explicitly; saved materials are kept.'}
+                if ctx.is_test else {'status':'queued',
+                'error':'Preparation was interrupted by a server restart and continues by itself; saved materials are kept.'})
+
+
+def resume(ctx):
+    """Start the preparation waiting since the server started (see recover)."""
+    for job in ctx.store.all('lesson_preparation_jobs'):
+        if job['status']=='queued':launch(ctx,job['id'])
 
 
 def run(ctx, job_id):
@@ -129,7 +141,7 @@ def run(ctx, job_id):
     with ctx.store.transaction(kind='lesson.preparation.claim') as tx:
         job=tx.get('lesson_preparation_jobs',job_id)
         if not job or job['status']!='queued':return
-        job=tx.update('lesson_preparation_jobs',job_id,{'status':'running'})
+        job=tx.update('lesson_preparation_jobs',job_id,{'status':'running','error':None})
     # Compatible rehearsal material is generated from real observed learning,
     # exactly as the ordinary preparation route does, without learner actions.
     selected=ctx

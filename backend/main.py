@@ -75,6 +75,8 @@ def create_app(app_context=None) -> FastAPI:
             from app_context import AppContext
             set_context(AppContext())
             context().announce()
+            from tutoring.curriculum_preparation import resume
+            resume(context())
         _keep_host_awake(True)
         from security.https import manager
         secure = manager(app, context())

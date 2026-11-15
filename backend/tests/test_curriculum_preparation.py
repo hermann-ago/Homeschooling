@@ -169,21 +169,47 @@ def test_jobs_dedupe_preserve_progress_and_use_canonical_preparation(harness,mon
     assert h.call('POST','/api/tutor/preparation',role='tutor',json=body(s)).status_code==403
 
 
-def test_interrupted_jobs_pause_on_restart_and_failed_audio_keeps_the_guide(harness,monkeypatch):
+def test_interrupted_jobs_continue_after_restart_and_failed_audio_keeps_the_guide(harness,monkeypatch):
     h=harness;s,g=prepare(h,monkeypatch)
     h.config.update(tts={'enabled':True,'provider':'google-gemini'})
-    monkeypatch.setattr(prep,'launch',lambda *args:None)
+    launches=[]
+    monkeypatch.setattr(prep,'launch',lambda ctx,jid:launches.append(jid))
     h.call('POST','/api/tutor/preparation',json=body(s))
     h.restart()
     monkeypatch.setattr(h.ctx.ai,'generate',lambda *a,**kw:{'findings':[]})
     job=h.ctx.store.get('lesson_preparation_jobs','synthetic-prepare-01')
-    assert job['status']=='paused' and 'restart' in job['error']
+    # A restart does not leave the preparation waiting for someone to press Retry.
+    assert job['status']=='queued' and 'continues by itself' in job['error']
+    prep.resume(h.ctx)
+    assert launches[-1]=='synthetic-prepare-01'
     monkeypatch.setattr(prep.narration,'generate',lambda *args,**kw:(_ for _ in ()).throw(ValueError('Synthetic voice quota pause')))
-    response=h.call('POST','/api/tutor/preparation',json=body(s,operation_id='synthetic-retry-01',target='both'))
-    prep.run(h.ctx,response.json()['id'])
-    job=h.ctx.store.get('lesson_preparation_jobs',response.json()['id'])
+    prep.run(h.ctx,'synthetic-prepare-01')
+    job=h.ctx.store.get('lesson_preparation_jobs','synthetic-prepare-01')
     assert job['status']=='paused' and job['phase']=='audio' and 'quota' in job['error'],h.ctx.store.all('lesson_script_reviews')
     assert h.ctx.store.get('guides',job['guide_id']) and h.ctx.store.get('guides',g['guide_id']) and not h.ctx.store.all('attempts')
+
+
+def test_opening_the_records_while_the_server_runs_leaves_its_work_alone(harness,monkeypatch):
+    """A tool or a second start on the same data must not pause the running server's preparation
+    or mark its AI requests in flight as uncertain."""
+    import os, subprocess, sys
+    from app_context import AppContext
+    h=harness;s,g=prepare(h,monkeypatch)
+    monkeypatch.setattr(prep,'launch',lambda *args:None)
+    h.call('POST','/api/tutor/preparation',json=body(s))
+    with h.ctx.store.transaction() as tx:
+        tx.update('lesson_preparation_jobs','synthetic-prepare-01',{'status':'running'})
+    server=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])
+    try:
+        run=h.config.dir/'run'; run.mkdir(parents=True,exist_ok=True)
+        (run/'instance.json').write_text(json.dumps({'pid':server.pid,'token':'other'}))
+        other=AppContext(h.config,start_worker=False)
+        assert other.store.get('lesson_preparation_jobs','synthetic-prepare-01')['status']=='running'
+    finally:
+        server.kill(); server.wait()
+    # Once that server is gone, its unfinished preparation is recovered as usual.
+    h.restart()
+    assert h.ctx.store.get('lesson_preparation_jobs','synthetic-prepare-01')['status']=='queued'
 
 
 def test_test_mode_job_creation_does_not_write_live_job_records(harness,monkeypatch):

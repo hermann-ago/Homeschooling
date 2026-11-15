@@ -68,6 +68,25 @@ class ResponseCache:
         os.replace(temporary, path)
 
 
+def server_elsewhere(config) -> bool:
+    """Whether the home server is already running in another process on this data. Its
+    unfinished work is not interrupted then: a tool or a second start that opens the same
+    records must not pause its preparation or mark its requests in flight as uncertain."""
+    try:
+        record = json.loads((config.dir / "run" / "instance.json").read_text())
+    except (OSError, ValueError):
+        return False
+    pid = record.get("pid") if isinstance(record, dict) else None
+    if not isinstance(pid, int) or pid in (os.getpid(), os.getppid()):
+        return False
+    try:
+        import psutil
+        process = psutil.Process(pid)
+        return process.is_running() and "python" in process.name().lower()
+    except Exception:
+        return False
+
+
 class AppContext:
     def __init__(self, config: HostConfig | None = None, *, drive_folder=None, start_worker: bool = True,
                  live=None, files=None):
@@ -87,7 +106,10 @@ class AppContext:
         reconcile_completed_topics(self.store)
         from services.ai_provider import AIService
         self.ai = live.ai if live else AIService(self)
-        if not live:
+        elsewhere = not live and server_elsewhere(self.config)
+        if elsewhere:
+            logger.info("The home server is running in another process; its unfinished work is left to it")
+        elif not live:
             self.ai.ledger.recover_interrupted()
         self._assign_subject_folders()
         self.last_export = None
@@ -106,7 +128,8 @@ class AppContext:
         from tutoring.activity_engine import ActivityEngine
         self.activity_engine = ActivityEngine(self)
         from tutoring.curriculum_preparation import recover as recover_preparation
-        recover_preparation(self)
+        if not elsewhere:
+            recover_preparation(self)
         if not live:
             from services.test_mode import TestModes
             self.test_modes = TestModes(self)
