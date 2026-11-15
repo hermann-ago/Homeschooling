@@ -69,3 +69,18 @@ def test_published_recordings_drop_their_raw_ledger_copy(harness):
     ledger.save_job('job-running', {'status': 'running', 'request_ids': ['voice:in-progress']})
     assert audio_retention.slim_ledger(harness.ctx) == 1
     assert ledger.result('voice:published') is None and ledger.result('voice:in-progress') is not None
+
+
+def test_a_closing_note_keeps_its_recording_while_its_lesson_is_recent(harness):
+    h = harness
+    with h.ctx.store.transaction() as tx:
+        child = tx.insert('children', {'name': 'Lucas'})
+        subject = tx.insert('subjects', {'child_id': child['id'], 'name': 'Math'})
+        done = add_topic(tx, subject, 1, '2026-11-14T10:00:00Z')
+        add_guide(tx, done, 'script')
+        add_track(h, tx, done, 'script', 'lesson-voice')
+        add_track(h, tx, done, 'note-text', 'closing-voice')
+        tx.insert('tutor_sessions', {'id': 's-1', 'child_id': child['id'], 'subject_id': subject['id'], 'topic_id': done['id'],
+                                     'status': 'completed', 'completion_summary': {'closing_note': {'text': 'Well done.',
+                                     'audio': {'track_id': 'closing-voice', 'part': 0}}}})
+    assert audio_retention.plan(h.ctx.store) == []

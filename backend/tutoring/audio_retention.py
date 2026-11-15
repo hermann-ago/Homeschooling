@@ -39,6 +39,10 @@ def plan(db):
     remove = []
     tracks = [t for t in db.all('audio_tracks') if not (t.get('note') or '').startswith('feedback:')]
     by_topic = {}
+    # A lesson's closing note is heard at the start of the next lesson; it is not part of any
+    # script, so it stays with its lesson's other recordings rather than the script's.
+    notes = {((s.get('completion_summary') or {}).get('closing_note') or {}).get('audio', {}).get('track_id')
+             for s in db.all('tutor_sessions')} - {None}
     for track in tracks:
         by_topic.setdefault(track['topic_id'], []).append(track)
     topics = {t['id']: t for t in db.all('topics') if t['id'] in by_topic}
@@ -55,7 +59,8 @@ def plan(db):
                 remove += [t['id'] for t in by_topic[topic['id']]]
                 continue
             needed = _guide_shas_in_use(db, topic)
-            remove += [t['id'] for t in by_topic[topic['id']] if needed and t['passage_sha256'] not in needed]
+            remove += [t['id'] for t in by_topic[topic['id']] if needed and t['passage_sha256'] not in needed
+                       and t['id'] not in notes]
     return remove
 
 
