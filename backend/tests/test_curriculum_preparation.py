@@ -50,6 +50,28 @@ def test_review_retries_only_a_known_temporary_rejection_once(harness,monkeypatc
     assert voices==([True] if retried else [])
 
 
+def test_a_saved_script_never_reviewed_is_reviewed_by_the_job_before_its_voice(harness,monkeypatch):
+    """A preparation cut off after the script was saved: resuming reuses the script, reviews it,
+    then prepares its voice, instead of stopping at "no editorial review recorded"."""
+    from tutoring import script_review
+    h=harness;s,g=prepare(h,monkeypatch)
+    row=h.ctx.store.get('guides',g['guide_id'])
+    with h.ctx.store.transaction() as tx:
+        for review in tx.find('lesson_script_reviews',guide_id=row['id']):tx.delete('lesson_script_reviews',review['id'])
+        tx.update('guides',row['id'],{'context_snapshot':{**(row.get('context_snapshot') or {}),'script_review_policy':script_review.VERSION}})
+    reviews=[];voices=[]
+    monkeypatch.setattr(h.ctx.ai,'generate',lambda *a,**k:reviews.append(True) or {'findings':[]})
+    monkeypatch.setattr(prep,'launch',lambda *a:None)
+    monkeypatch.setattr(prep.narration,'generate',lambda *a,**k:voices.append(True) or {'job_status':'ready','track_id':'saved-voice'})
+    h.config.update(tts={'provider':'inworld','inworld_enabled':True})
+    job=h.call('POST','/api/tutor/preparation',json=body(s,target='audio')).json()
+    prep.run(h.ctx,job['id'])
+    saved=h.ctx.store.get('lesson_preparation_jobs',job['id'])
+    assert saved['status']=='completed',saved
+    assert reviews==[True] and voices==[True]
+    assert script_review.latest(h.ctx,row['id'])['status']=='approved'
+
+
 def test_curriculum_uses_configured_inworld_with_child_narrator(harness, monkeypatch):
     h = harness
     s, _ = prepare(h, monkeypatch)

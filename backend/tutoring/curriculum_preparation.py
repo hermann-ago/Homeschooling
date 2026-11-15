@@ -166,6 +166,16 @@ def run(ctx, job_id):
             from . import script_review
             from .script_review import require_audio
             report=script_review.latest(selected,guide['guide_id'])
+            row=selected.store.get('guides',guide['guide_id'])
+            if not report and row and (row.get('context_snapshot') or {}).get('script_review_policy'):
+                # A saved script never reviewed (its preparation was cut off after the script
+                # was written) is reviewed now, within this job's script allowance.
+                from services.ai_budget import micros
+                digest=script_review.identity(script_review.inputs(selected,row))
+                scope='script-review-'+row['id']+'-'+digest[:16]
+                selected.ai.ledger.configure_scope(scope,micros(job['maximum_guide_usd']),category='teaching')
+                with selected.ai.scoped(scope):
+                    report=script_review.run(selected,row)
             detail=(report or {}).get('data') or {}
             if report and report['status']=='failed' and detail.get('error_code')=='provider_rate_limit':
                 # A known rejected request has no unknown purchase to repeat.
