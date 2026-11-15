@@ -12,7 +12,7 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  * Without a live camera (plain HTTP, no webcam) the device's own camera or
  * photo picker stands in.
  */
-export default function SnapWork({ onSnap, busy, label = 'Photo of my work', viewSlot = null, onType }) {
+export default function SnapWork({ onSnap, busy, label = 'Photo of my work', viewSlot = null, onType, typeLabel = 'Answer here instead', TypeIcon = Keyboard }) {
   const [stage, setStage] = useState('idle'); // idle | camera | taken | sending
   const [preview, setPreview] = useState(null);
   const [ready, setReady] = useState(false);
@@ -92,7 +92,7 @@ export default function SnapWork({ onSnap, busy, label = 'Photo of my work', vie
       <Button ref={main} data-lesson-primary variant="primary" icon={Camera} disabled={busy} onKeyDown={repeat}
         onClick={() => { setError(''); if (live) setStage('camera'); else picker.current?.click(); }}>{label}</Button>
       {live && <button type="button" className="tutor-icon-button snap-extra" aria-label="Choose a saved photo" title="Choose a saved photo" disabled={busy} onClick={() => picker.current?.click()}><ImagePlus size={18} aria-hidden="true" /></button>}
-      {onType && <button type="button" className="tutor-icon-button snap-extra" aria-label="Answer here instead" title="Answer here instead" disabled={busy} onClick={onType}><Keyboard size={18} aria-hidden="true" /></button>}
+      {onType && <button type="button" className="tutor-icon-button snap-extra" aria-label={typeLabel} title={typeLabel} disabled={busy} onClick={onType}><TypeIcon size={18} aria-hidden="true" /></button>}
     </>}
     {stage === 'camera' && <>
       <Button onClick={() => setStage('idle')}>Cancel</Button>

@@ -19,7 +19,7 @@ from .service import TutorConflict, TutorError
 
 logger = logging.getLogger(__name__)
 
-EVENTS = {'snap_work', 'retry_photo_check', 'fix_work', 'fix_later'}
+EVENTS = {'snap_work', 'retry_photo_check', 'fix_work', 'fix_later', 'grown_up_checked'}
 RUNS_AFTER = {'snap_work', 'retry_photo_check'}
 MAX_PHOTOS = 3
 MAX_BYTES = 12 * 1024 * 1024
@@ -39,10 +39,16 @@ class PhotoCheckReply(BaseModel):
     items: list[CheckedWork] = Field(max_length=40)
 
 
+def hands_on(action):
+    """Book work judged by looking at the page (lines drawn, circling, underlining, colouring,
+    tracing). The tutor checks a photo of it first; a grown-up settles what the photo cannot."""
+    return bool((action.get('activity_content') or {}).get('parent_check'))
+
+
 def snappable(action):
     """A book exercise the child does on paper: its answer can arrive as a photo."""
     from .activity_engine import RESPONSE_KINDS
-    return bool(action.get('origin') == 'required_book' and action.get('activity_kind') in RESPONSE_KINDS
+    return bool(action.get('origin') == 'required_book' and (action.get('activity_kind') in RESPONSE_KINDS or hands_on(action))
                 and not action.get('parent_activity_id') and action['status'] == 'pending')
 
 
@@ -118,12 +124,17 @@ def _task(engine, tx, action):
         'try_number': attempt, 'earlier_replies': said[-3:] if attempt > 1 else [],
         'original_question': original_refs(action),
         'pages': sorted({r['page'] for r in action.get('source_refs') or [] if r.get('page')}),
-        'answer_format': content.get('answer_format', 'text'), 'evidence': content.get('evidence_requirement', 'answer'),
+        'answer_format': content.get('answer_format', 'text'),
+        'evidence': 'marks' if hands_on(action) else content.get('evidence_requirement', 'answer'),
         'choices': [c.get('label') for c in content.get('choices') or []],
         'blanks': [b.get('label') for b in content.get('blanks') or []],
         'teacher_key': _key(engine, tx, action)}
 
 
+MARKS = ('A task whose evidence is marks was done by drawing on the page (lines, circles, underlining, colouring, '
+         'tracing). For it: answer = a short description of what the child marked; judge those marks against the '
+         'task and its teacher_key; set uncertain = true whenever the photo does not let you tell exactly what was '
+         'marked or whether it is right. An uncertain one goes to a grown-up to look at, so never guess. ')
 TASKS = 'Tasks (teacher_key is private):\n'
 
 
@@ -144,6 +155,7 @@ def _prompt(engine, job):
         'and walk into the first small step with the child (for example ask what one digit or word is). Never repeat '
         'the wording of earlier_replies. '
         'Keep feedback brief and do not request new activities. Return every item_id exactly once. '
+        + (MARKS if any(t.get('evidence') == 'marks' for t in snapshot['tasks']) else '')
         + TASKS + json.dumps(snapshot['tasks'], ensure_ascii=False, default=str))
 
 
@@ -202,6 +214,14 @@ def apply(engine, tx, session, action, interaction, event, payload, operation_id
         if target['status'] != 'checking' or not latest or latest['status'] != 'failed':
             raise TutorConflict('There is no failed photo check to try again')
         tx.update('activity_jobs', latest['id'], {'status': 'queued', 'error': None})
+        return
+    if event == 'grown_up_checked':
+        # A grown-up looked at hands-on work the photo check could not settle (or marked to fix).
+        # As with a grown-up check during the step, the event log keeps it; no answer is assessed.
+        if not hands_on(target) or not (target['status'] == 'fix' or target['status'] == 'checking'
+                                         and latest and latest['status'] == 'failed'):
+            raise TutorConflict('Only hands-on work waiting for a look can be confirmed by a grown-up')
+        tx.update('lesson_actions', target['id'], {'status': 'answered', 'next_prompt': None})
         return
     # fix_work: open a checked exercise again, then return to this place.
     if fixing(action):
@@ -280,7 +300,10 @@ def _settle(snapshot, item):
     """An unsure reading is never a wrong answer; a reviewed true/false key decides a clear one."""
     from .keyed_assessment import checked_binary_assessment
     item = dict(item)
-    if item['uncertain'] and item['result'] in ('Partly correct', 'Not yet'):
+    task = next((t for t in snapshot['tasks'] if t['item_id'] == item['item_id']), {})
+    # Marks on a page that could not be made out are never passed either: a grown-up looks.
+    if item['uncertain'] and (item['result'] in ('Partly correct', 'Not yet')
+                              or task.get('evidence') == 'marks' and item['result'] == 'Correct'):
         item['result'] = 'Unreadable'
     key = next((t.get('teacher_key') for t in snapshot['tasks'] if t['item_id'] == item['item_id']), None)
     verdict = checked_binary_assessment(key, item['answer']) if isinstance(key, dict) and item['answer'] and not item['uncertain'] else None

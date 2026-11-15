@@ -1307,7 +1307,11 @@ class ActivityEngine:
         Photo answers add checking (being read), unchecked (the check failed)
         and fix (something to look at again; "practise" once the lesson ends).
         """
+        from . import photo_check
         checks = checks or {}
+        # Hands-on work a grown-up confirmed after its photo check: done, with no verdict.
+        confirmed = {(e.get("payload") or {}).get("activity_id") for e in self.db.find("activity_events", session_id=session_id)
+                     if e["event_type"] == "grown_up_checked"}
         said = {}
         for m in sorted(self.db.find("lesson_dialogue", session_id=session_id), key=lambda m: m["sequence"] or 0):
             if m["role"] == "student" and m["status"] == "assessed":
@@ -1318,7 +1322,10 @@ class ActivityEngine:
                 continue
             results = said.get(action["action_id"], [])
             check = checks.get(action["action_id"])
+            hands_on = photo_check.hands_on(action)
             outcome = ("skipped" if action["status"] == "skipped"
+                       else "grown_up" if action["status"] == "fix" and hands_on and (check or {}).get("result") == "Unreadable"
+                       else "done" if action["status"] == "answered" and action["action_id"] in confirmed
                        else ("practise" if finished else "fix") if action["status"] == "fix"
                        else ("unchecked" if finished or (check or {}).get("status") == "failed" else "checking") if action["status"] == "checking"
                        else "first_try" if results[:1] == ["Correct"] and not action.get("help_given")
@@ -1326,11 +1333,11 @@ class ActivityEngine:
                        else "practise" if action["status"] == "answered" and results
                        else "done" if action["status"] in ("answered", "in_book")
                        else "pending")
-            items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt"),
+            items.append({"id": action["action_id"], "outcome": outcome, "prompt": action.get("prompt"), "hands_on": hands_on,
                 **({"check": {**{k: check.get(k) for k in ("read", "result", "feedback", "error", "reply_id") if check.get(k)},
-                              "prompt": action.get("prompt")}} if check and outcome in ("fix", "unchecked", "checking", "practise") else {})})
+                              "prompt": action.get("prompt")}} if check and outcome in ("fix", "unchecked", "checking", "practise", "grown_up") else {})})
         graded = [i for i in items if i["outcome"] in ("first_try", "again", "practise", "fix")]
-        return {"items": [{k: i[k] for k in ("id", "outcome", "check") if k in i} for i in items],
+        return {"items": [{k: i[k] for k in ("id", "outcome", "check", "hands_on") if i.get(k)} for i in items],
                 "first_try": sum(i["outcome"] == "first_try" for i in items), "graded": len(graded),
                 "practise": [i["prompt"] for i in items if i["outcome"] in ("again", "practise", "fix")][:6]}
 

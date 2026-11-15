@@ -286,6 +286,19 @@ child was on. Finish waits for running checks. Anything still `fix` at the end i
 recorded as "to practise" (`completion_summary.photo_checks`) and is not carried
 into later lessons as pending work.
 
+### Hands-on work (lines, circles, colouring, tracing)
+
+A `parent_check` step is answered the same way: **Photo of my work** is its main
+button (`photo_check.hands_on`), and the quiet grown-up icon beside it keeps
+**Looks good** / **Let's try again** for a grown-up who is there. The check
+describes the child's marks and judges them against the task and its key
+(`evidence: marks`). A clear result is `answered` or `fix` as for any exercise.
+Whatever the reader is unsure of, even a "Correct", is `Unreadable`: the
+tracker shows it as `grown_up` ("for a grown-up to look at") and **Looks good**
+(`grown_up_checked`) marks it done without a grade; a grown-up may also pass
+hands-on work marked to fix, or whose check failed. Ordinary answers cannot be
+passed this way.
+
 Rehearse offline with `backend/dev/activity_demo.py --practice-sections` (the
 `photo-demo` launch configuration): the mocked check takes five seconds and
 returns one answer to fix.

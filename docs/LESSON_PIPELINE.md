@@ -124,8 +124,10 @@ with a photo"). For book work the
 grader receives the pinned key answer (`page_script.answer_for`) as teacher-only
 context, plus the private bundle for disputes. Evidence type comes from the
 exercise's declared response format. Hands-on work judged by looking (lines,
-colouring, tracing) uses `parent_check`: the step waits until a grown-up taps
-**Looks good** (or **Let's try again**) and records no grade. A grown-up can
+colouring, tracing) uses `parent_check`: the child sends a photo and the tutor
+checks the marks; what the photo cannot settle waits for a grown-up's
+**Looks good** (ACTIVITY_ENGINE.md, "Hands-on work"). A grown-up can also
+confirm it in the step, and that records no grade. A grown-up can
 also confirm any other unassigned book exercise from the lesson help. In a subject set to **Book exercises: Done in the book**, the
 child does each exercise in the book and moves on without sending answers;
 the closing step offers an optional photo check of the pages

@@ -4,21 +4,28 @@ import { Button, Dialog } from '../../ui';
 const LABELS = {
   first_try: 'right on the first try', again: 'right after another go', practise: 'to practise again',
   done: 'done', skipped: 'skipped for now', pending: 'still to do',
-  checking: 'being checked', fix: 'something to fix', unchecked: 'not checked yet',
+  checking: 'being checked', fix: 'something to fix', unchecked: 'not checked yet', grown_up: 'for a grown-up to look at',
 };
-const MARK = { fix: '!', unchecked: '?' };
+const MARK = { fix: '!', unchecked: '?', grown_up: '?' };
+// Still open after a photo check: something to fix, a check that failed, or marks the tutor could not make out.
+const OPEN = ['fix', 'unchecked', 'grown_up'];
+const GROWN_UP = 'Your tutor could not tell from the photo. Show this page to a grown-up.';
 const short = (text) => { const line = (text || '').trim(); return line.length > 400 ? `${line.slice(0, 400)}…` : line; };
 
 /** What a photo check found for one exercise, with the way to fix it. */
-function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose, renderVoice }) {
+function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onGrownUp, onClose, renderVoice }) {
   const check = item.check || {};
   const fix = item.outcome === 'fix';
   const failed = item.outcome === 'unchecked';
+  const grownUp = item.outcome === 'grown_up';
+  const open = OPEN.includes(item.outcome);
   return <Dialog open title={`Exercise ${number} · ${LABELS[item.outcome]}`} onClose={onClose} width={520}
     footer={<div className="flex flex-wrap justify-end gap-2 w-full">
-      <Button onClick={onClose}>{fix || failed ? 'Later' : 'Close'}</Button>
+      <Button onClick={onClose}>{open ? 'Later' : 'Close'}</Button>
       {failed && onRetry && <Button disabled={busy} onClick={() => { onClose(); onRetry(item.id); }}>Try the check again</Button>}
-      {(fix || failed) && onFix && <Button variant="primary" disabled={busy || !canFix} onClick={() => { onClose(); onFix(item.id); }}>{fix ? 'Fix it now' : 'Take the photo again'}</Button>}
+      {open && onFix && <Button variant={grownUp ? undefined : 'primary'} disabled={busy || !canFix} onClick={() => { onClose(); onFix(item.id); }}>{fix ? 'Fix it now' : 'Take the photo again'}</Button>}
+      {/* Hands-on work (lines, circles, colouring): a grown-up who looked at the page can pass it. */}
+      {open && item.hands_on && onGrownUp && <Button variant={grownUp ? 'primary' : undefined} disabled={busy} onClick={() => { onClose(); onGrownUp(item.id); }}>✓ A grown-up says it looks good</Button>}
     </div>}>
     <div className="flex flex-col gap-3 text-sm">
       {check.prompt && <p className="whitespace-pre-wrap font-semibold">{short(check.prompt)}</p>}
@@ -26,15 +33,16 @@ function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onClose, rend
       {check.read && <p className="rounded-xl bg-paper p-3"><span className="block text-xs text-muted">I read in your photo</span>{check.read}</p>}
       {check.feedback && <p className="whitespace-pre-wrap">{check.feedback}</p>}
       {/* Opening an exercise with something to fix reads the tutor's reply aloud. */}
-      {fix && check.feedback && check.reply_id && renderVoice?.({ id: check.reply_id, text: check.feedback })}
+      {(fix || grownUp) && check.feedback && check.reply_id && renderVoice?.({ id: check.reply_id, text: check.feedback })}
+      {grownUp && <p className="text-attention">{GROWN_UP}</p>}
       {failed && <p className="text-attention">{check.error || 'This photo could not be checked yet. Nothing was marked wrong.'}</p>}
-      {(fix || failed) && !canFix && <p className="text-xs text-muted">Finish the answer you are fixing first.</p>}
+      {open && !canFix && <p className="text-xs text-muted">Finish the answer you are fixing first.</p>}
     </div>
   </Dialog>;
 }
 
 /** One chip per exercise. A chip with a photo check opens what the check found. */
-export function ProgressDots({ progress, currentId, canFix = true, busy = false, onFix, onRetry, renderVoice }) {
+export function ProgressDots({ progress, currentId, canFix = true, busy = false, onFix, onRetry, onGrownUp, renderVoice }) {
   const items = progress?.items || [];
   const greens = items.filter((i) => i.outcome === 'first_try').map((i) => i.id).join(',');
   // Dots that were already green when the lesson opened do not pop.
@@ -47,7 +55,7 @@ export function ProgressDots({ progress, currentId, canFix = true, busy = false,
     return () => clearTimeout(timer);
   }, [greens, fresh.size]);
   if (items.length < 2 && !items.some((i) => i.check)) return null;
-  const toFix = items.filter((i) => ['fix', 'unchecked'].includes(i.outcome));
+  const toFix = items.filter((i) => OPEN.includes(i.outcome));
   const checking = items.filter((i) => i.outcome === 'checking').length;
   const opened = items.find((i) => i.id === open && i.check);
   return <div className="progress-tracker">
@@ -62,13 +70,13 @@ export function ProgressDots({ progress, currentId, canFix = true, busy = false,
       {checking > 0 && <span className="text-muted">Checking {checking} answer{checking === 1 ? '' : 's'}…</span>}
       {toFix.length > 0 && <button type="button" className="progress-fix" onClick={() => setOpen(toFix[0].id)}>{toFix.length} to look at</button>}
     </p>}
-    {opened && <CheckDetail item={opened} number={items.indexOf(opened) + 1} canFix={canFix} busy={busy} onFix={onFix} onRetry={onRetry} onClose={() => setOpen(null)} renderVoice={renderVoice} />}
+    {opened && <CheckDetail item={opened} number={items.indexOf(opened) + 1} canFix={canFix} busy={busy} onFix={onFix} onRetry={onRetry} onGrownUp={onGrownUp} onClose={() => setOpen(null)} renderVoice={renderVoice} />}
   </div>;
 }
 
 /** At the end of the lesson: the answers still to look at, each one tap from fixing. */
-export function ToFix({ progress, checking, busy, onFix, onRetry }) {
-  const items = (progress?.items || []).map((item, n) => ({ ...item, number: n + 1 })).filter((i) => ['fix', 'unchecked'].includes(i.outcome));
+export function ToFix({ progress, checking, busy, onFix, onRetry, onGrownUp }) {
+  const items = (progress?.items || []).map((item, n) => ({ ...item, number: n + 1 })).filter((i) => OPEN.includes(i.outcome));
   if (!items.length && !checking) return null;
   return <section aria-label="Answers to look at" className="rounded-xl border border-line p-3 flex flex-col gap-2">
     <h2 className="font-semibold">{items.length ? 'Answers to look at' : 'Almost done'}</h2>
@@ -77,10 +85,12 @@ export function ToFix({ progress, checking, busy, onFix, onRetry }) {
       <p className="font-semibold">Exercise {item.number}</p>
       <p className="whitespace-pre-wrap">{short(item.check?.prompt).split('\n').slice(0, 3).join('\n')}</p>
       {item.check?.read && <p className="text-muted">I read: {item.check.read}</p>}
-      {item.outcome === 'fix' ? item.check?.feedback && <p>{item.check.feedback}</p> : <p className="text-attention">{item.check?.error || 'This photo could not be checked yet.'}</p>}
+      {item.outcome === 'unchecked' ? <p className="text-attention">{item.check?.error || 'This photo could not be checked yet.'}</p> : item.check?.feedback && <p>{item.check.feedback}</p>}
+      {item.outcome === 'grown_up' && <p className="text-attention">{GROWN_UP}</p>}
       <div className="flex flex-wrap gap-2 mt-1">
         <Button size="sm" variant="primary" disabled={busy} onClick={() => onFix(item.id)}>{item.outcome === 'fix' ? 'Fix it now' : 'Take the photo again'}</Button>
         {item.outcome === 'unchecked' && <Button size="sm" disabled={busy} onClick={() => onRetry(item.id)}>Try the check again</Button>}
+        {item.hands_on && onGrownUp && <Button size="sm" disabled={busy} onClick={() => onGrownUp(item.id)}>✓ A grown-up says it looks good</Button>}
       </div>
     </article>)}
     {items.length > 0 && <p className="text-xs text-muted">You can also finish now. Anything left here is saved for a grown-up as “to practise”.</p>}

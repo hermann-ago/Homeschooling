@@ -96,3 +96,35 @@ it('sends a plain step again when only a finished check changed the revision', a
   expect(api.event.mock.calls[1][1]).toMatchObject({ type: 'continue', expected_revision: 2 });
   expect(screen.queryByText(/Your saved place changed/)).toBeNull();
 });
+
+const handsOn = (patch = {}) => exercise({ kind: 'explain_or_observe', content: { text: 'Draw a line from each word to its meaning.', parent_check: true }, ...patch });
+
+it('answers hands-on work with a photo first, with the grown-up check one tap away', async () => {
+  api.state.mockResolvedValue(state(handsOn()));
+  api.event.mockResolvedValue(state(next(), { revision: 2 }));
+  render(<ActivityLesson sessionId="s1" />);
+  expect(await screen.findByRole('button', { name: /Photo of my work/ })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: '✓ Looks good' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'A grown-up checked it instead' }));
+  fireEvent.click(await screen.findByRole('button', { name: '✓ Looks good' }));
+  await waitFor(() => expect(api.event.mock.calls[0][1]).toMatchObject({ type: 'parent_check', payload: { result: 'checked' } }));
+});
+
+it('sends marks the tutor could not make out to a grown-up, who can pass them from the dot', async () => {
+  const grownUp = vi.fn();
+  const progress = { items: [{ id: 'a1', outcome: 'first_try' }, { id: 'a2', outcome: 'grown_up', hands_on: true,
+    check: { prompt: 'Draw a line from each word to its meaning.', read: 'Some faint lines', feedback: 'I could not see your lines clearly.', result: 'Unreadable' } }] };
+  render(<ProgressDots progress={progress} currentId="a3" onFix={vi.fn()} onRetry={vi.fn()} onGrownUp={grownUp} />);
+  fireEvent.click(screen.getByRole('button', { name: '1 to look at' }));
+  expect(screen.getByText('Your tutor could not tell from the photo. Show this page to a grown-up.')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Take the photo again' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '✓ A grown-up says it looks good' }));
+  expect(grownUp).toHaveBeenCalledWith('a2');
+});
+
+it('does not offer the grown-up pass for an ordinary answer to fix', () => {
+  const progress = { items: [{ id: 'a1', outcome: 'first_try' }, { id: 'a2', outcome: 'fix', check: { prompt: 'A__inatura', feedback: 'Count the letters s.' } }] };
+  render(<ProgressDots progress={progress} currentId="a3" onFix={vi.fn()} onRetry={vi.fn()} onGrownUp={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button', { name: '1 to look at' }));
+  expect(screen.queryByRole('button', { name: '✓ A grown-up says it looks good' })).toBeNull();
+});

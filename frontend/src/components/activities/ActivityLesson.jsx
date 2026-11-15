@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp, Camera, Coffee, MessageCircleQuestion, PencilLine } from 'lucide-react';
+import { ArrowUp, Camera, Coffee, MessageCircleQuestion, PencilLine, UserCheck } from 'lucide-react';
 import { activitiesApi } from '../../api/activities';
 import { tutorApi } from '../../api/tutor';
 import { modeHref } from '../../api/mode';
@@ -392,7 +392,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
   return <section ref={lessonPanel} aria-label="Tutor activities" className="tutor-chat">
     <header className="tutor-chat-header">
       <LessonPosition state={state} header busy={working} canFix={Boolean(activity) && !activity.fix && !state.on_break && state.status !== 'completed'}
-        onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })}
+        onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} onGrownUp={(id) => event('grown_up_checked', { activity_id: id })}
         renderVoice={(message) => renderFeedback?.({ message, play: true })} />
       <div className="tutor-header-actions">
         {activity && !state.on_break && <button type="button" className="tutor-icon-button" aria-label="Take a break" title="Take a break" disabled={working} onClick={() => event('take_break')}><Coffee size={18} aria-hidden="true" /></button>}
@@ -435,7 +435,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
       {state.on_break ? <section aria-label="Lesson break" className="flex flex-col gap-2"><h2 className="font-semibold">Your place is saved</h2><p className="text-sm">Take your break. Your pending activity and original answers will be here when you return.</p></section> : <>
         <CatchUpNotice state={state} busy={working} onFocus={() => event('focus_unfinished')} />
         {activity?.kind === 'close_lesson' && activity.status === 'pending' && <ToFix progress={state.progress} checking={Boolean(state.checking)} busy={working}
-          onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} />}
+          onFix={(id) => event('fix_work', { activity_id: id })} onRetry={(id) => event('retry_photo_check', { activity_id: id })} onGrownUp={(id) => event('grown_up_checked', { activity_id: id })} />}
         {activity?.kind === 'close_lesson' && activity.status === 'pending' && state.book_check?.count > 0 && <BookCheck check={state.book_check} sessionId={sessionId} onUpload={upload} onEvent={event} busy={working} />}
         <ClosingSummary state={state} busy={working} onRepeat={onRepeat} onRevisit={(activityId) => event('revisit_activity', { activity_id: activityId })} />
             {workGroup ? <><p className="tutor-step-label">{workGroup.scope === 'exercise' ? `Exercise · ${workGroup.items.length} parts together` : state.page_work?.id ? `Book page ${state.page_work.items[0]?.page} · ${state.page_work.items.length} answers together` : 'Book work together'}</p>
@@ -479,7 +479,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {definition.family === 'unsupported' && <p role="alert">This activity needs a supported definition. Ask a parent to review it; no learner result has been inferred.</p>}
         {activity.can_continue_discussion && <p className="text-sm text-muted">You can continue with this explanation, or add more to your answer if you want.</p>}
         {activity.kind === 'close_lesson' && <p role="status" className="text-sm text-muted">Your work is saved. Choose Finish lesson to mark this chapter complete in Curriculum. Any work left to revisit stays in your record.</p>}
-        {parentCheck && <p role="status" className="tutor-hint">{triedAgain === activity.interaction?.id ? 'Have another go, then show your book again.' : 'When you are done, show your book to a grown-up.'}</p>}
+        {parentCheck && !snapMode && <p role="status" className="tutor-hint">{triedAgain === activity.interaction?.id ? 'Have another go, then show your book again.' : 'When you are done, show your book to a grown-up.'}</p>}
       </>}</>}
           </section>
         </div>
@@ -507,11 +507,12 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         <div className="tutor-controls-main" aria-label="Lesson step controls">
           <div ref={setSubmitSlot} className="contents" />
           {snapMode && <SnapWork key={snapKey} busy={working} onSnap={snap} viewSlot={snapSlot} onType={() => setTyping(snapKey)}
+            {...(parentCheck ? { typeLabel: 'A grown-up checked it instead', TypeIcon: UserCheck } : {})}
             label={activity.fix ? 'New photo' : activity.practice_section?.total > 1 ? `Photo of all ${activity.practice_section.total - activity.practice_section.item + 1}` : 'Photo of my work'} />}
           {paced && !state.on_break && <Button data-lesson-primary variant="primary" disabled={working} onKeyDown={blockRepeat} onClick={() => event('done_in_book')}>
             {activity.practice_section?.total > 1 ? `Done · all ${activity.practice_section.total - activity.practice_section.item + 1} in my book` : 'Done in my book'}
           </Button>}
-          {parentCheck && !state.on_break && <>
+          {parentCheck && !snapMode && !state.on_break && <>
             <Button variant="primary" disabled={working} onClick={() => event('parent_check', { result: 'checked' })}>✓ Looks good</Button>
             <Button disabled={working} onClick={async () => { if (await event('parent_check', { result: 'try_again' })) setTriedAgain(activity.interaction?.id); }}>Let&apos;s try again</Button>
           </>}

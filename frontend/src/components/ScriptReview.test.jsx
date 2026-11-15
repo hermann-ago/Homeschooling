@@ -2,7 +2,7 @@
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-const api=vi.hoisted(()=>({scriptReview:vi.fn(),retryScriptReview:vi.fn()}));
+const api=vi.hoisted(()=>({scriptReview:vi.fn(),retryScriptReview:vi.fn(),approveScript:vi.fn()}));
 vi.mock('../api/tutor',()=>({tutorApi:api}));
 import ScriptReview from './ScriptReview';
 const failed={input_sha256:'a'.repeat(64),status:{status:'failed',summary:'Script saved · review could not finish'},review:{data:{error:'Synthetic connection failed',findings:[]}}};
@@ -51,4 +51,23 @@ it('lets a grown-up approve the expected answers for boxes the key does not cove
   await waitFor(()=>expect(api.approveAnswers).toHaveBeenCalledTimes(2));
   expect(api.approveAnswers).toHaveBeenCalledWith('guide-synthetic',0,['humor','horta']);
   expect(api.approveAnswers).toHaveBeenCalledWith('guide-synthetic',1,['Dromedário']);
+});
+
+it('lets a grown-up keep a script the review wanted changed, but not one with a source conflict',async()=>{
+  const finding={severity:'blocking',category:'task',detail:'The quiz should be run by a grown-up.',suggestion:'Use a grown-up check.'};
+  api.scriptReview.mockResolvedValue({...failed,status:{status:'needs_changes',summary:'Script saved · review found changes to make'},review:{method:'ai',data:{findings:[finding]}}});
+  show();await screen.findByText('The quiz should be run by a grown-up.');
+  api.approveScript.mockResolvedValue({});
+  api.scriptReview.mockResolvedValue({...failed,status:{status:'approved',summary:'Script reviewed'},review:{method:'family_review',data:{findings:[],overridden_findings:[finding]}}});
+  fireEvent.click(screen.getByRole('button',{name:'Approve as it is'}));
+  await screen.findByText('Approved as it is by a grown-up');
+  expect(api.approveScript).toHaveBeenCalledWith('guide-synthetic',{expected_input_sha256:'a'.repeat(64)});
+  expect(screen.getByText('The quiz should be run by a grown-up.')).toBeTruthy();
+  expect(screen.queryByRole('button',{name:'Approve as it is'})).toBeNull();
+});
+
+it('offers no approval for a source disagreement',async()=>{
+  api.scriptReview.mockResolvedValue({...failed,status:{status:'needs_source_review',summary:'Source clarification needed'},review:{data:{findings:[]}}});
+  show();await screen.findByText('Source clarification needed');
+  expect(screen.queryByRole('button',{name:'Approve as it is'})).toBeNull();
 });

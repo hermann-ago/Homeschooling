@@ -191,3 +191,69 @@ def test_a_photo_answer_still_to_fix_is_where_continuing_the_lesson_starts(harne
     assert [w['activity_id'] for w in state['learning_summary']['pending_work']] == [question['action_id']]
     continued = engine.repeat(state['session_id'], 'continue-the-fix', unfinished_only=True)
     assert continued['active_activity']['id'] == question['action_id']
+
+
+def hands_on_lesson(harness, monkeypatch):
+    """The seeded lesson with its question turned into hands-on book work (lines drawn on the page)."""
+    seeded, guide = prepare(harness, monkeypatch)
+    legacy = start(harness, seeded, guide)
+    engine = service(harness.ctx)
+    engine.background_checks = False
+    state = engine.state(legacy['session_id'])
+    step = next(a for a in harness.ctx.store.find('lesson_actions', session_id=state['session_id']) if a['activity_kind'] == 'ask_question')
+    with harness.ctx.store.transaction() as tx:
+        tx.update('lesson_actions', step['id'], {'origin': 'required_book', 'activity_kind': 'explain_or_observe', 'kind': 'activity',
+            'prompt': 'Draw a line from each word to its meaning.',
+            'activity_content': {'text': 'Draw a line from each word to its meaning.', 'parent_check': True}})
+    return engine, reach_question(engine, engine.state(state['session_id'])), step
+
+
+def test_hands_on_work_is_checked_from_a_photo_first(harness, monkeypatch):
+    engine, state, step = hands_on_lesson(harness, monkeypatch)
+    assert state['active_activity']['id'] == step['action_id'] and state['active_activity']['snap']
+    prompts = []
+    def read(prompt, **kwargs):
+        prompts.append(prompt)
+        return reader('Correct', 'Three lines, each to the right meaning')(prompt, **kwargs)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', read)
+    state = snap(harness, engine, state)
+    assert photo_check.MARKS in prompts[0] and '"evidence": "marks"' in prompts[0]
+    item = next(i for i in state['progress']['items'] if i['id'] == step['action_id'])
+    assert item['outcome'] == 'first_try' and item['hands_on']
+    assert harness.ctx.store.get('lesson_actions', step['id'])['status'] == 'answered'
+
+
+def test_marks_the_photo_cannot_settle_go_to_a_grown_up(harness, monkeypatch):
+    engine, state, step = hands_on_lesson(harness, monkeypatch)
+    # Even a "Correct" the reader is unsure of is not passed: a grown-up looks.
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader('Correct', 'Some faint lines', uncertain=True, feedback='I could not see your lines clearly.'))
+    state = snap(harness, engine, state)
+    item = next(i for i in state['progress']['items'] if i['id'] == step['action_id'])
+    assert item['outcome'] == 'grown_up' and item['check']['feedback'] == 'I could not see your lines clearly.'
+    assert harness.ctx.store.get('lesson_actions', step['id'])['status'] == 'fix'
+    state = event(engine, state, 'grown_up_checked', {'activity_id': step['action_id']})
+    item = next(i for i in state['progress']['items'] if i['id'] == step['action_id'])
+    assert item['outcome'] == 'done' and harness.ctx.store.get('lesson_actions', step['id'])['status'] == 'answered'
+    assert not harness.ctx.store.find('attempts', session_id=state['session_id'])  # looked at, never graded
+    with pytest.raises(TutorConflict):
+        event(engine, state, 'grown_up_checked', {'activity_id': step['action_id']})
+
+
+def test_a_clear_miss_in_hands_on_work_is_fixed_like_any_answer_and_a_grown_up_may_still_pass_it(harness, monkeypatch):
+    engine, state, step = hands_on_lesson(harness, monkeypatch)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader('Not yet', 'Two lines cross to the wrong meanings', feedback='Look again at the second word.'))
+    state = snap(harness, engine, state)
+    item = next(i for i in state['progress']['items'] if i['id'] == step['action_id'])
+    assert item['outcome'] == 'fix' and item['hands_on']
+    state = event(engine, state, 'fix_work', {'activity_id': step['action_id']})
+    assert state['active_activity']['id'] == step['action_id'] and state['active_activity']['snap']
+    state = event(engine, state, 'parent_check', {'result': 'checked'})  # the grown-up's look is still offered in the step
+    assert harness.ctx.store.get('lesson_actions', step['id'])['status'] == 'answered'
+
+
+def test_a_grown_up_cannot_pass_ordinary_answers_from_the_tracker(harness, monkeypatch):
+    engine, state, question = lesson(harness, monkeypatch)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader('Not yet', 'He fought them', feedback='Look again.'))
+    state = snap(harness, engine, state)
+    with pytest.raises(TutorConflict):
+        event(engine, state, 'grown_up_checked', {'activity_id': question['action_id']})

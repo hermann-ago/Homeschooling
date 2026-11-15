@@ -18,11 +18,21 @@ export default function ScriptReview({guideId}) {
       await refetch();await client.invalidateQueries({queryKey:['curriculum-preparation']});
     } catch(e){setProblem(e.message);} finally{setBusy(false);}
   };
+  // The review asked for changes the family is happy without: a grown-up keeps the script as written.
+  const approve=async()=>{
+    setBusy(true);setProblem('');
+    try {
+      await tutorApi.approveScript(guideId,{expected_input_sha256:data.input_sha256});
+      await refetch();await client.invalidateQueries({queryKey:['curriculum-preparation']});
+    } catch(e){setProblem(e.message);} finally{setBusy(false);}
+  };
+  const kept=data?.review?.method==='family_review'?data.review.data?.overridden_findings:null;
   return <details className="bg-paper rounded-lg p-3 text-sm" open={data?.status.status==='failed' ? true : undefined}>
     <summary className="cursor-pointer font-semibold">Script review</summary>
     {data&&<><p className="mt-2">{data.status.summary}</p><p className="text-xs text-muted mt-1">A source-consistency and teaching review. It does not independently verify every fact.</p>
       {data.review?.data?.provider&&<p className="text-xs text-muted mt-1">Review provider: {data.review.data.provider==='google'?'Google':'OpenAI'}</p>}
       {data.review?.data?.findings?.map((f,i)=><div key={i} className="mt-3 border-t border-line pt-2"><p className="font-semibold">{f.severity==='blocking'?'Needs adjustment':'Suggestion'} · {f.category.replaceAll('_',' ')}</p><p>{f.detail}</p><p className="mt-1">{f.suggestion}</p></div>)}
+      {kept?.length>0&&<div className="mt-3 border-t border-line pt-2"><p className="font-semibold">Approved as it is by a grown-up</p><p className="text-xs text-muted mt-1">The review had asked for:</p>{kept.map((f,i)=><p key={i} className="mt-1 text-muted">{f.detail}</p>)}</div>}
       {data.review?.data?.error&&<p className="text-problem mt-2">{data.review.data.error}</p>}
       {data.answer_key?.some(item=>item.answer)&&<details className="mt-3 border-t border-line pt-2">
         <summary className="cursor-pointer font-semibold">Answer key (teacher only)</summary>
@@ -38,6 +48,7 @@ export default function ScriptReview({guideId}) {
       {data.answer_key?.some(approvable)&&<AnswerApprovals key={guideId} guideId={guideId} entries={data.answer_key.filter(approvable)}/>}
       {['failed','outdated','not_reviewed'].includes(data.status.status)&&<div className="flex flex-col gap-2 mt-3"><Button disabled={busy} onClick={retry}>{busy?'Reviewing…':'Review saved script'}</Button><p className="text-xs text-muted">Review costs are tracked with your teaching usage. Saved replies are reused. A failed or uncertain purchase is not automatically replaced.</p></div>}
       {['needs_changes','needs_source_review'].includes(data.status.status)&&<p className="mt-3">Update the relevant teaching skill or source note, then select “Generate a new tutor script” below. Saved lessons and audio remain available.</p>}
+      {data.status.status==='needs_changes'&&<div className="flex flex-col gap-2 mt-3"><p>Or, if you have read the points above and are happy with the lesson as written, keep it:</p><Button disabled={busy} onClick={approve}>{busy?'Saving…':'Approve as it is'}</Button><p className="text-xs text-muted">The review stays in the lesson’s history. Then prepare the voice.</p></div>}
     </>}
     {(error||problem)&&<p role="alert" className="text-problem">{problem||error.message}</p>}
   </details>;

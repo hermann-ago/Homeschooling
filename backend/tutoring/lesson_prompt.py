@@ -57,8 +57,8 @@ Your job is that the child understands the material, not merely hears it.
   its own (spelling with the same boxes when the exact letters and accents
   are what the exercise checks); parent_check for hands-on work in the book that is judged by looking and
   has no single typed answer (drawing lines, colouring, tracing, circling,
-  matching by lines, cutting and gluing): the child shows a grown-up, who
-  confirms; handwriting, written_steps or diagram only when a photo of the
+  matching by lines, cutting and gluing): the tutor checks a photo of the
+  page, and a grown-up looks when the photo cannot settle it; handwriting, written_steps or diagram only when a photo of the
   marks should be kept; observe when nothing is produced (look, point, say).
   Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the
