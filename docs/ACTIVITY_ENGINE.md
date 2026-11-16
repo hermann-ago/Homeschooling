@@ -13,7 +13,7 @@ The 23 activities are:
 | `review_progress` | Reads relevant progress; creates no learner evidence. |
 | `prepare_lesson` | Retrieves the running lesson's pinned preparation. New preparation uses the existing preparation UI/API and the same activity schemas. |
 | `introduce` | Green introduction using the explicit Figtree style token; Continue acknowledges it. |
-| `read_source` | Reads exact, assigned source sentences; saves the narration cursor. |
+| `read_source` | Reads exact, assigned source sentences; saves the narration cursor. The book's words sit in a "From the book · page N" card ("Follow along in your book."), apart from the tutor's yellow notes, and a soft device-made chime plays just before their voice starts. |
 | `explain_or_observe` | Shows an explanation and returns to its originating activity. |
 | `ask_question` | Waits for an actual submitted response. |
 | `request_book_work` | Preserves assigned exercise/version; finishing writing opens capture. |

@@ -22,7 +22,7 @@ import { narrationPlace, narrationRange, sentencePieces } from './narrationRange
 import { requestReadFrom } from '../../utils/readAlong';
 
 function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, language,
-  onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed, bookOnPage = false }) {
+  onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed, bookOnPage = false, bookPageOf }) {
   const key = storageKey(state.session_id, `narration.${activity.id}.${activity.interaction?.id || 'legacy'}`);
   const start = activity.start_sentence ?? 0;
   const end = activity.end_sentence ?? guide.sentences.length - 1;
@@ -72,7 +72,7 @@ function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, l
       activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language}
       rangeStart={start} rangeEnd={end} visibleThrough={end} savedCursor={savedCursor}
       onCursorChange={changed} onPassageModeChange={onPassageModeChange}
-      settingsInHeader selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage}
+      settingsInHeader selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage} bookPageOf={bookPageOf}
       externalControls headless={headless} autoPlayRequest={autoPlayRequest} onTransport={transportChanged}
       // A finished reading can still be heard again (a tap on a sentence or on the book page); it only
       // reports its end once, while it is the lesson's pending step.
@@ -114,7 +114,7 @@ export function NewerVersionNotice({ newer, onSwitched }) {
 }
 
 export default function RegistryGuidedLesson({ guide, learner, topic, session, slotId, closed, resumeLesson, earlierVersion, newerVersion, warmUp,
-  activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt, bookOnPage = false }) {
+  activeIndex, onActiveIndex, language, onStarted, onFinished, onPassageModeChange, onSource, lessonOptions, onVoiceBuilt, bookOnPage = false, bookPageOf }) {
   const [startedSession, setStartedSession] = useState(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
@@ -210,8 +210,8 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
     activeIndex={activeIndex} onActiveIndex={onActiveIndex} language={language}
     onPassageModeChange={onPassageModeChange} complete={complete} onCursor={setCursor}
     onTransport={setTransport} autoPlayRequest={playRequest?.session === state.session_id && playRequest.place === narrationPlace(activity) ? playRequest.token : 0}
-    selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage} />,
-  [guide, activeIndex, onActiveIndex, language, onPassageModeChange, setCursor, playRequest, selectedSource, selectedSpeed, bookOnPage]);
+    selectedSource={selectedSource} selectedSpeed={selectedSpeed} bookOnPage={bookOnPage} bookPageOf={bookPageOf} />,
+  [guide, activeIndex, onActiveIndex, language, onPassageModeChange, setCursor, playRequest, selectedSource, selectedSpeed, bookOnPage, bookPageOf]);
   const sessionControls = ({ activity, state, busy, inMenu = false }) => <SessionNarrationControls inMenu={inMenu} tracks={tracks} source={selectedSource} speed={selectedSpeed}
     onChange={changeSettings} onReplay={() => transport?.replay?.()}
     canReplay={Boolean(!busy && !state.on_break && transport?.place === narrationPlace(activity) && transport.available && transport.replay)}

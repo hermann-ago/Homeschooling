@@ -17,6 +17,26 @@ function Harness({ tracks }) {
 }
 
 describe('ReadAlong', () => {
+  it("labels the book's own words with their page and asks the child to follow in the book", () => {
+    const lesson = { sentences: [
+      { text: 'Let us read about the tribes.', kind: 'teacher' },
+      { text: 'The Mongols came from the north.', kind: 'book', source: 4, paragraphIndex: 0 },
+      { text: 'They lived in felt tents.', kind: 'book', source: 5, paragraphIndex: 1 },
+    ] };
+    render(<ReadAlong passage={lesson} tracks={[]} activeIndex={1} onActiveIndex={() => {}} bookPageOf={(source) => (source === 4 ? 47 : 48)} />);
+    const book = screen.getByRole('region', { name: 'From the book' });
+    expect(book.textContent).toContain('From the book · page 47');
+    expect(book.textContent).toContain('Follow along in your book.');
+    expect(book.textContent).toContain('They lived in felt tents.');
+    expect(screen.getAllByRole('region', { name: 'From the book' })).toHaveLength(1);
+    expect(screen.getByText('Let us read about the tribes.').closest('section')).toBeNull();
+  });
+
+  it('adds no book label to a plain read-along, where every word is the book', () => {
+    render(<ReadAlong passage={passage} tracks={[]} activeIndex={0} onActiveIndex={() => {}} />);
+    expect(screen.queryByRole('region', { name: 'From the book' })).toBeNull();
+  });
+
   it('leaves the book text to the highlighted page and keeps the teacher talking in the panel', () => {
     const lesson = { sentences: [
       { text: 'Let us read about the tribes.', kind: 'teacher' },

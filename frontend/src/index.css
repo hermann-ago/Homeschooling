@@ -137,6 +137,10 @@
 .teacher-note-label { display: block; margin-bottom: .2rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #8A6100; }
 /* The sentence being spoken, in any text of the step on screen. */
 .spoken-now { background: #F5C842; color: inherit; border-radius: 4px; box-shadow: 0 0 0 2px #F5C842; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+/* The book's own words in a guided lesson: a page-like card, apart from the tutor's yellow notes. */
+.book-reading { display: flex; flex-direction: column; gap: .6rem; padding: .85rem 1rem 1rem; border: 1px solid #D9CDB4; border-left: 4px solid #6B4F2A; border-radius: .25rem .9rem .9rem .25rem; background: #FBF7EE; font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.7; color: var(--color-ink); }
+.book-reading-label { display: flex; align-items: center; gap: .4rem; margin: 0; font-family: var(--font-sans, inherit); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #6B4F2A; }
+.book-reading-hint { margin: -.4rem 0 0; font-family: var(--font-sans, inherit); font-size: .85rem; font-weight: 600; color: var(--color-muted); }
 .book-follow-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem .75rem; margin: 0; font-size: .875rem; color: var(--color-muted); }
 .book-follow-note > button { color: var(--color-action); font-weight: 600; text-decoration: underline; min-height: 2.25rem; }
 

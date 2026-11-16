@@ -83,6 +83,24 @@ describe('Activity reading boundaries and exact saved playback', () => {
     expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
   });
 
+  it("chimes before the book's own words start, so the child knows to follow in the book", async () => {
+    const tones = [];
+    class FakeAudio {
+      constructor() { this.currentTime = 0; this.state = 'running'; this.destination = {}; }
+      createOscillator() { const tone = { frequency: {}, connect: (next) => next, start: vi.fn(), stop: vi.fn() }; tones.push(tone); return tone; }
+      createGain() { return { gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: (next) => next }; }
+    }
+    vi.stubGlobal('AudioContext', FakeAudio);
+    const guided = { sentences: [{ text: 'Let us read.', kind: 'teacher' }, { text: 'The book begins.', kind: 'book', source: 0 }, { text: 'It goes on.', kind: 'book', source: 1 }] };
+    const { container, rerender } = render(<ReadAlong passage={guided} tracks={tracks} activeIndex={1} onActiveIndex={vi.fn()} rangeStart={1} rangeEnd={2} externalControls autoPlayRequest={0} />);
+    await waitFor(() => expect(container.querySelector('audio')).not.toBeNull());
+    Object.defineProperty(container.querySelector('audio'), 'readyState', { configurable: true, value: 1 });
+    rerender(<ReadAlong passage={guided} tracks={tracks} activeIndex={1} onActiveIndex={vi.fn()} rangeStart={1} rangeEnd={2} externalControls autoPlayRequest={1} />);
+    expect(tones).toHaveLength(2);
+    expect(window.HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+    await waitFor(() => expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  });
+
   it('cancels a pending autoplay when minimized or interrupted before the recording loads', async () => {
     let deliver;
     api.audioManifest.mockImplementationOnce(() => new Promise((resolve) => { deliver = resolve; }));

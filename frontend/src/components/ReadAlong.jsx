@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { Pause, Play, RotateCcw, VolumeX } from 'lucide-react';
+import { BookOpen, Pause, Play, RotateCcw, VolumeX } from 'lucide-react';
 import { tutorApi } from '../api/tutor';
 import { onReadFrom, partForSentence, sentenceAt } from '../utils/readAlong';
 import { beginNarration, isNarrating, registerNarrator } from '../utils/narration';
+import { playBookCue } from '../utils/bookCue';
 import { NARRATION_SPEEDS, narrationVoiceLabel } from '../utils/narrationSettings';
 
 const DEVICE = 'device';
@@ -18,8 +19,10 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   onAction, onReadingEnd, pendingActions = [], renderAction, resumeToken = 0, maxSeekIndex, onPassageModeChange,
   rangeStart = 0, rangeEnd, visibleThrough, savedCursor, onCursorChange, voiceSetup,
   externalControls = false, headless = false, autoPlayRequest = 0, onTransport,
-  settingsInHeader = false, selectedSource, selectedSpeed, bookOnPage = false }) {
+  settingsInHeader = false, selectedSource, selectedSpeed, bookOnPage = false, bookPageOf }) {
   const sentences = passage?.sentences || [];
+  // A guided lesson mixes the tutor's words with the book's; the book's are marked, on screen and with a chime.
+  const guided = sentences.some((sentence) => sentence.kind === 'teacher');
   const lastSentence = Math.min(rangeEnd ?? sentences.length - 1, sentences.length - 1);
   const resumableCursor = savedCursor && Number.isInteger(savedCursor.sentence_index) &&
     savedCursor.sentence_index >= rangeStart && savedCursor.sentence_index <= lastSentence ? savedCursor : null;
@@ -315,12 +318,22 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   useEffect(() => {
     onTransport?.({ playing, ended, recorded: recordedPart, unrecorded: unrecordedPart, error, available: (recordedPart || deviceAvailable) && !held && !unsafePassages, toggle: () => toggleRef.current?.(), replay: () => replayRef.current?.() });
   }, [onTransport, playing, ended, recordedPart, unrecordedPart, deviceAvailable, held, unsafePassages, error]);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!autoPlayRequest || autoplayed.current === autoPlayRequest || !recordedPart || held || unsafePassages) return;
     autoplayed.current = autoPlayRequest;
     beginNarration(narratorId.current);
-    if (audioRef.current?.readyState >= 1) toggleRef.current?.();
-    else pendingSeek.current = { time: pendingSeek.current?.time ?? cursorRef.current?.offset_seconds ?? 0, play: true };
+    const start = () => {
+      // A pause, another narrator or a newer request during the chime wins.
+      if (!mounted.current || autoplayed.current !== autoPlayRequest || !isNarrating(narratorId.current)) return;
+      if (audioRef.current && !audioRef.current.paused) return; // the child already pressed play
+      if (audioRef.current?.readyState >= 1) toggleRef.current?.();
+      else pendingSeek.current = { time: pendingSeek.current?.time ?? cursorRef.current?.offset_seconds ?? 0, play: true };
+    };
+    const chime = guided && sentences[rangeStart]?.kind !== 'teacher' ? playBookCue() : null;
+    if (chime) chime.then(start);
+    else start();
   }, [autoPlayRequest, recordedPart, held, unsafePassages]);
 
   const replay = () => seekTo(activeIndex ?? 0);
@@ -344,6 +357,13 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
       const paragraph = sentence.paragraphIndex ?? null;
       if (runs.length && runs[runs.length - 1].kind === kind && runs[runs.length - 1].paragraph === paragraph && !sentences[index - 1]?.pause_after) runs[runs.length - 1].items.push(index);
       else runs.push({ kind, paragraph, items: [index] });
+  });
+  // Consecutive book paragraphs read as one passage under one "From the book" label.
+  const blocks = [];
+  runs.filter((run) => !(followBook && run.kind === 'book')).forEach((run) => {
+    const last = blocks.at(-1);
+    if (run.kind === 'book' && last?.kind === 'book') last.runs.push(run);
+    else blocks.push({ kind: run.kind, runs: [run], page: run.kind === 'book' ? bookPageOf?.(sentences[run.items[0]]?.source) ?? null : null });
   });
   const sentenceButton = (index) => (
       <span key={`${index}-${sentences[index].text.slice(0, 12)}`} role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled || undefined}
@@ -472,15 +492,20 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
           <span>{followBook ? 'Follow the highlighted lines in the book.' : 'The book text is also highlighted on the page.'}</span>
           <button type="button" onClick={() => setShowBookText((shown) => !shown)}>{followBook ? 'Show the text here' : 'Hide the text here'}</button>
         </p>}
-        {runs.filter((run) => !(followBook && run.kind === 'book')).map((run) => (run.kind === 'teacher' ? (
-          <div key={run.items[0]} className="teacher-note text-[16px]">
+        {blocks.map((block) => (block.kind === 'teacher' ? (
+          <div key={block.runs[0].items[0]} className="teacher-note text-[16px]">
             <span className="teacher-note-label">Teacher</span>
-            <p className="m-0">{run.items.map(flow)}</p>
-            {sentences[run.items.at(-1)]?.pause_after && renderAction?.(sentences[run.items.at(-1)].pause_after)}
+            <p className="m-0">{block.runs[0].items.map(flow)}</p>
+            {sentences[block.runs[0].items.at(-1)]?.pause_after && renderAction?.(sentences[block.runs[0].items.at(-1)].pause_after)}
           </div>
-        ) : (
-          <p key={run.items[0]} className="m-0">{run.items.map(flow)}</p>
-        )))}
+        ) : guided ? (
+          <section key={block.runs[0].items[0]} className="book-reading" aria-label="From the book">
+            <p className="book-reading-label"><BookOpen aria-hidden="true" size={16} />
+              <span>From the book{block.page ? ` · page ${block.page}` : ''}</span></p>
+            <p className="book-reading-hint">Follow along in your book.</p>
+            {block.runs.map((run) => <p key={run.items[0]} className="m-0">{run.items.map(flow)}</p>)}
+          </section>
+        ) : block.runs.map((run) => <p key={run.items[0]} className="m-0">{run.items.map(flow)}</p>)))}
       </div>
     </div>
   );
