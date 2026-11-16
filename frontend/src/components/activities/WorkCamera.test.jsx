@@ -49,7 +49,7 @@ it('captures a readable frame, stops the webcam, and uploads only after confirma
   fireEvent.click(screen.getByRole('button', { name: 'Take photo', exact: true }));
   expect(await screen.findByAltText('Preview of your work')).toBeTruthy();
   expect(draw).toHaveBeenCalledWith(video, 0, 0, 1920, 1080);
-  expect(stop).toHaveBeenCalledOnce();
+  await waitFor(() => expect(stop).toHaveBeenCalledOnce()); // released as the preview closes
   expect(upload).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole('button', { name: 'Use this photo' }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());

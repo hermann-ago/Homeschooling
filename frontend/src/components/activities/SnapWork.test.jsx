@@ -60,3 +60,18 @@ it('waits for the tutor to finish reading before the camera covers the text', as
   view.rerender(<SnapWork onSnap={vi.fn()} holdCamera={false} />);
   await waitFor(() => expect(screen.getByLabelText('Camera').srcObject).toBe(media));
 });
+
+it('finds and locks the focus when Focus is pressed, and says so', async () => {
+  const track = { stop, label: 'Desk camera', getCapabilities: () => ({ focusMode: ['continuous', 'single-shot'] }), applyConstraints: vi.fn().mockResolvedValue(undefined) };
+  media = { getTracks: () => [track], getVideoTracks: () => [track] };
+  navigator.mediaDevices.getUserMedia.mockResolvedValue(media);
+  render(<SnapWork onSnap={vi.fn()} />);
+  const video = screen.getByLabelText('Camera');
+  await waitFor(() => expect(video.srcObject).toBe(media));
+  Object.defineProperties(video, { videoWidth: { value: 1920 }, videoHeight: { value: 1080 } });
+  fireEvent.loadedData(video);
+  fireEvent.click(screen.getByRole('button', { name: 'Find the focus and lock it' }));
+  expect(screen.getByText('Finding the sharpest focus…')).toBeTruthy();
+  expect(track.applyConstraints).toHaveBeenCalledWith({ advanced: [{ focusMode: 'single-shot' }] });
+  expect(await screen.findByText(/Focus locked/, {}, { timeout: 3000 })).toBeTruthy();
+});

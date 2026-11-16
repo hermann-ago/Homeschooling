@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /*
  * The camera for photos of book work. One stream is shared by every photo step
  * and stays on for a while after a step closes, so the next question needs no
- * new start-up. The camera keeps its own focus. The preview is left alone while
+ * new start-up. The camera keeps its own focus until the Focus button asks for a
+ * lock: then the lens is stepped across its range while the sharpness of each
+ * position is measured, the sharpest is held, and that distance is kept for this
+ * camera (and put back after a restart) until Focus is pressed again. Cameras
+ * that cannot set a distance focus once and hold it. The preview is left alone while
  * it shows: frames are measured only during a press, which waits briefly for a
  * sharp one, and a photo much softer than earlier ones is offered for a retake.
  * The whole frame is sent. A preview whose picture stops moving (the camera
@@ -21,6 +25,10 @@ const MAX_SIDE = 2048;
 const WAIT_FOR_SHARP = 1200;
 const SHARP = 0.8; // a frame this close to the sharpest seen is taken at once
 const BLURRY = 0.45; // below this share of the sharpest seen, the photo is called blurry
+const COARSE = 12; // lens positions tried across the whole range
+const FINE = 6; // then between the neighbours of the best one
+const SETTLE = 160; // the least time a lens position is given before it is measured
+const FOCUS_KEY = 'work-camera-focus';
 
 let current = null;
 
@@ -42,14 +50,16 @@ export function openCamera() {
     clearTimeout(current.timer);
     return current;
   }
-  const entry = { users: 1, best: 0, stream: null, timer: null, dead: false, closed: new Set() };
+  const entry = { users: 1, best: 0, stream: null, track: null, timer: null, dead: false, closed: new Set() };
   entry.ready = navigator.mediaDevices.getUserMedia(CONSTRAINTS).then((stream) => {
     if (entry.dead) {
       stream.getTracks().forEach((track) => track.stop());
       throw Object.assign(new Error('The camera was closed.'), { name: 'AbortError' });
     }
     entry.stream = stream;
-    stream.getVideoTracks?.()[0]?.addEventListener?.('ended', () => stop(entry));
+    entry.track = stream.getVideoTracks?.()[0] || null;
+    entry.track?.addEventListener?.('ended', () => stop(entry));
+    restoreFocus(entry);
     return stream;
   }, (failure) => { stop(entry); throw failure; });
   current = entry;
@@ -63,6 +73,95 @@ export function releaseCamera(entry, keep = KEEP_ON) {
   clearTimeout(entry.timer);
   if (keep > 0) entry.timer = setTimeout(() => stop(entry), keep);
   else stop(entry);
+}
+
+// Focus: the camera's own autofocus, unless the Focus button locked a distance.
+function capabilities(track) {
+  try { return track?.getCapabilities?.() || {}; } catch { return {}; }
+}
+
+/** How this camera can be focused: 'distance' (the lens can be set), 'once' (it can focus once and hold), or null. */
+export function focusKind(track) {
+  const caps = capabilities(track); const modes = caps.focusMode || [];
+  const range = caps.focusDistance;
+  if (modes.includes('manual') && range && Number.isFinite(range.min) && Number.isFinite(range.max) && range.max > range.min) return 'distance';
+  if (modes.includes('single-shot')) return 'once';
+  return null;
+}
+
+const cameraName = (track) => track?.label || 'camera';
+function savedFocus(track) {
+  try { return JSON.parse(window.localStorage.getItem(FOCUS_KEY) || '{}')[cameraName(track)] ?? null; } catch { return null; }
+}
+function saveFocus(track, distance) {
+  try {
+    const all = JSON.parse(window.localStorage.getItem(FOCUS_KEY) || '{}');
+    all[cameraName(track)] = distance;
+    window.localStorage.setItem(FOCUS_KEY, JSON.stringify(all));
+  } catch { /* the lock still holds for this page */ }
+}
+
+const setFocus = (track, setting) => Promise.resolve(track.applyConstraints({ advanced: [setting] }));
+
+/** A distance locked earlier for this camera is put back whenever it starts. */
+function restoreFocus(entry) {
+  const distance = savedFocus(entry.track); const kind = focusKind(entry.track);
+  const setting = typeof distance === 'number' && kind === 'distance' ? { focusMode: 'manual', focusDistance: distance }
+    : distance === 'once' && kind === 'once' ? { focusMode: 'single-shot' } : null;
+  if (!setting) return;
+  entry.locked = distance;
+  setFocus(entry.track, setting).catch(() => { entry.locked = null; });
+}
+
+/** Waits until the preview has drawn a couple of new pictures after a lens move. */
+async function nextPictures(video, least) {
+  const count = () => video.getVideoPlaybackQuality?.().totalVideoFrames;
+  const start = count(); const began = Date.now();
+  await wait(least);
+  if (!Number.isFinite(start)) { await wait(120); return; } // the browser does not count pictures
+  while (count() < start + 2 && Date.now() - began < 700) await wait(40);
+}
+
+async function scoreAt(entry, video, distance, least) {
+  await setFocus(entry.track, { focusMode: 'manual', focusDistance: distance });
+  await nextPictures(video, least);
+  const first = measure(video); await wait(40); const second = measure(video);
+  return ((first || 0) + (second || 0)) / 2;
+}
+
+/**
+ * Finds the sharpest focus and holds it: the lens is stepped across its range,
+ * then between the neighbours of the best position. Returns the locked distance,
+ * or 'once' for a camera that can only focus once and hold.
+ */
+export async function findFocus(entry, video) {
+  const kind = focusKind(entry?.track);
+  if (!kind || entry.dead) throw new Error('This camera cannot be focused from the app.');
+  if (kind === 'once') {
+    await setFocus(entry.track, { focusMode: 'single-shot' }); await wait(1200);
+    entry.locked = 'once'; saveFocus(entry.track, 'once');
+    return 'once';
+  }
+  const { min, max } = capabilities(entry.track).focusDistance;
+  const step = capabilities(entry.track).focusDistance.step || 0;
+  const tried = [];
+  const visit = async (distance, least) => {
+    if (entry.dead) throw new Error('The camera closed while focusing.');
+    const at = step > 0 ? Math.min(max, Math.max(min, min + Math.round((distance - min) / step) * step)) : distance;
+    if (tried.some((seen) => seen.distance === at)) return;
+    tried.push({ distance: at, score: await scoreAt(entry, video, at, least) });
+  };
+  for (let i = 0; i < COARSE; i += 1) await visit(min + (max - min) * i / (COARSE - 1), i ? SETTLE : SETTLE * 3);
+  const gap = (max - min) / (COARSE - 1);
+  const coarse = tried.reduce((a, b) => (b.score > a.score ? b : a));
+  for (let i = 1; i <= FINE; i += 1) await visit(Math.min(max, Math.max(min, coarse.distance - gap + 2 * gap * i / (FINE + 1))), SETTLE);
+  const best = tried.reduce((a, b) => (b.score > a.score ? b : a));
+  await setFocus(entry.track, { focusMode: 'manual', focusDistance: best.distance });
+  await nextPictures(video, SETTLE);
+  entry.locked = best.distance;
+  entry.best = Math.max(best.score, measure(video) || 0);
+  saveFocus(entry.track, best.distance);
+  return best.distance;
 }
 
 // Measuring frames.
@@ -202,5 +301,17 @@ export function useWorkCamera(active, { keep = KEEP_ON } = {}) {
     return { canvas: chosen.canvas, blurry };
   }, []);
 
-  return { attach, stream, error, take };
+  // The Focus button: find the sharpest focus and keep it for the lesson.
+  const [focusing, setFocusing] = useState(false);
+  const [locked, setLocked] = useState(false);
+  useEffect(() => { setLocked(Boolean(stream && handle.current?.locked != null)); }, [stream]);
+  const focusAvailable = Boolean(stream && focusKind(stream.getVideoTracks?.()[0]));
+  const focus = useCallback(async () => {
+    const entry = handle.current; const frame = video.current;
+    if (!entry || !frame?.videoWidth) return false;
+    setFocusing(true);
+    try { await findFocus(entry, frame); setLocked(true); return true; } catch { return false; } finally { setFocusing(false); }
+  }, []);
+
+  return { attach, stream, error, take, focus: { available: focusAvailable, focusing, locked, find: focus } };
 }

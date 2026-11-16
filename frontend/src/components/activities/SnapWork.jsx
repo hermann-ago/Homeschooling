@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Camera, CameraOff, ImagePlus, Keyboard } from 'lucide-react';
+import { Camera, CameraOff, Focus, ImagePlus, Keyboard } from 'lucide-react';
 import { Button } from '../../ui';
 import { useWorkCamera } from './sharedCamera';
 
@@ -15,7 +15,8 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
  * takes a sharp picture, and it sends itself after a moment unless the child
  * retakes it. Without a live
  * camera (plain HTTP, no webcam) the device's own camera or photo picker
- * stands in.
+ * stands in. Where the camera allows it, a Focus button finds the sharpest focus
+ * and keeps it for the lesson, until it is pressed again.
  */
 export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Photo of my work', viewSlot = null, onType, typeLabel = 'Answer here instead', TypeIcon = Keyboard }) {
   const live = Boolean(navigator.mediaDevices?.getUserMedia) && window.isSecureContext !== false;
@@ -30,7 +31,8 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
   const opened = useRef(live && !holdCamera);
   const file = useRef(null);
   const cameraOn = ['camera', 'focusing', 'taken', 'blurry'].includes(stage);
-  const { attach, take: shoot, error: cameraError } = useWorkCamera(live && cameraOn);
+  const { attach, take: shoot, error: cameraError, focus } = useWorkCamera(live && cameraOn);
+  const [focusNote, setFocusNote] = useState('');
   const showVideo = stage === 'camera' || stage === 'focusing';
 
   useEffect(() => {
@@ -81,6 +83,16 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
     if (!TYPES.includes(picked.type) || picked.size > 10 * 1024 * 1024) { setError('Use a JPG, PNG or WebP photo smaller than 10 MB.'); return; }
     file.current = picked; setPreview(null); void send();
   };
+  const lockFocus = async () => {
+    setFocusNote('Finding the sharpest focus…');
+    const found = await focus.find();
+    setFocusNote(found ? 'Focus locked. It stays for the lesson; press Focus again to find it anew.' : 'The focus could not be set. The camera keeps focusing by itself.');
+  };
+  useEffect(() => {
+    if (!focusNote || focus.focusing) return undefined;
+    const timer = setTimeout(() => setFocusNote(''), 4000);
+    return () => clearTimeout(timer);
+  }, [focusNote, focus.focusing]);
   const repeat = (event) => { if (event.repeat && ['Enter', ' '].includes(event.key)) event.preventDefault(); };
 
   // The preview and any problem open above the text box; the buttons stay in the control row.
@@ -89,6 +101,7 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
       {!showVideo && preview ? <img src={preview} alt="The photo you took" /> :
         <video ref={attach} autoPlay muted playsInline aria-label="Camera" onLoadedData={() => setReady(true)} />}
     </div>}
+    {showVideo && focusNote && <p role="status" className="text-sm font-semibold text-action">{focusNote}</p>}
     {error && <p role="alert" className="text-sm text-problem">{error}</p>}
   </>;
   const extras = <>
@@ -105,10 +118,13 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
       {extras}
     </>}
     {showVideo && <>
-      <button type="button" className="tutor-icon-button snap-extra" aria-label="Turn the camera off" title="Turn the camera off" onClick={() => act(() => setStage('idle'))}><CameraOff size={18} aria-hidden="true" /></button>
+      <button type="button" className="tutor-icon-button snap-extra" aria-label="Turn the camera off" title="Turn the camera off" disabled={focus.focusing} onClick={() => act(() => setStage('idle'))}><CameraOff size={18} aria-hidden="true" /></button>
+      {focus.available && <button type="button" className="tutor-icon-button snap-extra" aria-pressed={focus.locked}
+        aria-label={focus.locked ? 'Focus again' : 'Find the focus and lock it'} title={focus.locked ? 'Focus locked · press to find it again' : 'Find the sharpest focus and keep it'}
+        disabled={!ready || focus.focusing || stage === 'focusing'} onClick={() => { setError(''); void lockFocus(); }}><Focus size={18} aria-hidden="true" /></button>}
       {extras}
-      <Button ref={main} data-lesson-primary variant="primary" icon={Camera} disabled={busy || !ready || stage === 'focusing'} onKeyDown={repeat} onClick={() => act(take)}>
-        {stage === 'focusing' ? 'Focusing…' : ready ? label : 'Opening the camera…'}</Button>
+      <Button ref={main} data-lesson-primary variant="primary" icon={Camera} disabled={busy || !ready || stage === 'focusing' || focus.focusing} onKeyDown={repeat} onClick={() => act(take)}>
+        {stage === 'focusing' || focus.focusing ? 'Focusing…' : ready ? label : 'Opening the camera…'}</Button>
     </>}
     {stage === 'taken' && <>
       <p role="status" className="text-sm font-semibold text-action">Sending…</p>

@@ -269,7 +269,12 @@ opens when the voice ends or the child pauses it, or at once when no voice
 starts by itself. Space takes the picture and it
 is sent after a moment (`snap_work`, 1–3 photos attached to that exercise). The
 camera (`sharedCamera.js`) is shared by consecutive photo steps and turns off
-two minutes after the last one. It keeps its own autofocus. The preview's
+two minutes after the last one. It keeps its own autofocus unless the child
+presses **Focus** (shown only for a camera the app can focus): the lens is
+stepped across its range (12 positions, then 6 around the best), each scored for
+sharpness, and the sharpest distance is locked, remembered for that camera in
+this browser and put back whenever the camera starts, until Focus is pressed
+again. A camera that cannot set a distance focuses once and holds. The preview's
 pixels are not read while it shows (reading them several times a second froze
 the picture on a slower computer); a press measures a few frames, waits up to
 1.2 s for a sharp one, and a photo much softer than earlier ones offers a
