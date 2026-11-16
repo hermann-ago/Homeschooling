@@ -51,3 +51,12 @@ it('turns the camera off on request and back on with the photo button', async ()
   fireEvent.click(screen.getByRole('button', { name: 'Photo of my work' }));
   await waitFor(() => expect(screen.getByLabelText('Camera').srcObject).toBe(media));
 });
+
+it('waits for the tutor to finish reading before the camera covers the text', async () => {
+  const view = render(<SnapWork onSnap={vi.fn()} holdCamera />);
+  expect(screen.queryByLabelText('Camera')).toBeNull();
+  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Photo of my work' })).toBeTruthy();
+  view.rerender(<SnapWork onSnap={vi.fn()} holdCamera={false} />);
+  await waitFor(() => expect(screen.getByLabelText('Camera').srcObject).toBe(media));
+});

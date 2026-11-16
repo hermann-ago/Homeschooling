@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { focusStep, KEEP_ON, openCamera, pageBox, releaseCamera, sharpness, stopCamera } from './sharedCamera';
+import { KEEP_ON, openCamera, releaseCamera, sharpness, stopCamera } from './sharedCamera';
 
 let stop;
 let track;
@@ -19,41 +19,8 @@ it('scores crisp edges above the same pattern blurred', () => {
   expect(sharpness(crisp.values, 40, 40)).toBeGreaterThan(sharpness(soft.values, 40, 40) * 4);
 });
 
-it('finds a bright upright page in a landscape frame and leaves a plain frame uncropped', () => {
-  // A page across columns 80–159 with a few lines of writing, on a dark table.
-  const page = frame(240, 135, (x, y) => (x < 80 || x >= 160 ? 50 : y % 12 === 0 && x > 90 && x < 150 ? 20 : 235));
-  const box = pageBox(page);
-  expect(box.x).toBeCloseTo(80 / 240 - 0.03, 2);
-  expect(box.x + box.w).toBeCloseTo(160 / 240 + 0.03, 2);
-  expect(box.h).toBeCloseTo(1, 2);
-  expect(pageBox(frame(240, 135, () => 200))).toBeNull();
-  // A page that already fills the picture needs no crop.
-  expect(pageBox(frame(240, 135, (x) => (x < 4 ? 40 : 230)))).toBeNull();
-});
-
-it('locks the focus once the page is still and sharp, and looks again when it stays blurry', async () => {
-  const entry = openCamera();
-  await entry.ready;
-  expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ focusMode: 'continuous' }] });
-  entry.best = 100;
-  const later = Date.now() + 3000;
-  for (let i = 0; i < 7; i += 1) focusStep(entry, 95, true, later);
-  expect(entry.focus).toBe('searching');
-  focusStep(entry, 95, false, later); // the child's hand moved: start counting again
-  for (let i = 0; i < 8; i += 1) focusStep(entry, 95, true, later);
-  expect(entry.focus).toBe('locked');
-  expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ focusMode: 'manual', focusDistance: 0.3 }] });
-  for (let i = 0; i < 15; i += 1) focusStep(entry, 20, true, later);
-  expect(entry.focus).toBe('searching');
-  expect(track.applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ focusMode: 'continuous' }] });
-});
-
-it('leaves the focus alone on a camera that cannot lock it', async () => {
-  track.getCapabilities = () => ({});
-  const entry = openCamera();
-  await entry.ready;
-  for (let i = 0; i < 20; i += 1) focusStep(entry, 100, true, Date.now() + 5000);
-  expect(entry.focus).toBe('none');
+it("never changes the camera's own focus", async () => {
+  await openCamera().ready;
   expect(track.applyConstraints).not.toHaveBeenCalled();
 });
 

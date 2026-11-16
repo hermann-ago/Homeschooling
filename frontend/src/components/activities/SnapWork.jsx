@@ -9,25 +9,28 @@ const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 /**
  * One-button photo of book work. With a live camera the preview opens as soon
- * as the step appears, so the camera has found the page by the time the child
- * finishes writing; one press takes a sharp, page-cropped picture, and it
- * sends itself after a moment unless the child retakes it. Without a live
+ * as the tutor has finished reading the step (`holdCamera` until then, so the
+ * preview does not cover the text; the photo button opens it early), and the
+ * camera has found the page by the time the child finishes writing. One press
+ * takes a sharp picture, and it sends itself after a moment unless the child
+ * retakes it. Without a live
  * camera (plain HTTP, no webcam) the device's own camera or photo picker
  * stands in.
  */
-export default function SnapWork({ onSnap, busy, label = 'Photo of my work', viewSlot = null, onType, typeLabel = 'Answer here instead', TypeIcon = Keyboard }) {
+export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Photo of my work', viewSlot = null, onType, typeLabel = 'Answer here instead', TypeIcon = Keyboard }) {
   const live = Boolean(navigator.mediaDevices?.getUserMedia) && window.isSecureContext !== false;
   // idle | camera | focusing | taken | blurry | sending
-  const [stage, setStage] = useState(live ? 'camera' : 'idle');
+  const [stage, setStage] = useState(live && !holdCamera ? 'camera' : 'idle');
   const [preview, setPreview] = useState(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const picker = useRef(null);
   const main = useRef(null);
   const acted = useRef(false);
+  const opened = useRef(live && !holdCamera);
   const file = useRef(null);
   const cameraOn = ['camera', 'focusing', 'taken', 'blurry'].includes(stage);
-  const { attach, page, take: shoot, error: cameraError } = useWorkCamera(live && cameraOn);
+  const { attach, take: shoot, error: cameraError } = useWorkCamera(live && cameraOn);
   const showVideo = stage === 'camera' || stage === 'focusing';
 
   useEffect(() => {
@@ -36,6 +39,12 @@ export default function SnapWork({ onSnap, busy, label = 'Photo of my work', vie
     setStage('idle');
   }, [cameraError]);
   useEffect(() => { if (!showVideo) setReady(false); }, [showVideo]);
+  // Once the tutor has finished reading, the camera opens by itself: once, and never after the child turned it off.
+  useEffect(() => {
+    if (!live || holdCamera || opened.current || acted.current) return;
+    opened.current = true;
+    setStage('camera');
+  }, [live, holdCamera]);
 
   const send = async () => {
     setStage('sending'); setError('');
@@ -77,7 +86,6 @@ export default function SnapWork({ onSnap, busy, label = 'Photo of my work', vie
     {cameraOn && <div className="snap-view">
       {!showVideo && preview ? <img src={preview} alt="The photo you took" /> :
         <video ref={attach} autoPlay muted playsInline aria-label="Camera" onLoadedData={() => setReady(true)} />}
-      {showVideo && page && <div className="snap-page" aria-hidden="true" style={page} />}
     </div>}
     {error && <p role="alert" className="text-sm text-problem">{error}</p>}
   </>;

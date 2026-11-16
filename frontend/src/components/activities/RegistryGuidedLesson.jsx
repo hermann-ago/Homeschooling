@@ -231,6 +231,12 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
           onClick={(event) => { event.stopPropagation(); requestReadFrom(range.start + piece.index); }}>
           {piece.index === speaking ? <mark className="spoken-now" aria-current="true">{piece.text}</mark> : piece.text}</span>)}</>;
   };
+  // While a step's own voice has yet to finish, its camera waits so the preview does not cover the words being read.
+  const voicePending = (activity) => {
+    if (!activity || !narrationRange(guide, activity)) return false;
+    if (transport?.place !== narrationPlace(activity)) return true;
+    return Boolean(transport.available && !transport.unrecorded && !transport.ended);
+  };
   const narration = ({ activity, state, busy }) => {
     if (!activity || state.status === 'completed') return null;
     const range = narrationRange(guide, activity);
@@ -314,7 +320,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
         : <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
     </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
-      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderSpokenText={spokenText} renderNarration={narration} renderSessionControls={sessionControls}
+      onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderSpokenText={spokenText} renderNarration={narration} isVoicePending={voicePending} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false,play=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local','inworld'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={play || (!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id)} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
   </div>;

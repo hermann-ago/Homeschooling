@@ -18,7 +18,7 @@ export default function WorkCamera({ onPhoto, onClose }) {
   const supported = Boolean(navigator.mediaDevices?.getUserMedia);
   const nativeCamera = windows && !supported;
   // A dialog's camera closes with it: these photos are not part of a run of questions.
-  const { attach, page, take: shoot, error: cameraError } = useWorkCamera(supported && !photo, { keep: 0 });
+  const { attach, take: shoot, error: cameraError } = useWorkCamera(supported && !photo, { keep: 0 });
   const unsupported = !supported && !windows ? (insecure ? 'This HTTP network connection blocks live webcam access. Set up the secure home connection on this computer, or choose a saved photo.'
     : 'This browser does not offer webcam access. Try Chrome or Edge, or choose a saved photo.') : '';
   const failure = cameraError && cameraError.name !== 'AbortError' ? (cameraError.name === 'NotAllowedError' ? 'Camera permission was not granted. Allow camera access for this app in your browser, then try again.' :
@@ -90,7 +90,6 @@ export default function WorkCamera({ onPhoto, onClose }) {
       <div className="relative overflow-hidden rounded-xl">
         <video ref={attach} autoPlay muted playsInline aria-label="Webcam preview" className={`block w-full max-h-[55vh] rounded-xl bg-black${problem ? ' hidden' : ''}`}
           onLoadedData={() => setReady(true)} />
-        {page && !problem && <div className="snap-page" aria-hidden="true" style={page} />}
       </div>}
     {!ready && !photo && !problem && !nativeCamera && <p role="status" className="text-sm text-muted mt-3">Opening the webcam… Allow camera access if your browser asks.</p>}
     {problem && <p role="alert" className="text-sm text-problem mt-3">{problem}</p>}

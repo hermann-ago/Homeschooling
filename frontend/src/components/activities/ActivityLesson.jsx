@@ -116,7 +116,7 @@ function ParentReview({ response, busy, onEvent, sourceIssue = false }) {
 // Steps that carry no typed answer: safe to send again on the refreshed lesson.
 const SAFE_AGAIN = ['continue', 'reading_done', 'done_in_book', 'snap_work', 'fix_work', 'fix_later', 'retry_photo_check'];
 
-export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderSpokenText, renderNarration, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions }) {
+export default function ActivityLesson({ sessionId, language = 'en-US', onState, onPauseNarration, onContinue, onRepeat, renderReading, renderSpokenText, renderNarration, isVoicePending, renderFeedback, renderSessionControls, sessionNotice, onSource, getNarrationCursor, options, completionActions }) {
   const [state, setState] = useState(null);
   const stateRef = useRef(null);
   const [problem, setProblem] = useState('');
@@ -512,7 +512,7 @@ export default function ActivityLesson({ sessionId, language = 'en-US', onState,
         {stepChoices}
         <div className="tutor-controls-main" aria-label="Lesson step controls">
           <div ref={setSubmitSlot} className="contents" />
-          {snapMode && <SnapWork key={snapKey} busy={working} onSnap={snap} viewSlot={snapSlot} onType={() => setTyping(snapKey)}
+          {snapMode && <SnapWork key={snapKey} busy={working} onSnap={snap} viewSlot={snapSlot} onType={() => setTyping(snapKey)} holdCamera={Boolean(isVoicePending?.(activity))}
             {...(parentCheck ? { typeLabel: 'A grown-up checked it instead', TypeIcon: UserCheck } : {})}
             label={activity.fix ? 'New photo' : coveredCount > 1 ? `Photo of all ${coveredCount}` : 'Photo of my work'} />}
           {paced && !state.on_break && <Button data-lesson-primary variant="primary" disabled={working} onKeyDown={blockRepeat} onClick={() => event('done_in_book')}>
