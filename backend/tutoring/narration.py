@@ -6,6 +6,8 @@ def generate(ctx, topic, passage, *, provider=None, **options):
     if not options.get('dry_run'):
         from .script_review import require_audio
         require_audio(ctx,passage)
+    from .speech_text import for_voice
+    passage = for_voice(passage)  # blanks and layout marks are not read aloud
     if selected_provider == 'inworld':
         from .inworld_audio import generate as selected
     elif selected_provider == "elevenlabs":

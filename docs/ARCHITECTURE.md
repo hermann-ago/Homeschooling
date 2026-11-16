@@ -14,7 +14,7 @@ Files live in the Google Drive-synced Homeschooling folder; records live in
 | Guides and review | `tutoring/guide.py`, `script_review.py` | Saved, versioned guides; the pre-narration review |
 | Activity engine | `tutoring/activity_engine.py`, `activities.py`, `interactive.py` | Running lessons: activities, answers, help, revisions, grading |
 | Learning records | `tutoring/learning_memory.py`, `service.py` | Attempts, reviews, checkpoints, the learning summary |
-| Narration | `tutoring/narration.py` and provider adapters | Recorded voice, timings, reuse |
+| Narration | `tutoring/narration.py`, `speech_text.py` and provider adapters | Recorded voice, timings, reuse; what the voice is sent (answer lines, boxes, bullets and emoji removed, the shown text unchanged) |
 | AI provider | `services/ai_provider.py`, `ai_budget.py` | Requests, caching by exact input, cost ledger |
 | API | `backend/routers/` | HTTP surface; family-only routes for teacher material |
 | UI | `frontend/src/` | React screens; data through `src/api/queries.js` |

@@ -113,7 +113,10 @@ in child content.
 `script_review` checks the compiled lesson against the private bundle: omitted
 reading or exercises, changed options, answer leaks, factual contradictions,
 questions that don't wait. Tone and pacing are advice only. Codex imports are
-recorded as a family review. Narration can be bought only after approval.
+recorded as a family review. Narration can be bought only after approval. The
+voice is sent each sentence through `speech_text.for_voice`: blanks to fill in
+become a short pause, answer lines, tick boxes, bullets and emoji are left out, and
+the text on screen keeps them.
 
 ## 5. The lesson
 
