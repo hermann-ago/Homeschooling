@@ -263,13 +263,20 @@ Rehearse offline with `backend/dev/activity_demo.py --practice-sections --paced-
 In a subject whose book exercises are checked by the tutor, a required book
 exercise shows one main button, **Photo of my work** (`active_activity.snap`).
 The camera preview opens in the card once the tutor has finished reading the
-step (so it never covers the text being read), Space takes the picture and it
+step (so it never covers the text being read): it waits while the step's
+autoplay recording loads and speaks (up to 10 s for one that never starts), and
+opens when the voice ends or the child pauses it, or at once when no voice
+starts by itself. Space takes the picture and it
 is sent after a moment (`snap_work`, 1–3 photos attached to that exercise). The
 camera (`sharedCamera.js`) is shared by consecutive photo steps and turns off
-two minutes after the last one. It keeps its own autofocus; a press waits up to
-1.5 s for a sharp frame and a blurry photo offers a retake. The whole frame is
-sent: focus locking and cropping to the page were tried and removed (focus got
-stuck; the page outline was unreliable). The exercise, and
+two minutes after the last one. It keeps its own autofocus. The preview's
+pixels are not read while it shows (reading them several times a second froze
+the picture on a slower computer); a press measures a few frames, waits up to
+1.2 s for a sharp one, and a photo much softer than earlier ones offers a
+retake. A preview that stops drawing new pictures (3 s, or 8 s for the first
+picture) restarts the camera, twice at most before asking for another try. The
+whole frame is sent: focus locking and cropping to the page were tried and
+removed (focus got stuck; the page outline was unreliable). The exercise, and
 the still-pending rest of its practice section, become `checking` and the
 lesson moves on at once. **Answer here instead** keeps the typed/choice flow.
 

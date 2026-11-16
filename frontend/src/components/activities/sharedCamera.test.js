@@ -1,5 +1,7 @@
+/* @vitest-environment jsdom */
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { KEEP_ON, openCamera, releaseCamera, sharpness, stopCamera } from './sharedCamera';
+import { KEEP_ON, STALLED, openCamera, releaseCamera, sharpness, stopCamera, useWorkCamera } from './sharedCamera';
 
 let stop;
 let track;
@@ -7,7 +9,7 @@ beforeEach(() => {
   stop = vi.fn();
   track = { stop, getCapabilities: () => ({ focusMode: ['continuous', 'manual'] }), getSettings: () => ({ focusDistance: 0.3 }),
     applyConstraints: vi.fn().mockResolvedValue(undefined) };
-  vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track], getVideoTracks: () => [track] }) } });
+  vi.stubGlobal('navigator', { ...navigator, mediaDevices: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track], getVideoTracks: () => [track] }) } });
 });
 afterEach(() => { stopCamera(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -39,4 +41,27 @@ it('shares one camera between photo steps and turns it off a while after the las
   expect(stop).toHaveBeenCalledOnce();
   openCamera();
   expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+});
+
+const preview = () => { let frames = 0; return { readyState: 4, paused: false, srcObject: null, getVideoPlaybackQuality: () => ({ totalVideoFrames: frames }), next() { frames += 1; } }; };
+
+it('starts a frozen camera again, and after repeated freezes says so instead of a stuck preview', async () => {
+  vi.useFakeTimers();
+  const view = renderHook(() => useWorkCamera(true));
+  await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+  const video = preview();
+  act(() => view.result.current.attach(video));
+  for (let i = 0; i < 3; i += 1) { video.next(); act(() => { vi.advanceTimersByTime(500); }); }
+  expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
+  act(() => { vi.advanceTimersByTime(STALLED + 500); }); // the picture stopped moving
+  expect(stop).toHaveBeenCalledOnce();
+  expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+  for (let round = 0; round < 2; round += 1) {
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    act(() => view.result.current.attach(video));
+    video.next(); act(() => { vi.advanceTimersByTime(500); });
+    act(() => { vi.advanceTimersByTime(STALLED + 500); });
+  }
+  expect(view.result.current.error?.name).toBe('StalledError');
+  view.unmount();
 });

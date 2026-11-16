@@ -316,8 +316,8 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const unrecordedPart = source !== DEVICE && Boolean(parts[partIndex]?.fallback);
   const deviceAvailable = (source === DEVICE || unrecordedPart) && Boolean(window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined');
   useEffect(() => {
-    onTransport?.({ playing, ended, recorded: recordedPart, unrecorded: unrecordedPart, error, available: (recordedPart || deviceAvailable) && !held && !unsafePassages, toggle: () => toggleRef.current?.(), replay: () => replayRef.current?.() });
-  }, [onTransport, playing, ended, recordedPart, unrecordedPart, deviceAvailable, held, unsafePassages, error]);
+    onTransport?.({ playing, ended, recorded: recordedPart, unrecorded: unrecordedPart, device: source === DEVICE, error, available: (recordedPart || deviceAvailable) && !held && !unsafePassages, toggle: () => toggleRef.current?.(), replay: () => replayRef.current?.() });
+  }, [onTransport, playing, ended, recordedPart, unrecordedPart, source, deviceAvailable, held, unsafePassages, error]);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {

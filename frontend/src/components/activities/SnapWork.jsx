@@ -35,7 +35,9 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
 
   useEffect(() => {
     if (!cameraError) return;
-    setError(cameraError.name === 'NotAllowedError' ? 'Allow camera access for this app, or choose a photo.' : 'The camera could not open. Choose a photo instead.');
+    setError(cameraError.name === 'NotAllowedError' ? 'Allow camera access for this app, or choose a photo.'
+      : cameraError.name === 'StalledError' ? 'The camera stopped sending a picture. Press the photo button to try again, or choose a photo.'
+      : 'The camera could not open. Choose a photo instead.');
     setStage('idle');
   }, [cameraError]);
   useEffect(() => { if (!showVideo) setReady(false); }, [showVideo]);

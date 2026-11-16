@@ -216,3 +216,32 @@ it('explains a missing recorded passage and offers device speech without changin
   expect(screen.getByLabelText('Session voice').value).toBe('google');
   expect(mocks.complete).not.toHaveBeenCalled(); expect(mocks.event).not.toHaveBeenCalled();
 });
+
+it("keeps a step's camera closed while its voice loads and speaks, and opens it when the voice ends or is paused", () => {
+  const activity = { id: 'read-1', kind: 'read_source', status: 'pending', start_sentence: 1, end_sentence: 2, interaction: { id: 'reading', sequence: 1 } };
+  const state = { session_id: 's1', revision: 1, playback: {}, active_activity: activity };
+  mocks.readingFixture = { activity, state };
+  show({ session: 's1', guide: { ...guide, activities: [activity] } });
+  const pending = () => mocks.activityProps.isVoicePending(activity);
+  expect(pending()).toBe(false); // a resumed step with no autoplay coming
+  act(() => mocks.activityProps.onContinue(state));
+  expect(pending()).toBe(true);
+  act(() => mocks.readingProps.onTransport({ playing: false, available: false, recorded: false })); // the recording is still loading
+  expect(pending()).toBe(true);
+  act(() => mocks.readingProps.onTransport({ playing: true, available: true, recorded: true }));
+  expect(pending()).toBe(true);
+  act(() => mocks.readingProps.onTransport({ playing: false, available: true, recorded: true }));
+  expect(pending()).toBe(false); // the child paused it
+  act(() => mocks.readingProps.onTransport({ playing: false, ended: true, available: true, recorded: true }));
+  expect(pending()).toBe(false);
+});
+
+it('does not hold the camera for a device voice that never starts by itself', () => {
+  const activity = { id: 'read-1', kind: 'read_source', status: 'pending', start_sentence: 1, end_sentence: 2, interaction: { id: 'reading', sequence: 1 } };
+  const state = { session_id: 's1', revision: 1, playback: {}, active_activity: activity };
+  mocks.readingFixture = { activity, state };
+  show({ session: 's1', guide: { ...guide, activities: [activity] } });
+  act(() => mocks.activityProps.onContinue(state));
+  act(() => mocks.readingProps.onTransport({ playing: false, available: true, recorded: false, device: true }));
+  expect(mocks.activityProps.isVoicePending(activity)).toBe(false);
+});

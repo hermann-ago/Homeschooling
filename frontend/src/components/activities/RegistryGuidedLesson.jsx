@@ -21,6 +21,8 @@ import { operationId, readSaved, storageKey, writeSaved } from './durable';
 import { narrationPlace, narrationRange, sentencePieces } from './narrationRange';
 import { requestReadFrom } from '../../utils/readAlong';
 
+const VOICE_WAIT = 10000; // an autoplay that has not started by then is not coming
+
 function ActivityReading({ activity, state, guide, activeIndex, onActiveIndex, language,
   onPassageModeChange, complete, onCursor, headless = false, autoPlayRequest = 0, onTransport, selectedSource, selectedSpeed, bookOnPage = false, bookPageOf }) {
   const key = storageKey(state.session_id, `narration.${activity.id}.${activity.interaction?.id || 'legacy'}`);
@@ -173,6 +175,15 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
   const advance = useCallback((next) => {
     if (next?.active_activity) setPlayRequest({ session: next.session_id, place: narrationPlace(next.active_activity), token: ++playSequence.current });
   }, []);
+  // The step whose voice has started, and an autoplay that never started (no recording came).
+  const [voiceHeard, setVoiceHeard] = useState('');
+  useEffect(() => { if (transport?.playing && transport.place) setVoiceHeard(transport.place); }, [transport?.playing, transport?.place]);
+  const [voiceWaitOver, setVoiceWaitOver] = useState(0);
+  useEffect(() => {
+    if (!playRequest) return undefined;
+    const timer = setTimeout(() => setVoiceWaitOver(playRequest.token), VOICE_WAIT);
+    return () => clearTimeout(timer);
+  }, [playRequest]);
   useEffect(() => {
     currentSession.current = sessionId; completed.current = false;
     readingCursor.current = null; activeActivity.current = null; activeInteraction.current = null; setFinished(false); setNavigation(null);
@@ -231,11 +242,16 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
           onClick={(event) => { event.stopPropagation(); requestReadFrom(range.start + piece.index); }}>
           {piece.index === speaking ? <mark className="spoken-now" aria-current="true">{piece.text}</mark> : piece.text}</span>)}</>;
   };
-  // While a step's own voice has yet to finish, its camera waits so the preview does not cover the words being read.
+  // While a step's own voice is coming or speaking, its camera waits so the preview does not cover the words being read.
+  // It opens when the voice ends or the child pauses it, and at once when no voice will start by itself.
   const voicePending = (activity) => {
     if (!activity || !narrationRange(guide, activity)) return false;
-    if (transport?.place !== narrationPlace(activity)) return true;
-    return Boolean(transport.available && !transport.unrecorded && !transport.ended);
+    const place = narrationPlace(activity);
+    const voice = transport?.place === place ? transport : null;
+    if (voice?.playing) return true;
+    if (voice && (voice.ended || voice.error || voice.unrecorded || voice.device) || voiceHeard === place) return false;
+    // Not started yet: the recording may still be loading for this step's autoplay.
+    return playRequest?.session === sessionId && playRequest.place === place && voiceWaitOver !== playRequest.token;
   };
   const narration = ({ activity, state, busy }) => {
     if (!activity || state.status === 'completed') return null;
