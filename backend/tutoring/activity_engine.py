@@ -1364,7 +1364,11 @@ class ActivityEngine:
         for action in self._main_sequence(actions):
             if not _exercise(action) or action["status"] == "not_assigned":
                 continue
+            # Work the check could not see (not in the photo, unreadable, nothing marked yet) was not a
+            # try at the answer: the first real answer decides "right on the first try".
             results = said.get(action["action_id"], [])
+            while results[:1] and results[0] in ("Unreadable", "Unanswered", "Source disputed"):
+                results = results[1:]
             check = checks.get(action["action_id"])
             hands_on = photo_check.hands_on(action)
             outcome = ("skipped" if action["status"] == "skipped"

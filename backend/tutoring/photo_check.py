@@ -135,6 +135,8 @@ MARKS = ('A task whose evidence is marks was done by drawing on the page (lines,
          'tracing). For it: answer = a short description of what the child marked; judge those marks against the '
          'task and its teacher_key; set uncertain = true whenever the photo does not let you tell exactly what was '
          'marked or whether it is right. An uncertain one goes to a grown-up to look at, so never guess. ')
+TOGETHER = ('This one photo was meant to show all {n} tasks. A task that is not in the photo at all is Unreadable, '
+            'not a miss: say which question the next photo should show. ')
 TASKS = 'Tasks (teacher_key is private):\n'
 
 
@@ -156,6 +158,7 @@ def _prompt(engine, job):
         'the wording of earlier_replies. '
         'Keep feedback brief and do not request new activities. Return every item_id exactly once. '
         + (MARKS if any(t.get('evidence') == 'marks' for t in snapshot['tasks']) else '')
+        + (TOGETHER.format(n=len(snapshot['tasks'])) if len(snapshot['tasks']) > 1 else '')
         + TASKS + json.dumps(snapshot['tasks'], ensure_ascii=False, default=str))
 
 

@@ -142,6 +142,7 @@ def test_one_photo_covers_a_whole_true_or_false_set_with_separate_results(harnes
     state = engine.state(state['session_id'])
 
     def read(prompt, **kwargs):
+        assert photo_check.TOGETHER.format(n=3) in prompt  # one photo is meant to show all three
         return {'items': [{'item_id': row['action_id'], 'answer': 'T', 'uncertain': False,
                            'result': 'Not yet' if index == 1 else 'Correct', 'feedback': 'Checked.'} for index, row in enumerate(rows)]}
     monkeypatch.setattr(harness.ctx.ai, 'generate', read)
@@ -260,3 +261,16 @@ def test_a_grown_up_cannot_pass_ordinary_answers_from_the_tracker(harness, monke
     state = snap(harness, engine, state)
     with pytest.raises(TutorConflict):
         event(engine, state, 'grown_up_checked', {'activity_id': question['action_id']})
+
+
+@pytest.mark.parametrize('unseen', ['Unanswered', 'Unreadable'])
+def test_a_question_the_photo_did_not_show_is_not_a_first_try(harness, monkeypatch, unseen):
+    engine, state, question = lesson(harness, monkeypatch)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader(unseen, '', feedback='This question is not in your photo.'))
+    state = snap(harness, engine, state)
+    assert state['progress']['items'][0]['outcome'] == 'fix'
+    state = event(engine, state, 'fix_work', {'activity_id': question['action_id']})
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader())
+    state = snap(harness, engine, state, 'again.png')
+    # The first answer the tutor could see was right: right on the first try, not "after another go".
+    assert state['progress']['items'][0]['outcome'] == 'first_try'
