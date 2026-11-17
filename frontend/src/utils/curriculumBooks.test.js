@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { curriculumBooks } from './curriculumBooks';
+import { curriculumBooks, shownBook } from './curriculumBooks';
 
 it('keeps separately imported books with the same filename in their own lesson order',()=>{
   const topics=[
@@ -26,4 +26,12 @@ it('retains separate legacy printed books and unambiguous PDF labels',()=>{
   ]);
   expect(books.map(b=>b.title)).toEqual(['A','B','Actual']);
   expect(books.every(b=>!b.detail)).toBe(true);
+});
+
+it('opens on the book with lessons still to do, not a finished earlier book', () => {
+  const books = curriculumBooks([
+    { id: 1, title: 'Lesson 120', document_id: 17, pdf_filename: 'Math 1.pdf', is_core: true, completed: true, chapter_order: 0, page_start: 1 },
+    { id: 2, title: 'Lesson 1', document_id: 34, pdf_filename: 'Math 2.pdf', is_core: true, completed: false, chapter_order: 0, page_start: 9 }]);
+  expect(shownBook(books, null).name).toBe('Math 2.pdf');
+  expect(shownBook(books, 'document:17').name).toBe('Math 1.pdf');  // a book the parent picked stays shown
 });

@@ -26,3 +26,8 @@ export function curriculumBooks(topics) {
   }
   return books.sort((a,b)=>Number(b.core)-Number(a.core));
 }
+
+/** The book a subject opens on: the one chosen, else the first with lessons still to do. */
+export function shownBook(books, chosenKey) {
+  return books.find((b) => b.key === chosenKey) || books.find((b) => b.chapters.some((t) => !t.completed)) || books[0];
+}

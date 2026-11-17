@@ -27,7 +27,7 @@ import {
 import { learnerTones } from '../utils/colors';
 import { isoDay, lessonPath } from '../utils/lessons';
 import { folderLabel, gradeLabel, sameGrade } from '../utils/grades';
-import { PRINTED, bookTitle, curriculumBooks } from '../utils/curriculumBooks';
+import { PRINTED, bookTitle, curriculumBooks, shownBook } from '../utils/curriculumBooks';
 import { BookReading } from './Books';
 
 // The planner numbers the study days: A subjects get the 1st, 3rd, 5th…, B the 2nd, 4th, 6th…
@@ -271,7 +271,7 @@ function SubjectDetail({ subject, child, onDeleted }) {
   const tones = learnerTones(child.color);
 
   const books = curriculumBooks(topics);
-  const book = books.find((b) => b.key === chosenBook) || books[0];
+  const book = shownBook(books, chosenBook);
   const chapters = book?.chapters || [];
   const finished = chapters.filter((t) => t.completed);
   const open = chapters.filter((t) => !t.completed);
