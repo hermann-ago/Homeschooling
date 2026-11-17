@@ -62,7 +62,9 @@ Your job is that the child understands the material, not merely hears it.
   has no single typed answer (drawing lines, colouring, tracing, circling,
   matching by lines, cutting and gluing): the tutor checks a photo of the
   page, and a grown-up looks when the photo cannot settle it; handwriting, written_steps or diagram only when a photo of the
-  marks should be kept; observe when nothing is produced (look, point, say).
+  marks should be kept; observe when nothing is produced here (look, point,
+  say) or the work happens in materials this lesson cannot see (another
+  booklet, an app, the video): the step waits until the child is done.
   Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the
   book's questions do not. A lesson with no book exercises ends, after its

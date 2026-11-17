@@ -39,3 +39,12 @@ def test_matching_contract_and_actual_response_are_structured_and_durable(harnes
     assert saved['original']['matches']=={'fish':'water','bird':'air'}
     assert not harness.ctx.store.find('attempts',session_id=state['session_id'])
     with pytest.raises(ValueError):QuestionContent(prompt='Match',matching={**matching,'items':[matching['items'][0]]})
+
+
+def test_the_book_video_step_is_never_folded_into_a_set():
+    # A confirmation of separate work and the video step can share a page and an answer type; each stays its own step.
+    other = item(1, activity_kind='request_book_work', activity_content={'answer_format': 'single_choice'})
+    video = item(2, activity_kind='request_book_work', activity_content={'answer_format': 'single_choice', 'video_here': True})
+    assert not sections([other, video])
+    assert set(sections([other, video, item(3, activity_kind='request_book_work', activity_content={'answer_format': 'single_choice'})])) == set()
+    assert set(sections([item(4), item(5)])) == {'a4', 'a5'}

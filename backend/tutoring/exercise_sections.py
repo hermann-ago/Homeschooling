@@ -17,7 +17,9 @@ def sections(actions):
         family='spelling' if content.get('evidence_requirement')=='spelling' else content.get('answer_format')
         eligible=(action.get('origin')=='required_book' and not action.get('parent_activity_id')
                   and action.get('activity_kind') in ('ask_question','request_book_work')
-                  and family in ('spelling','true_false','single_choice','multiple_select') and locations)
+                  and family in ('spelling','true_false','single_choice','multiple_select') and locations
+                  # The book's video plays at its own step, so that step is never folded into a set.
+                  and not content.get('video_here'))
         signature=(action['session_id'],locations,family) if eligible else None
         if current and (signature is None or signature!=previous):groups.append(current);current=[]
         if signature is not None:current.append(action)
