@@ -534,8 +534,6 @@ def build(passage_sentences: list[dict], plan: dict, *, faithful=False, instruct
             text = str(item.get('text') or '').strip() if faithful else _spoken_reading(item.get("text"))
             if not text:
                 raise GuideError('The rewritten reading is missing its spoken instructions; raw extraction was not substituted.',invalid_response=True)
-            if re.search(r'uso exclusivo de|licenciado para',text,re.I):
-                raise GuideError('The rewritten reading contains a purchase watermark and needs correction.',invalid_response=True)
             if item.get('text') and len(text) > 12000:
                 raise GuideError('A rewritten reading section is too long; divide it into smaller source-linked steps.')
             if text:

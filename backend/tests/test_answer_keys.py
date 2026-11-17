@@ -117,6 +117,15 @@ def test_grading_finds_the_pinned_answer_for_each_book_activity():
     assert page_script.answer_for(ctx, {'session_id': 's', 'action_id': 'follow-up-9'}) is None
 
 
+def test_copywork_whose_answer_is_the_printed_words_is_not_a_leak():
+    words = ['thirteen', 'fourteen', 'eleven', 'twelve']
+    copy = work(prompt='Write the number words.\n\n' + '\n\n'.join(words), answer='; '.join(words))
+    compile_({'type': 'say', 'text': 'Each printed word is a model showing its letters in order.'}, {**copy, 'items': words})
+    # A printed item that is not the answer still cannot be spoken before its question.
+    with pytest.raises(ValueError, match='reveals its answer'):
+        compile_({'type': 'say', 'text': 'It was Mehmed the Conqueror.'}, {**work(), 'items': ['3']})
+
+
 def test_true_false_answers_are_not_mistaken_for_leaks():
     compile_(work(prompt='15. True or false: the empire shrank.', answer='true', format='true_false'))
 
