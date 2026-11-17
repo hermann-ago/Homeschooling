@@ -38,7 +38,8 @@ def saved(db, doc):
 
 
 def validate(doc, chapters):
-    chapters = ChapterMap(chapters=chapters).model_dump()['chapters']
+    # A chapter added at the end of the editor (a lesson the contents reader missed) takes its place by page.
+    chapters = sorted(ChapterMap(chapters=chapters).model_dump()['chapters'], key=lambda row: row['page_start'])
     previous = 0
     for row in chapters:
         if not previous < row['page_start'] <= row['page_end'] <= doc['page_count']:
@@ -64,6 +65,15 @@ def persist(tx, doc, chapters, method, toc_pages=None, expected_revision=None):
 
 FILE_BOOKMARK = re.compile(r'\.pdf\s*$|^\s*(front\s+|back\s+)?covers?\s*$', re.I)
 LESSON_ENTRY = re.compile(r'^\s*(lessons?|li[cç](?:[aã]o|ões)|aulas?)\s+\d+', re.I)
+# A numbered lesson heading inside a title: "Lesson 71:", "Lessons 32–33:", "Lição 4 –".
+LESSON_HEADING = re.compile(r'\b(lessons?|li[cç](?:[aã]o|ões)|aulas?)\s+\d+(?:\s*[–-]\s*\d+)?\s*[:–-]', re.I)
+
+
+def lesson_title(title):
+    """A running head printed above a continued contents page ("MATH 2MATH 2") joins
+    the first entry's title; the entry starts at its lesson heading."""
+    match = LESSON_HEADING.search(title)
+    return title[match.start():] if match else title
 
 
 def page_text(page):
@@ -77,11 +87,12 @@ def page_text(page):
 def toc_entries(text):
     # Dot-leader contents: titles wrap across lines, even mid-word, before their
     # leaders and page number, so read "title ..... page" pairs from the flattened text.
+    # A title long enough to fill the line leaves only two leader dots.
     flat = re.sub(r'^[^.\n]*\b(table of contents|contents|sumário|sumario|índice|indice)\b[^.\n]*$', '', text, flags=re.I | re.M)
     flat = re.sub(r'(?<=[a-zà-ÿ])[ \t]*\n[ \t]*(?=[a-zà-ÿ])', '', flat)
     flat = re.sub(r'\s*\n\s*', ' ', flat)
-    dotted = [(re.sub(r'^\d+[.)]?\s+', '', title.strip(' .')), int(page))
-              for title, page in re.findall(r'([^.·…]{3,290}?)\s*[.·…]{3,}\s*(\d{1,4})(?!\d)', flat)
+    dotted = [(lesson_title(re.sub(r'^\d+[.)]?\s+', '', title.strip(' .'))), int(page))
+              for title, page in re.findall(r'([^.·…]{3,290}?)\s*[.·…]{2,}\s*(\d{1,4})(?!\d)', flat)
               if not re.search(r'copyright|isbn', title, re.I)]
     if len(dotted) >= 5:
         return [(title, page) for title, page in dotted if title]
@@ -90,7 +101,7 @@ def toc_entries(text):
         match = re.match(r'^\s*(?:\d+[.)]?\s+)?(.{3,290}?)\s*[.·…\s]+\s*(\d{1,4})\s*$', line)
         if match and not re.search(r'copyright|isbn', match[1], re.I):
             title = re.split(r'(?:\s*\.\s*){3,}', match[1])[-1].strip(' .')
-            title = re.sub(r'^\d+[.)]?\s+', '', title)
+            title = lesson_title(re.sub(r'^\d+[.)]?\s+', '', title))
             if title:
                 entries.append((title, int(match[2])))
     return entries
@@ -185,6 +196,19 @@ def extract(ctx, doc):
         return persist(tx, doc, chapters, 'pdf_bookmarks' if not toc_pages else 'local_contents', toc_pages)
 
 
+def topics_in_use(tx, topics):
+    """Whether any of these lessons is done, or anything (a plan slot, session, guide,
+    answer, page selection…) refers to one of them."""
+    ids = {t['id'] for t in topics}
+    if any(t.get('completed') for t in topics):
+        return True
+    if any(tx.get('lesson_page_selections', str(i)) for i in ids):
+        return True
+    from storage.schema import TABLES
+    return any(row.get(fk.column) in ids for table in TABLES.values() for fk in table.foreign_keys
+               if fk.table == 'topics' for row in tx.all(table.name))
+
+
 def publish_topics(service, book, doc, navigation):
     chapters = navigation['data']['chapters']
     if not chapters:
@@ -194,17 +218,26 @@ def publish_topics(service, book, doc, navigation):
         from .library_materials import book_for
         library = book_for(tx, book['subject_id'])
         prior = [t for t in tx.find('topics', subject_id=book['subject_id'], document_id=doc['id']) if not t.get('archived')]
-        if prior and not library:
+        keys = ['ch-' + sha256_text([doc['sha256'], chapter])[:22] for chapter in chapters]
+        # A book nothing has used yet (no plan, lesson, guide or progress) follows its
+        # corrected chapter map; once used, its lessons stay as they are.
+        rebuild = bool(prior) and not library and not topics_in_use(tx, prior)
+        if prior and not library and not rebuild:
             return
+        if rebuild:
+            for topic in prior:
+                if topic.get('source_key') not in keys:
+                    tx.update('topics', topic['id'], {'archived': True, 'is_core': False})
         if library and not tx.find('tutor_sessions', subject_id=book['subject_id']) and not any(a['topic_id'] in {t['id'] for t in prior} for a in tx.all('attempts')):
             for topic in prior:
                 if not (topic.get('source_key') or '').startswith('ch-'):
                     tx.update('topics', topic['id'], {'archived': True, 'is_core': False})
-        for order, chapter in enumerate(chapters):
-            key = 'ch-' + sha256_text([doc['sha256'], chapter])[:22]
+        for order, (chapter, key) in enumerate(zip(chapters, keys)):
             existing = next((t for t in tx.find('topics', subject_id=book['subject_id'], document_id=doc['id'])
                              if t.get('source_key') == key), None)
             if existing:
+                if rebuild and (existing['chapter_order'] != order or existing.get('archived')):
+                    tx.update('topics', existing['id'], {'chapter_order': order, 'archived': False, 'is_core': True})
                 continue
             # Existing curriculum divisions and saved progress remain authoritative.
             tx.insert('topics', {'subject_id': book['subject_id'], 'document_id': doc['id'], 'title': chapter['title'],
