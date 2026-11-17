@@ -234,17 +234,27 @@ def publish_topics(service, book, doc, navigation):
             for topic in prior:
                 if not (topic.get('source_key') or '').startswith('ch-'):
                     tx.update('topics', topic['id'], {'archived': True, 'is_core': False})
-        for order, (chapter, key) in enumerate(zip(chapters, keys)):
+        if rebuild:  # the corrected lessons keep the book's place: planned or extra, and its position
+            core = any(t['is_core'] for t in prior)
+            base = min(t['chapter_order'] or 0 for t in prior)
+        else:
+            # A new book is planned by itself only when nothing else in the subject still is;
+            # otherwise it waits as an extra book until the family makes it the main book
+            # or lets it continue the course.
+            core = not any(t['is_core'] and not t['completed'] and not t.get('archived') and t.get('document_id') != doc['id']
+                           for t in tx.find('topics', subject_id=book['subject_id']))
+            base = 0
+        for order, (chapter, key) in enumerate(zip(chapters, keys), start=base):
             existing = next((t for t in tx.find('topics', subject_id=book['subject_id'], document_id=doc['id'])
                              if t.get('source_key') == key), None)
             if existing:
-                if rebuild and (existing['chapter_order'] != order or existing.get('archived')):
-                    tx.update('topics', existing['id'], {'chapter_order': order, 'archived': False, 'is_core': True})
+                if rebuild and (existing['chapter_order'] != order or existing.get('archived') or existing['is_core'] != core):
+                    tx.update('topics', existing['id'], {'chapter_order': order, 'archived': False, 'is_core': core})
                 continue
             # Existing curriculum divisions and saved progress remain authoritative.
             tx.insert('topics', {'subject_id': book['subject_id'], 'document_id': doc['id'], 'title': chapter['title'],
                 'page_start': chapter['page_start'], 'page_end': chapter['page_end'], 'pdf_page_offset': 0,
-                'chapter_order': order, 'source_key': key, 'is_core': True, 'completed': False})
+                'chapter_order': order, 'source_key': key, 'is_core': core, 'completed': False})
 
 
 def sources(db, subject_id):

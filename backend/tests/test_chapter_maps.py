@@ -142,3 +142,29 @@ def test_lessons_not_made_from_a_chapter_map_are_never_replaced(harness):
                               {"data": {"chapters": [{"title": "Lição 1 – Fonemas", "page_start": 1, "page_end": 9}]}})
     assert [t["id"] for t in store.find("topics", subject_id=subject["id"]) if not t.get("archived")] == [indexed["id"]]
     assert store.get("topics", indexed["id"])["is_core"] is False
+
+
+def test_a_second_book_waits_as_an_extra_book_while_the_main_book_is_unfinished(harness):
+    from types import SimpleNamespace
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Learner"})
+        subject = tx.insert("subjects", {"child_id": child["id"], "name": "Reading"})
+        main = tx.insert("documents", {"file_path": "Books/Volume 2.pdf", "original_filename": "Volume 2.pdf",
+                                       "size_bytes": 1, "page_count": 20, "sha256": "c" * 64, "source": "drive"})
+        new = tx.insert("documents", {"file_path": "Books/Volume 1.pdf", "original_filename": "Volume 1.pdf",
+                                      "size_bytes": 1, "page_count": 20, "sha256": "d" * 64, "source": "drive"})
+        last = tx.insert("topics", {"subject_id": subject["id"], "document_id": main["id"], "title": "Letter W",
+                                    "page_start": 1, "page_end": 8, "chapter_order": 10, "is_core": True})
+    service, book = SimpleNamespace(db=store), {"subject_id": subject["id"]}
+    chapters = {"data": {"chapters": [{"title": "Sentences", "page_start": 1, "page_end": 9},
+                                      {"title": "Words", "page_start": 10, "page_end": 20}]}}
+    navigation.publish_topics(service, book, new, chapters)
+    added = [t for t in store.find("topics", subject_id=subject["id"]) if t["document_id"] == new["id"]]
+    assert len(added) == 2 and not any(t["is_core"] for t in added)  # Letter W is still planned first
+    # Once the main book is finished, a newly mapped book is planned by itself (a new course book).
+    with store.transaction() as tx:
+        tx.update("topics", last["id"], {"completed": True})
+        tx.delete("topics", added[0]["id"]); tx.delete("topics", added[1]["id"])
+    navigation.publish_topics(service, book, new, chapters)
+    assert all(t["is_core"] for t in store.find("topics", subject_id=subject["id"]) if t["document_id"] == new["id"])
