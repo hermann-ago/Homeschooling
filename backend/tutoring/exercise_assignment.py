@@ -140,11 +140,15 @@ def _pdf(ctx, members):
     attached = []
     for group_pages in members['pages']:
         doc = ctx.store.get('documents', group_pages['document_id'])
-        reader = PdfReader(io.BytesIO(ctx.file_bytes(doc['file_path'], doc['sha256'])))
+        data = ctx.file_bytes(doc['file_path'], doc['sha256'])
+        reader = PdfReader(io.BytesIO(data))
+        from .passages import page_furniture
+        from .navigation import book_page_offset
+        furniture, offset = page_furniture(data, doc['sha256']), book_page_offset(ctx, doc)
         for page in group_pages['pages']:
             writer.add_page(reader.pages[page - 1])
             attached.append({'attachment_page': len(attached) + 1, 'document_id': doc['id'], 'page': page,
-                             **({'printed_page': n} if (n := printed_page(reader.pages[page - 1], page)) else {})})
+                             **({'printed_page': n} if (n := printed_page(reader.pages[page - 1], page, furniture, offset)) else {})})
     writer.remove_links()
     output = io.BytesIO()
     writer.write(output)
@@ -178,11 +182,26 @@ def assign(ctx, members):
         return persist(tx, members, result['items'], 'ai', model)
 
 
-def printed_page(page, pdf_page):
+def printed_page(page, pdf_page, furniture=frozenset(), offset=None):
     """The page number printed at the page's top or bottom edge, when one is
-    plausible for this PDF page; None otherwise."""
+    plausible for this PDF page; None otherwise. The book's furniture lines (a
+    running head such as "MATH 2") are skipped, so their digits are not read as one.
+    ``offset`` is the book's page offset (``navigation.book_page_offset``)."""
     from .navigation import page_text, printed_number
-    lines = [line for line in page_text(page).strip().splitlines() if line.strip()]
+    from .passages import without_furniture
+    lines = [line for line in without_furniture(page_text(page), furniture).strip().splitlines() if line.strip()]
+    plausible = lambda n: n and 1 <= n <= pdf_page and pdf_page - n <= 60  # noqa: E731
+    # Lines that are only a number ("77": 7 drawn twice) at the edges.
+    alone = [n for n in (printed_number(line) for line in lines[:3] + lines[-3:]
+                         if re.fullmatch(r'\s*\d{1,4}\s*', line)) if plausible(n)]
+    if offset is not None and pdf_page - offset >= 1:
+        expected = pdf_page - offset
+        # One clear printed number that differs is a book whose numbering restarts;
+        # anything else (map labels, a lone answer, "LESSON 1" in every heading,
+        # "87 miles to a waterfall") gives way to the book's own offset.
+        return alone[0] if len(set(alone)) == 1 and expected not in alone else expected
+    if alone:
+        return alone[0]  # it wins over a digit ending a heading ("MATH 2MATH 2", "Lesson 5")
     for n in map(printed_number, lines[:2] + lines[-2:]):
         if n and 1 <= n <= pdf_page and pdf_page - n <= 60:
             return n

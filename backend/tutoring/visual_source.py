@@ -60,7 +60,11 @@ def prepare(ctx, topic, package, skill_content):
               'printed_page': page - (topic.get('pdf_page_offset') or 0)}
              for i, page in enumerate(range(first, last + 1))]
     validate_source_references(ctx, topic['subject_id'], pages)
-    reader = PdfReader(io.BytesIO(ctx.file_bytes(document['file_path'], document['sha256'])))
+    data = ctx.file_bytes(document['file_path'], document['sha256'])
+    reader = PdfReader(io.BytesIO(data))
+    from .passages import page_furniture
+    from .navigation import book_page_offset
+    furniture, offset = page_furniture(data, document['sha256']), book_page_offset(ctx, document)
     if last > len(reader.pages):
         raise GuideError('The visual page range is outside the assigned PDF.')
     writer = PdfWriter()
@@ -70,7 +74,7 @@ def prepare(ctx, topic, package, skill_content):
         if not topic.get('pdf_page_offset'):
             # No recorded offset: use the number printed on the page itself, when one is visible.
             from .exercise_assignment import printed_page
-            printed = printed_page(reader.pages[page - 1], page)
+            printed = printed_page(reader.pages[page - 1], page, furniture, offset)
             if printed:
                 pages[page - first]['printed_page'] = printed
         writer.add_page(reader.pages[page - 1])
@@ -102,10 +106,14 @@ def _append(ctx, writer, metadata, document, pages, role, *, exercise_id=None):
         if len(metadata) >= MAX_PAGES * 2:
             raise GuideError('The lesson and linked sources exceed 40 pages; split the preparation scope.')
         if reader is None:
-            reader = PdfReader(io.BytesIO(ctx.file_bytes(document['file_path'], document['sha256'])))
+            data = ctx.file_bytes(document['file_path'], document['sha256'])
+            reader = PdfReader(io.BytesIO(data))
+            from .passages import page_furniture
+            from .navigation import book_page_offset
+            furniture, offset = page_furniture(data, document['sha256']), book_page_offset(ctx, document)
         writer.add_page(reader.pages[page - 1])
         from .exercise_assignment import printed_page
-        printed = printed_page(reader.pages[page - 1], page)
+        printed = printed_page(reader.pages[page - 1], page, furniture, offset)
         metadata.append({'attachment_page': len(metadata) + 1, 'document_id': document['id'],
                          'document_sha256': document['sha256'], 'page': page, 'role': role,
                          # The number printed on the page, so a child can find it in a paper book.

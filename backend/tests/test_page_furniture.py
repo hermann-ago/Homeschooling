@@ -60,3 +60,26 @@ def test_furniture_in_transcribed_reading_and_quotations_is_removed_when_a_guide
 def test_a_running_head_drawn_twice_by_the_text_layer_is_still_furniture():
     assert passages.without_furniture("MATH 4MATH 4\nLesson 24: Estimating", frozenset({"MATH 4"})) == "Lesson 24: Estimating"
     assert passages.strip_furniture("THE MATH 4 BOOK", frozenset({"MATH 4"})) == "THE MATH 4 BOOK"  # too short to cut inside text
+
+
+def test_a_running_heads_digit_is_not_read_as_the_page_number():
+    from types import SimpleNamespace
+    from tutoring.exercise_assignment import printed_page
+    page = SimpleNamespace(extract_text=lambda: "INDEPENDENT REVIEW\nMATH 2MATH 2\n77\nAdd the numbers.\n+ 4\n+ 5")
+    assert printed_page(page, 14, frozenset({"MATH 2"})) == 7  # "77": the number drawn twice
+    # Also when the running head is on too few pages to count as furniture.
+    assert printed_page(page, 14) == 7
+    heading_only = SimpleNamespace(extract_text=lambda: "23Lições de Língua Portuguesa | 3º ano\nTexto da lição")
+    assert printed_page(heading_only, 30) == 23
+
+
+def test_the_books_page_offset_settles_pages_whose_edges_are_ambiguous():
+    from types import SimpleNamespace
+    from tutoring.exercise_assignment import printed_page
+    page = lambda text: SimpleNamespace(extract_text=lambda: text)  # noqa: E731
+    # A world map whose markers are numbers on their own lines; the book's offset is 19.
+    assert printed_page(page("1\n2\n7\nWorld map\n5\n4"), 23, offset=19) == 4
+    # A heading repeated on every page ("LESSON 1") does not number the page.
+    assert printed_page(page("PALEONTOLOGY\nLESSON 1\nDiscovering Fossils\nText"), 26, offset=19) == 7
+    # One clear number that differs: the book's numbering restarts (a second part).
+    assert printed_page(page("3\nPart two begins\nText of the page"), 50, offset=19) == 3

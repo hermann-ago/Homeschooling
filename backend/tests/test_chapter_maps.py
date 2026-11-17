@@ -209,3 +209,23 @@ def test_map_lessons_carry_their_books_name_so_the_curriculum_can_choose_the_boo
     continued = harness.call("PUT", f"/api/subjects/{fresh['id']}/books/set-main-book",
                              params={"pdf_filename": "Volume 1.pdf", "document_id": doc["id"], "continues": True})
     assert continued.status_code == 200, continued.text
+
+
+def test_contents_that_run_past_the_last_page_are_reported_not_dropped(harness):
+    import hashlib
+    from tests.pdf_fixture import make_pdf
+    contents = ["Table of Contents"] + [f"Lesson {n}: Topic {n} ........................ {2 * n - 1}" for n in range(1, 6)]
+    # A book merged from parts with the last part left out: printed pages 1-5 only.
+    pdf = make_pdf([contents] + [[str(n), f"Printed page {n} of the course book with its lesson text."] for n in range(1, 6)])
+    path = harness.add_file(pdf, "Books/Course.pdf")
+    with harness.ctx.store.transaction() as tx:
+        doc = tx.insert("documents", {"file_path": path, "original_filename": "Course.pdf", "size_bytes": len(pdf),
+                                      "page_count": 6, "sha256": hashlib.sha256(pdf).hexdigest(), "source": "drive"})
+    nav = navigation.extract(harness.ctx, doc)
+    assert [c["title"] for c in nav["data"]["chapters"]] == ["Lesson 1: Topic 1", "Lesson 2: Topic 2", "Lesson 3: Topic 3"]
+    assert nav["data"]["beyond_end"] == [{"title": "Lesson 4: Topic 4", "printed_page": 7},
+                                         {"title": "Lesson 5: Topic 5", "printed_page": 9}]
+    # A family edit of the map keeps the warning about the missing pages.
+    with harness.ctx.store.transaction() as tx:
+        edited = navigation.persist(tx, doc, nav["data"]["chapters"][:2], "parent_checked")
+    assert edited["data"]["beyond_end"] == nav["data"]["beyond_end"]

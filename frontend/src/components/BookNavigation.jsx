@@ -49,6 +49,7 @@ export default function BookNavigation({subject}) {
       {!book.navigation&&<Button size="sm" disabled={busy!==null} onClick={()=>extract(book)}>{busy===book.document_id?'Reading contents…':'Read table of contents'}</Button>}
       <Button size="sm" onClick={()=>setEditing(book)}>Edit chapter map</Button>
       {book.navigation&&!book.navigation.data.chapters.length&&<p className="text-xs text-muted w-full">{book.role==='answer_key'?'Each lesson’s answer pages are found automatically when the lesson is prepared.':book.role==='reference'?'Add pages from this book to a lesson when you prepare it.':'No reliable contents found. Enter chapter ranges from the original PDF, or choose pages directly for a lesson.'}</p>}
+      {book.navigation?.data.beyond_end?.length>0&&<p role="note" className="text-xs text-attention w-full">The contents list {book.navigation.data.beyond_end.length} more {book.navigation.data.beyond_end.length===1?'chapter':'chapters'} after this PDF’s last page ({book.navigation.data.beyond_end.map(b=>b.title).join(', ')}). This file seems to be missing pages, and the last chapter here may be cut short. Add the missing part as another book, or replace the PDF.</p>}
     </article>)}
     {(problem||error)&&<p role="alert" className="text-problem text-sm">{problem||error.message}</p>}
     {editing&&<ChapterEditor key={editing.document_id} subject={subject} book={editing} onClose={()=>setEditing(null)}/>}

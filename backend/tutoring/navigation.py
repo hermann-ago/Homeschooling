@@ -48,14 +48,21 @@ def validate(doc, chapters):
     return chapters
 
 
-def persist(tx, doc, chapters, method, toc_pages=None, expected_revision=None):
+def persist(tx, doc, chapters, method, toc_pages=None, expected_revision=None, beyond_end=None, printed_offset=None):
     chapters = validate(doc, chapters)
+    old = saved(tx, doc)
+    # A family edit keeps what the book itself showed: contents past the end, its page offset.
+    if beyond_end is None:
+        beyond_end = (old['data'].get('beyond_end') if old else None) or []
+    if printed_offset is None and old:
+        printed_offset = old['data'].get('printed_offset')
     data = {'version': VERSION, 'document_sha256': doc['sha256'], 'page_count': doc['page_count'],
-            'method': method, 'toc_pages': toc_pages or [], 'chapters': chapters}
+            'method': method, 'toc_pages': toc_pages or [], 'chapters': chapters,
+            **({'beyond_end': beyond_end} if beyond_end else {}),
+            **({'printed_offset': printed_offset} if printed_offset is not None else {})}
     body = json.dumps(data, ensure_ascii=False, indent=2).encode()
     path, _ = tx.add_blob(body, 'Family Library/Chapter Maps/Lesson Content', f"{doc['sha256'][:16]}-{sha256_text(data)[:8]}.json", 'application/json')
     values = {'document_sha256': doc['sha256'], 'data': data, 'file_path': path}
-    old = saved(tx, doc)
     if old:
         return tx.update('book_navigation', old['id'], values, expected_revision=expected_revision)
     if expected_revision not in (None, 0):
@@ -121,6 +128,51 @@ def printed_number(line):
     return int(digits)
 
 
+def page_offset(reader):
+    """PDF page minus printed page, from the numbers printed at the edges of the first
+    40 pages; stray numbers are outvoted. None when no offset is printed twice."""
+    offsets = []
+    for i, page in enumerate(reader.pages[:min(40, len(reader.pages))]):
+        lines = [line for line in page_text(page).strip().splitlines() if line.strip()]
+        # Page numbers sit near an edge, sometimes above a copyright footer.
+        for n in map(printed_number, lines[:2] + lines[-3:]):
+            if n and 1 <= n <= len(reader.pages):
+                offsets.append(i + 1 - n)
+    if not offsets:
+        return None
+    offset = max(set(offsets), key=offsets.count)
+    return offset if offsets.count(offset) >= 2 else None
+
+
+_offsets: dict[str, int | None] = {}
+
+
+def book_page_offset(ctx, document):
+    """A book's page offset: recorded with its chapter map, or worked out once and cached."""
+    nav = saved(ctx.store, document)
+    if nav and nav['data'].get('printed_offset') is not None:
+        return nav['data']['printed_offset']
+    sha = document.get('sha256')
+    if not sha:
+        return None
+    if sha in _offsets:
+        return _offsets[sha]
+    config = getattr(ctx, 'config', None)
+    path = config.cache_dir / 'page-offsets' / f'{sha}.json' if config else None
+    if path and path.exists():
+        value = json.loads(path.read_text(encoding='utf-8'))['offset']
+    else:
+        try:
+            value = page_offset(PdfReader(io.BytesIO(ctx.file_bytes(document['file_path'], sha))))
+        except Exception:
+            return None
+        if path:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({'offset': value}), encoding='utf-8')
+    _offsets[sha] = value
+    return value
+
+
 def prefer_lessons(chapters):
     """When contents list numbered lessons inside units, the lessons are the
     teaching sequence. Unit headings still bound the lesson before them (their
@@ -154,6 +206,8 @@ def extract(ctx, doc):
     if len(starts) < 2:
         starts = []
     toc_pages = []
+    beyond = []
+    printed_offset = None
     if not starts:
         entries = []
         for i, page in enumerate(reader.pages[:min(24, len(reader.pages))]):
@@ -167,18 +221,12 @@ def extract(ctx, doc):
             entries += found
         # A constant page offset is established from actual printed page labels.
         # No model estimates ranges from the length of the book.
-        offsets = []
-        for i, page in enumerate(reader.pages[:min(40, len(reader.pages))]):
-            lines = [line for line in page_text(page).strip().splitlines() if line.strip()]
-            # Page numbers sit near an edge, sometimes above a copyright footer. Stray
-            # numbers there are outvoted: the offset is the most common one.
-            for n in map(printed_number, lines[:2] + lines[-3:]):
-                if n and 1 <= n <= len(reader.pages):
-                    offsets.append(i + 1 - n)
-        if offsets and entries:
-            offset = max(set(offsets), key=offsets.count)
-            if offsets.count(offset) >= 2:
-                starts = [(title, p + offset) for title, p in entries if 1 <= p + offset <= len(reader.pages)]
+        offset = printed_offset = page_offset(reader)
+        if offset is not None and entries:
+            starts = [(title, p + offset) for title, p in entries if 1 <= p + offset <= len(reader.pages)]
+            # Contents that go on past the last page mean the PDF is missing pages
+            # (a book merged from parts, one part left out); say so, never drop it silently.
+            beyond = [{'title': title, 'printed_page': p} for title, p in entries if p + offset > len(reader.pages)]
     if not starts and len(reader.pages) == 1:
         lines = page_text(reader.pages[0]).strip().splitlines()
         if lines:
@@ -192,8 +240,11 @@ def extract(ctx, doc):
     chapters = prefer_lessons([{'title': title, 'page_start': page,
                  'page_end': starts[i+1][0]-1 if i+1 < len(starts) else len(reader.pages)}
                 for i, (page, title) in enumerate(starts)])
+    if beyond and chapters and all(LESSON_ENTRY.match(c['title']) for c in chapters):
+        beyond = [b for b in beyond if LESSON_ENTRY.match(b['title'])] or beyond
     with ctx.store.transaction(kind='books.chapter_map') as tx:
-        return persist(tx, doc, chapters, 'pdf_bookmarks' if not toc_pages else 'local_contents', toc_pages)
+        return persist(tx, doc, chapters, 'pdf_bookmarks' if not toc_pages else 'local_contents', toc_pages,
+                       beyond_end=beyond, printed_offset=printed_offset)
 
 
 def recorded_language(tx, subject_id):
