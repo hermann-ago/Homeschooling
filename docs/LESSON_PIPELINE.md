@@ -49,6 +49,12 @@ checked with the eval set — not by adding another prohibition to the prompt.
   student bundle.
 - **Numbered page text**: the lesson's own sentences from the PDF text layer
   (`passages.load`), with paragraph numbers. No whole-book extraction.
+  **Page furniture** (`passages.page_furniture`) is left out: a line printed on
+  at least 80% of the book's text pages, from a 24-page sample across the book,
+  such as a buyer's watermark (which can carry a name, email or ID number), a
+  running head or a copyright footer. Book-work quotations are checked against
+  the same text, and `guide.save` removes furniture from transcribed readings and
+  quotations, whichever way the lesson was written.
 
 ## 2. Writing (one AI call, or Codex)
 

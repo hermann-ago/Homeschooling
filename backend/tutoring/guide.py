@@ -770,13 +770,16 @@ def book_work_source(ctx, topic, package):
     first, last = pdf_range(topic)
     refs = [{'document_id':document['id'],'page':p} for p in range(first,last+1)]
     validate_source_references(ctx,topic['subject_id'],refs)
-    reader = PdfReader(io.BytesIO(ctx.file_bytes(document['file_path'],document['sha256'])))
+    data = ctx.file_bytes(document['file_path'],document['sha256'])
+    reader = PdfReader(io.BytesIO(data))
     if not 1 <= first <= last <= len(reader.pages):
         raise GuideError('The paper task is outside the assigned book pages.')
+    from .passages import page_furniture, without_furniture
+    furniture = page_furniture(data, document['sha256'])  # quotes match the same text as the lesson's sentences
     return {'document_id':document['id'],'topic_id':topic['id'],
             'book_name':document['original_filename'],'offset':topic.get('pdf_page_offset') or 0,
             'sentences':package['sentences'],
-            'pages':{p:reader.pages[p-1].extract_text() or '' for p in range(first,last+1)},
+            'pages':{p:without_furniture(reader.pages[p-1].extract_text() or '',furniture) for p in range(first,last+1)},
             # Reviewed tasks may assemble a shared stem and a later subitem or
             # visual table. Keep their exact source text and page identity.
             'tasks':requirements(ctx,topic,package)['tasks']}
@@ -983,8 +986,31 @@ def package(ctx, row: dict, fresh: bool) -> dict:
             "activities": guide_activities(content)}
 
 
+def without_page_furniture(tx, topic: dict, guide: dict) -> dict:
+    """The guide with its books' page furniture (a buyer's watermark, running heads)
+    left out of the book's words: transcribed readings and source quotations. Every
+    way of writing a lesson saves through here; teaching text is the tutor's own."""
+    refs = lambda node: [*(node.get('source_refs') or []), *((node.get('content') or {}).get('source_refs') or [])]  # noqa: E731
+    documents = {topic.get('document_id')} | {r.get('document_id') for s in guide.get('segments', []) for r in refs(s)}
+    from .passages import document_furniture, strip_furniture
+    furniture = frozenset().union(*(document_furniture(tx.store.files, tx.get('documents', d))
+                                    for d in documents if isinstance(d, int)))
+    if not furniture:
+        return guide
+    import copy
+    guide = copy.deepcopy(guide)
+    for segment in guide.get('segments', []):
+        if segment.get('type') == 'read' and segment.get('text'):
+            segment['text'] = strip_furniture(segment['text'], furniture)
+        for ref in refs(segment):
+            if ref.get('quote'):
+                ref['quote'] = strip_furniture(ref['quote'], furniture)
+    return guide
+
+
 def save(tx, topic: dict, passage: dict, guide: dict, *, model: str, language: str,
          skill: dict | None = None, learner_context: dict | None = None, folder: str | None = None) -> dict:
+    guide = without_page_furniture(tx, topic, guide)
     sha = guide_sha(guide["sentences"])
     # Several preparations can finish in one second; retain their actual order.
     created_at = datetime.now(timezone.utc)

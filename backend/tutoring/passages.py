@@ -23,8 +23,15 @@ from pypdf import PdfReader
 
 from storage import layout
 
-EXTRACTION_VERSION = "generic-1"
+EXTRACTION_VERSION = "generic-2"  # 2: page furniture (watermarks, running heads) left out
 MIN_PAGE_CHARACTERS = 40
+# Page furniture: a line printed on nearly every page of a book, such as a buyer's
+# watermark ("Licensed to <name> - <ID>"), a running head or a copyright footer.
+# It is never lesson text, and a watermark can carry personal data.
+FURNITURE_SAMPLE_PAGES = 24
+FURNITURE_SHARE = 0.8
+FURNITURE_MIN_PAGES = 6
+_furniture: dict[str, frozenset] = {}
 VERIFIED = "verified"
 NEEDS_REVIEW = "needs_review"
 
@@ -46,6 +53,83 @@ def _find(haystack: str, needle: str, start: int = 0) -> int:
     pattern = r"\s+".join(re.escape(word) for word in _norm(needle).split(" "))
     match = re.compile(pattern, re.IGNORECASE).search(haystack, start)
     return match.start() if match else -1
+
+
+def _sample_texts(pdf_bytes: bytes) -> list[str]:
+    """Text of up to FURNITURE_SAMPLE_PAGES pages spread across the whole book."""
+    def spread(count):
+        return sorted({round(i * (count - 1) / (FURNITURE_SAMPLE_PAGES - 1)) for i in range(FURNITURE_SAMPLE_PAGES)}) if count > 1 else [0]
+    try:  # PyMuPDF is many times faster than pypdf on heavy, illustrated books.
+        import pymupdf
+        with pymupdf.open(stream=pdf_bytes, filetype="pdf") as pdf:
+            return [pdf[i].get_text() for i in spread(len(pdf)) if len(pdf)]
+    except ImportError:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        texts = []
+        for i in spread(len(reader.pages)) if reader.pages else []:
+            try:
+                texts.append(reader.pages[i].extract_text() or "")
+            except Exception:  # an undecodable page has no lines to vote with
+                texts.append("")
+        return texts
+
+
+def page_furniture(pdf_bytes: bytes, sha256: str | None = None) -> frozenset:
+    """Lines printed on at least 80% of a book's pages that have text, sampled across
+    the whole book (a lesson's own pages are too few to tell). Content that recurs
+    on many pages, such as an exercise heading, stays well below that share."""
+    sha256 = sha256 or hashlib.sha256(pdf_bytes).hexdigest()
+    if sha256 in _furniture:
+        return _furniture[sha256]
+    pages = []
+    for text in _sample_texts(pdf_bytes):
+        lines = {_norm(line) for line in text.splitlines() if _norm(line)}
+        if sum(map(len, lines)) >= MIN_PAGE_CHARACTERS:
+            pages.append(lines)
+    found = frozenset()
+    if len(pages) >= FURNITURE_MIN_PAGES:
+        from collections import Counter
+        votes = Counter(line for lines in pages for line in lines)
+        found = frozenset(line for line, n in votes.items() if n >= FURNITURE_SHARE * len(pages) and len(line) >= 4)
+    _furniture[sha256] = found
+    return found
+
+
+def document_furniture(files, document: dict | None) -> frozenset:
+    """A stored book's page furniture; empty when its file cannot be read."""
+    if not document or not document.get("sha256"):
+        return frozenset()
+    if document["sha256"] in _furniture:
+        return _furniture[document["sha256"]]
+    try:
+        data = files.read(document["file_path"], document["sha256"])
+    except Exception:
+        return frozenset()
+    return page_furniture(data, document["sha256"])
+
+
+def without_furniture(page_text: str, furniture) -> str:
+    """A page's text-layer lines, leaving out its book's furniture lines."""
+    if not furniture:
+        return page_text
+    # Some text layers draw a running head twice ("MATH 4MATH 4").
+    lines = set(furniture) | {line + line for line in furniture}
+    return "\n".join(line for line in page_text.splitlines() if _norm(line) not in lines)
+
+
+def strip_furniture(text: str, furniture) -> str:
+    """Free text (a transcription or quotation) with furniture removed wherever it
+    appears, also when it ran into a neighbouring line. Short lines (a bare title
+    such as "MATH 2") are only removed as whole page lines, never inside text."""
+    stripped = without_furniture(text, furniture)  # whole lines go with their line break
+    for line in sorted(furniture or (), key=len, reverse=True):
+        if len(line) >= 12:
+            pattern = r"\s+".join(re.escape(word) for word in line.split(" "))
+            stripped = re.sub(pattern, " ", stripped, flags=re.IGNORECASE)
+    if stripped == text:
+        return text
+    stripped = re.sub(r"[ \t]+", " ", stripped)
+    return re.sub(r" *\n *", "\n", stripped).strip()
 
 
 def split_sentences(passage: str) -> list[dict]:
@@ -77,8 +161,9 @@ def extract(pdf_bytes: bytes, pdf_start: int, pdf_end: int, start_at: str | None
         return {"passage": "", "issues": [f"PDF pages {pdf_start}–{pdf_end} are outside this document"],
                 "page_texts": []}
     page_texts = []
+    furniture = page_furniture(pdf_bytes)
     for number in range(pdf_start, pdf_end + 1):
-        text = reader.pages[number - 1].extract_text() or ""
+        text = without_furniture(reader.pages[number - 1].extract_text() or "", furniture)
         if len(_norm(text)) < MIN_PAGE_CHARACTERS:
             issues.append(f"PDF page {number} has little or no selectable text (scanned or image-only); "
                           "review the original page before narration")
