@@ -267,6 +267,7 @@ def publish_topics(service, book, doc, navigation):
             # Existing curriculum divisions and saved progress remain authoritative.
             tx.insert('topics', {'subject_id': book['subject_id'], 'document_id': doc['id'], 'title': chapter['title'],
                 'page_start': chapter['page_start'], 'page_end': chapter['page_end'], 'pdf_page_offset': 0,
+                'pdf_filename': doc.get('original_filename'),  # books are listed and chosen by it
                 'chapter_order': order, 'source_key': key, 'is_core': core, 'completed': False, 'language': language})
 
 

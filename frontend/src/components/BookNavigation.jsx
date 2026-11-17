@@ -11,7 +11,7 @@ function ChapterEditor({subject,book,onClose}) {
   const edit=(i,key,value)=>setRows(old=>old.map((r,n)=>n===i?{...r,[key]:value}:r));
   const save=async()=>{
     setBusy(true);setProblem('');
-    try {await booksApi.saveNavigation(subject.id,book.document_id,rows.map(r=>({...r,page_start:Number(r.page_start),page_end:Number(r.page_end)})),book.navigation?.revision||0);await client.invalidateQueries({queryKey:['book-navigation',subject.id]});onClose();}
+    try {await booksApi.saveNavigation(subject.id,book.document_id,rows.map(r=>({...r,page_start:Number(r.page_start),page_end:Number(r.page_end)})),book.navigation?.revision||0);await client.invalidateQueries();onClose();}  // the map also sets the subject's lessons
     catch(e){setProblem(e.message);}finally{setBusy(false);}
   };
   return <Dialog open title={`Chapters · ${book.name}`} onClose={busy?undefined:onClose} width={800}
@@ -38,7 +38,7 @@ export default function BookNavigation({subject}) {
   const [problem,setProblem]=useState('');
   const extract=async(book)=>{
     setBusy(book.document_id);setProblem('');
-    try{await booksApi.extractNavigation(subject.id,book.document_id);await client.invalidateQueries({queryKey:['book-navigation',subject.id]});}
+    try{await booksApi.extractNavigation(subject.id,book.document_id);await client.invalidateQueries();}
     catch(e){setProblem(e.message);}finally{setBusy(null);}
   };
   return <section aria-label="Book chapter maps" className="rounded-2xl border border-line bg-surface p-4 flex flex-col gap-3">

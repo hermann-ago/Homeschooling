@@ -75,6 +75,10 @@ class BookService:
             for topic in tx.all("topics"):
                 if not topic.get("document_id"):
                     continue
+                if not topic.get("pdf_filename") and (topic.get("source_key") or "").startswith("ch-"):
+                    # Lessons made from a chapter map once lacked their book's name, so the
+                    # curriculum listed them as a printed book with no main-book choice.
+                    tx.update("topics", topic["id"], {"pdf_filename": tx.get("documents", topic["document_id"])["original_filename"]})
                 book_id = f"book-{topic['subject_id']}-{topic['document_id']}"
                 if tx.get("subject_books", book_id):
                     continue

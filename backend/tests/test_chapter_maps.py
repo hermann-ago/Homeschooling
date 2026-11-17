@@ -187,3 +187,25 @@ def test_a_new_books_lessons_take_the_language_the_subject_records(harness):
     navigation.publish_topics(service, {"subject_id": other["id"]}, doc, chapters)
     language = lambda s: [t.get("language") for t in store.find("topics", subject_id=s["id"]) if t["title"] == "Frase"]
     assert language(subject) == ["pt-BR"] and language(other) == [None]
+
+
+def test_map_lessons_carry_their_books_name_so_the_curriculum_can_choose_the_book(harness):
+    from types import SimpleNamespace
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Learner"})
+        fresh = tx.insert("subjects", {"child_id": child["id"], "name": "Reading"})
+        earlier = tx.insert("subjects", {"child_id": child["id"], "name": "Math"})
+        doc = tx.insert("documents", {"file_path": "Books/Volume 1.pdf", "original_filename": "Volume 1.pdf",
+                                      "size_bytes": 1, "page_count": 20, "sha256": "f" * 64, "source": "drive"})
+        older = tx.insert("topics", {"subject_id": earlier["id"], "document_id": doc["id"], "title": "Old map lesson",
+                                     "page_start": 15, "page_end": 20, "source_key": "ch-older", "completed": True})
+    navigation.publish_topics(SimpleNamespace(db=store), {"subject_id": fresh["id"]}, doc,
+                              {"data": {"chapters": [{"title": "Frase", "page_start": 1, "page_end": 9}]}})
+    assert [t["pdf_filename"] for t in store.find("topics", subject_id=fresh["id"])] == ["Volume 1.pdf"]
+    harness.ctx.books.backfill()  # lessons mapped before the name was recorded get it at startup
+    assert store.get("topics", older["id"])["pdf_filename"] == "Volume 1.pdf"
+    assert store.get("topics", older["id"])["completed"] is True
+    continued = harness.call("PUT", f"/api/subjects/{fresh['id']}/books/set-main-book",
+                             params={"pdf_filename": "Volume 1.pdf", "document_id": doc["id"], "continues": True})
+    assert continued.status_code == 200, continued.text
