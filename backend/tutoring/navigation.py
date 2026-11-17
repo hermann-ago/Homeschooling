@@ -196,6 +196,16 @@ def extract(ctx, doc):
         return persist(tx, doc, chapters, 'pdf_bookmarks' if not toc_pages else 'local_contents', toc_pages)
 
 
+def recorded_language(tx, subject_id):
+    """The language the subject's lessons already record (their books' language), for a
+    new book's lessons; None when no lesson records one."""
+    from collections import Counter
+    from .audio import LANGUAGES
+    seen = Counter(LANGUAGES.get(str(t.get('language') or '').casefold()) for t in tx.find('topics', subject_id=subject_id))
+    seen.pop(None, None)
+    return seen.most_common(1)[0][0] if seen else None
+
+
 def topics_in_use(tx, topics):
     """Whether any of these lessons is done, or anything (a plan slot, session, guide,
     answer, page selection…) refers to one of them."""
@@ -234,6 +244,7 @@ def publish_topics(service, book, doc, navigation):
             for topic in prior:
                 if not (topic.get('source_key') or '').startswith('ch-'):
                     tx.update('topics', topic['id'], {'archived': True, 'is_core': False})
+        language = recorded_language(tx, book['subject_id'])
         if rebuild:  # the corrected lessons keep the book's place: planned or extra, and its position
             core = any(t['is_core'] for t in prior)
             base = min(t['chapter_order'] or 0 for t in prior)
@@ -248,13 +259,15 @@ def publish_topics(service, book, doc, navigation):
             existing = next((t for t in tx.find('topics', subject_id=book['subject_id'], document_id=doc['id'])
                              if t.get('source_key') == key), None)
             if existing:
-                if rebuild and (existing['chapter_order'] != order or existing.get('archived') or existing['is_core'] != core):
-                    tx.update('topics', existing['id'], {'chapter_order': order, 'archived': False, 'is_core': core})
+                if rebuild and (existing['chapter_order'] != order or existing.get('archived') or existing['is_core'] != core
+                                or (language and not existing.get('language'))):
+                    tx.update('topics', existing['id'], {'chapter_order': order, 'archived': False, 'is_core': core,
+                                                         'language': existing.get('language') or language})
                 continue
             # Existing curriculum divisions and saved progress remain authoritative.
             tx.insert('topics', {'subject_id': book['subject_id'], 'document_id': doc['id'], 'title': chapter['title'],
                 'page_start': chapter['page_start'], 'page_end': chapter['page_end'], 'pdf_page_offset': 0,
-                'chapter_order': order, 'source_key': key, 'is_core': core, 'completed': False})
+                'chapter_order': order, 'source_key': key, 'is_core': core, 'completed': False, 'language': language})
 
 
 def sources(db, subject_id):

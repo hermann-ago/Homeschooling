@@ -168,3 +168,22 @@ def test_a_second_book_waits_as_an_extra_book_while_the_main_book_is_unfinished(
         tx.delete("topics", added[0]["id"]); tx.delete("topics", added[1]["id"])
     navigation.publish_topics(service, book, new, chapters)
     assert all(t["is_core"] for t in store.find("topics", subject_id=subject["id"]) if t["document_id"] == new["id"])
+
+
+def test_a_new_books_lessons_take_the_language_the_subject_records(harness):
+    from types import SimpleNamespace
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Learner"})
+        subject = tx.insert("subjects", {"child_id": child["id"], "name": "Leitura"})
+        other = tx.insert("subjects", {"child_id": child["id"], "name": "Numbers"})
+        doc = tx.insert("documents", {"file_path": "Books/Volume 1.pdf", "original_filename": "Volume 1.pdf",
+                                      "size_bytes": 1, "page_count": 20, "sha256": "e" * 64, "source": "drive"})
+        tx.insert("topics", {"subject_id": subject["id"], "title": "Letra W", "page_start": 1, "page_end": 2,
+                             "completed": True, "is_core": True, "language": "pt"})
+    chapters = {"data": {"chapters": [{"title": "Frase", "page_start": 1, "page_end": 9}]}}
+    service = SimpleNamespace(db=store)
+    navigation.publish_topics(service, {"subject_id": subject["id"]}, doc, chapters)
+    navigation.publish_topics(service, {"subject_id": other["id"]}, doc, chapters)
+    language = lambda s: [t.get("language") for t in store.find("topics", subject_id=s["id"]) if t["title"] == "Frase"]
+    assert language(subject) == ["pt-BR"] and language(other) == [None]
