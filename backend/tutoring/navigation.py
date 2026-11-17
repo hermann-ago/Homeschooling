@@ -219,9 +219,11 @@ def publish_topics(service, book, doc, navigation):
         library = book_for(tx, book['subject_id'])
         prior = [t for t in tx.find('topics', subject_id=book['subject_id'], document_id=doc['id']) if not t.get('archived')]
         keys = ['ch-' + sha256_text([doc['sha256'], chapter])[:22] for chapter in chapters]
-        # A book nothing has used yet (no plan, lesson, guide or progress) follows its
-        # corrected chapter map; once used, its lessons stay as they are.
-        rebuild = bool(prior) and not library and not topics_in_use(tx, prior)
+        # Lessons made from a chapter map follow the corrected map while nothing has used
+        # them (no plan, lesson, guide or progress). Lessons from anywhere else (a family
+        # index, an older import) and lessons in use stay as they are.
+        rebuild = (bool(prior) and not library and all((t.get('source_key') or '').startswith('ch-') for t in prior)
+                   and not topics_in_use(tx, prior))
         if prior and not library and not rebuild:
             return
         if rebuild:

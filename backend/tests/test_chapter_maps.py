@@ -125,3 +125,20 @@ def test_a_chapter_added_at_the_end_of_the_editor_takes_its_place_by_page():
     import pytest
     with pytest.raises(ValueError):
         navigation.validate(doc, [*rows, {"title": "Overlap", "page_start": 4, "page_end": 6}])
+
+
+def test_lessons_not_made_from_a_chapter_map_are_never_replaced(harness):
+    from types import SimpleNamespace
+    store = harness.ctx.store
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Learner"})
+        subject = tx.insert("subjects", {"child_id": child["id"], "name": "Spelling"})
+        doc = tx.insert("documents", {"file_path": "Books/Spelling.pdf", "original_filename": "Spelling.pdf",
+                                      "size_bytes": 1, "page_count": 20, "sha256": "b" * 64, "source": "drive"})
+        # An unused supporting book indexed some other way, with its own language and role.
+        indexed = tx.insert("topics", {"subject_id": subject["id"], "document_id": doc["id"], "title": "Lição 1 — Fonemas",
+                                       "page_start": 1, "page_end": 9, "is_core": False, "language": "pt"})
+    navigation.publish_topics(SimpleNamespace(db=store), {"subject_id": subject["id"]}, doc,
+                              {"data": {"chapters": [{"title": "Lição 1 – Fonemas", "page_start": 1, "page_end": 9}]}})
+    assert [t["id"] for t in store.find("topics", subject_id=subject["id"]) if not t.get("archived")] == [indexed["id"]]
+    assert store.get("topics", indexed["id"])["is_core"] is False
