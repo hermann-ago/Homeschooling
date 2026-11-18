@@ -192,6 +192,9 @@ class BookService:
             # Reading a large book's text can take minutes; do it now, not while a lesson is prepared.
             from .answer_keys import fingerprint
             fingerprint(self.ctx, doc)
+            # Its page offset numbers the book's pages in lessons; work it out here, not
+            # while a family waits for a preparation estimate (minutes on heavy books).
+            navigation.book_page_offset(self.ctx, doc)
         with self.db.transaction(kind='books.navigation_ready') as tx:
             tx.update('subject_books', book['id'], {'status': 'ready', 'active_index': nav['id']})
             tx.update('book_imports', job['id'], {'status': 'ready', 'stage': 'Chapter map ready' if nav['data']['chapters'] else 'Choose chapter pages',

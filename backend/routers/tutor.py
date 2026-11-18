@@ -715,6 +715,15 @@ def import_reviewed_guide(payload:ReviewedGuideRequest,background_tasks:Backgrou
         revision_of=revision_of)
 
 
+def _has_replaceable_reply(text, plan_schema, writer_pdf):
+    """Whether this exact writer input has a saved unusable reply (or a known failed
+    request) that one explicit replacement may stand in for."""
+    options = dict(schema=plan_schema, instructions=guide_mod.FORMAT_INSTRUCTIONS,
+                   max_output=guide_mod.MAX_PLAN_OUTPUT, pdf=writer_pdf)
+    failure = context().ai.cached_failure(text, **options)
+    return context().ai.has_invalid_cached_reply(text, **options) or bool(failure and failure.get('replaceable'))
+
+
 def _reader_guide(payload: ReaderGuideRequest, background_tasks: BackgroundTasks, *, reviewed_plan=None,
                   _editorial_repairs=1, _spending_scope=None, revision_of=None):
     from tutoring.library_materials import preparation_lock
@@ -915,10 +924,14 @@ def _prepare_reader_guide(payload: ReaderGuideRequest, background_tasks: Backgro
         if reviewed_plan is not None:
             plan,model=reviewed_plan,'codex-reviewed'
         else:
+            # A replacement is for a saved reply to this exact input. When the input has
+            # changed since (new pages, skill or policy), there is nothing to replace:
+            # this is a first write, with the provider's usual uncertain-request guards.
+            replace_invalid = payload.replace_invalid and _has_replaceable_reply(text, plan_schema, writer_pdf)
             with context().ai.scoped(scope_id):
                 plan, model = guide_mod.write_plan(text, models, **({'pdf': writer_pdf} if writer_pdf is not None else {}),
                     **({'schema':plan_schema} if plan_schema is not guide_mod.GuidePlan else {}),
-                    **({'replace_invalid':True} if payload.replace_invalid else {}))
+                    **({'replace_invalid':True} if replace_invalid else {}))
         # The paid writer returns teaching words, not engine commands. Local
         # compilation preserves those words and binds checked source identities.
         # Reviewed imports and older integrations retain their canonical adapter.

@@ -126,6 +126,7 @@ it('shows active audio progress without offering another purchase',()=>{
 });
 
 it('makes a known script replacement explicit and sends its durable recovery flag',async()=>{
+  api.estimate.mockResolvedValue({script:{allowed:true,reused:false,estimated_cost_usd:.01,cached_invalid_reply:true},allowed:true});
   const close=dialog({status:{...ready,job:{recovery:'replace_script',error:'The provider returned no lesson content.'}}});
   expect(screen.getByText(/one replacement script; its cost is tracked/)).toBeTruthy();
   fireEvent.click(screen.getByRole('button',{name:'Check cost and prepare'}));
@@ -134,6 +135,17 @@ it('makes a known script replacement explicit and sends its durable recovery fla
   fireEvent.click(screen.getByRole('button',{name:'Prepare in background'}));
   await waitFor(()=>expect(close).toHaveBeenCalled());
   expect(api.start.mock.calls[0][0].replace_invalid).toBe(true);
+});
+
+it('writes a changed lesson afresh instead of asking to replace a reply to its old input',async()=>{
+  const close=dialog({status:{...ready,job:{recovery:'replace_script',error:'The AI returned an unusable lesson-plan reply.'}}});
+  fireEvent.click(screen.getByRole('button',{name:'Check cost and prepare'}));
+  await screen.findByLabelText('Preparation estimate');
+  expect(screen.queryByText(/one replacement script; its cost is tracked/)).toBeNull();
+  api.start.mockResolvedValue({id:'fresh-job'});
+  fireEvent.click(screen.getByRole('button',{name:'Prepare in background'}));
+  await waitFor(()=>expect(close).toHaveBeenCalled());
+  expect(api.start.mock.calls[0][0].replace_invalid).toBe(false);
 });
 
 it('keeps audio synchronization free by default and requires an explicit replacement choice',()=>{

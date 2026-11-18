@@ -75,7 +75,8 @@ export function CurriculumPreparationDialog({learner,topic,status,target:initial
     setBusy(true);setProblem('');
     try{
       const result=await curriculumPrepApi.estimate(body);setEstimate(result);
-      if(result.script?.cached_invalid_reply||result.script?.cached_failure?.replaceable)setReplaceInvalid(true);
+      // A replacement is only for a saved reply to this exact input; a changed input is written afresh.
+      if(target!=='audio')setReplaceInvalid(Boolean(result.script?.cached_invalid_reply||result.script?.cached_failure?.replaceable));
     }
     catch(e){setProblem(clean(e));}finally{setBusy(false);}
   };

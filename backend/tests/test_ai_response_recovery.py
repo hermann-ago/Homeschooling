@@ -184,3 +184,20 @@ def test_flat_page_response_controls_still_reject_invalid_combinations(response)
         Script.model_validate({'welcome': 'Welcome.', 'turns': [
             {'type': 'book_work', 'document_id': 3, 'page': 20, 'prompt': 'Original work.', 'response': response}],
             'closing': 'Goodbye.'})
+
+
+def test_a_replacement_is_requested_only_for_a_saved_reply_to_the_same_input(harness,monkeypatch):
+    """A lesson whose writer input changed (new skill, pages) is written afresh, not refused."""
+    from routers import tutor
+    from tutoring.guide import FORMAT_INSTRUCTIONS, MAX_PLAN_OUTPUT
+    monkeypatch.setenv('OPENAI_API_KEY','test-key-never-real')
+    def respond(request):
+        if request.url.path.endswith('/input_tokens'):return httpx.Response(200,json={'input_tokens':100})
+        return httpx.Response(200,json={'status':'completed','output':[],'usage':{'input_tokens':100,'output_tokens':0}})
+    ai=AIService(harness.ctx,httpx.Client(transport=httpx.MockTransport(respond)))
+    monkeypatch.setattr(harness.ctx,'ai',ai)
+    assert not tutor._has_replaceable_reply('Lesson input, version 1',SmallResponse,None)
+    with pytest.raises(UnusableResponseError):
+        ai.generate('Lesson input, version 1',schema=SmallResponse,instructions=FORMAT_INSTRUCTIONS,max_output=MAX_PLAN_OUTPUT)
+    assert tutor._has_replaceable_reply('Lesson input, version 1',SmallResponse,None)
+    assert not tutor._has_replaceable_reply('Lesson input, version 2',SmallResponse,None)
