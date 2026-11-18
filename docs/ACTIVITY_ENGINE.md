@@ -300,7 +300,12 @@ a failed one keeps its photo (`retry_photo_check`).
 `check` (prompt, what was read, feedback). The tracker chips open it; **Fix it
 now** (`fix_work`) reopens that exercise with a return cursor, and a new photo, an
 on-screen answer or **Back to the lesson** (`fix_later`) returns to the step the
-child was on. Finish waits for running checks. Anything still `fix` at the end is
+child was on. An answer the check saw but could not decide (`photo_check.unsettled`:
+marks it could not read, or an answer it read but could not verify from the page,
+such as a count made on a map) is `grown_up`: besides a new photo, **A grown-up
+says it looks good** (`grown_up_checked`) marks it done without a grade. An
+exercise missing from the photo, or an answer the check found wrong, still waits
+for a fix. Finish waits for running checks. Anything still `fix` at the end is
 recorded as "to practise" (`completion_summary.photo_checks`) and is not carried
 into later lessons as pending work.
 
@@ -314,8 +319,8 @@ describes the child's marks and judges them against the task and its key
 Whatever the reader is unsure of, even a "Correct", is `Unreadable`: the
 tracker shows it as `grown_up` ("for a grown-up to look at") and **Looks good**
 (`grown_up_checked`) marks it done without a grade; a grown-up may also pass
-hands-on work marked to fix, or whose check failed. Ordinary answers cannot be
-passed this way.
+hands-on work marked to fix, or whose check failed. Other answers can be passed
+this way only when their check could not settle them (above).
 
 Rehearse offline with `backend/dev/activity_demo.py --practice-sections` (the
 `photo-demo` launch configuration): the mocked check takes five seconds and

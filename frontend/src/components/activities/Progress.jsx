@@ -24,8 +24,9 @@ function CheckDetail({ item, number, canFix, busy, onFix, onRetry, onGrownUp, on
       <Button onClick={onClose}>{open ? 'Later' : 'Close'}</Button>
       {failed && onRetry && <Button disabled={busy} onClick={() => { onClose(); onRetry(item.id); }}>Try the check again</Button>}
       {open && onFix && <Button variant={grownUp ? undefined : 'primary'} disabled={busy || !canFix} onClick={() => { onClose(); onFix(item.id); }}>{fix ? 'Fix it now' : 'Take the photo again'}</Button>}
-      {/* Hands-on work (lines, circles, colouring): a grown-up who looked at the page can pass it. */}
-      {open && item.hands_on && onGrownUp && <Button variant={grownUp ? 'primary' : undefined} disabled={busy} onClick={() => { onClose(); onGrownUp(item.id); }}>✓ A grown-up says it looks good</Button>}
+      {/* Hands-on work (lines, circles, colouring), or an answer the photo could not settle:
+          a grown-up who looked at the page can pass it. */}
+      {open && (item.hands_on || grownUp) && onGrownUp && <Button variant={grownUp ? 'primary' : undefined} disabled={busy} onClick={() => { onClose(); onGrownUp(item.id); }}>✓ A grown-up says it looks good</Button>}
     </div>}>
     <div className="flex flex-col gap-3 text-sm">
       {check.prompt && <p className="whitespace-pre-wrap font-semibold">{short(check.prompt)}</p>}
@@ -90,7 +91,7 @@ export function ToFix({ progress, checking, busy, onFix, onRetry, onGrownUp }) {
       <div className="flex flex-wrap gap-2 mt-1">
         <Button size="sm" variant="primary" disabled={busy} onClick={() => onFix(item.id)}>{item.outcome === 'fix' ? 'Fix it now' : 'Take the photo again'}</Button>
         {item.outcome === 'unchecked' && <Button size="sm" disabled={busy} onClick={() => onRetry(item.id)}>Try the check again</Button>}
-        {item.hands_on && onGrownUp && <Button size="sm" disabled={busy} onClick={() => onGrownUp(item.id)}>✓ A grown-up says it looks good</Button>}
+        {(item.hands_on || item.outcome === 'grown_up') && onGrownUp && <Button size="sm" disabled={busy} onClick={() => onGrownUp(item.id)}>✓ A grown-up says it looks good</Button>}
       </div>
     </article>)}
     {items.length > 0 && <p className="text-xs text-muted">You can also finish now. Anything left here is saved for a grown-up as “to practise”.</p>}

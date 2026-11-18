@@ -66,6 +66,17 @@ def _latest(jobs, action_id):
     return next((j for j in reversed(jobs) if action_id in j['input_snapshot']['items']), None)
 
 
+def unsettled(checked):
+    """A photo check that could not decide an answer it saw: the marks were unreadable, or the
+    answer it read depends on what the photo cannot show (a map, a count done together). A
+    grown-up who looked can settle it. An exercise missing from the photo needs another photo,
+    and an answer the check found wrong still waits for a fix."""
+    if not checked:
+        return False
+    return (checked.get('result') == 'Unreadable' or bool(checked.get('uncertain'))
+            or checked.get('result') == 'Unanswered' and bool((checked.get('answer') or '').strip()))
+
+
 def overview(db, session_id):
     """Per exercise: where its latest photo check stands, for the tracker."""
     jobs = _jobs(db, session_id)
@@ -76,7 +87,7 @@ def overview(db, session_id):
             checked = results.get(item)
             seen[item] = {'job_id': job['id'], 'status': job['status'], 'error': job.get('error'),
                 **({'read': checked['answer'], 'result': checked['result'], 'feedback': checked['feedback'],
-                    'reply_id': _reply_id(db, session_id, job['id'], item)} if checked else {})}
+                    'unsettled': unsettled(checked), 'reply_id': _reply_id(db, session_id, job['id'], item)} if checked else {})}
     return seen
 
 
@@ -227,11 +238,13 @@ def apply(engine, tx, session, action, interaction, event, payload, operation_id
         tx.update('activity_jobs', latest['id'], {'status': 'queued', 'error': None})
         return
     if event == 'grown_up_checked':
-        # A grown-up looked at hands-on work the photo check could not settle (or marked to fix).
-        # As with a grown-up check during the step, the event log keeps it; no answer is assessed.
-        if not hands_on(target) or not (target['status'] == 'fix' or target['status'] == 'checking'
-                                         and latest and latest['status'] == 'failed'):
-            raise TutorConflict('Only hands-on work waiting for a look can be confirmed by a grown-up')
+        # A grown-up looked at work the photo check could not settle: hands-on work it could not
+        # see or marked to fix, or any book answer it could not decide (unsettled). As with a
+        # grown-up check during the step, the event log keeps it; no answer is assessed.
+        failed = target['status'] == 'checking' and latest and latest['status'] == 'failed'
+        checked = next((r for r in ((latest or {}).get('result') or {}).get('items', []) if r['item_id'] == target['action_id']), None)
+        if not (target['status'] == 'fix' and (hands_on(target) or unsettled(checked)) or failed and hands_on(target)):
+            raise TutorConflict('Only work the photo check could not settle can be confirmed by a grown-up')
         tx.update('lesson_actions', target['id'], {'status': 'answered', 'next_prompt': None})
         return
     # fix_work: open a checked exercise again, then return to this place.

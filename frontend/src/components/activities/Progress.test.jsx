@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import { Celebration, ProgressDots } from './Progress';
+import { Celebration, ProgressDots, ToFix } from './Progress';
 
 afterEach(cleanup);
 const progress = { items: [{ id: 'a', outcome: 'first_try' }, { id: 'b', outcome: 'again' }, { id: 'c', outcome: 'pending' }],
@@ -35,4 +35,15 @@ it('reads the tutor reply aloud when an exercise to fix is opened', async () => 
   render(<ProgressDots progress={fix} currentId="b" renderVoice={(message) => { voiced.push(message); return <span>voice</span>; }} />);
   fireEvent.click(screen.getByText('Exercise 1: something to fix').closest('button'));
   expect(voiced.at(-1)).toEqual({ id: 'r-1:reply', text: 'Look at the tens again.' });
+});
+
+it('lets a grown-up pass a written answer the photo check could not settle, but not a wrong one', () => {
+  const passed = [];
+  render(<ToFix busy={false} onFix={() => {}} onRetry={() => {}} onGrownUp={(id) => passed.push(id)} progress={{ items: [
+    { id: 'count', outcome: 'grown_up', check: { prompt: 'How many houses?', read: '2', feedback: 'Check the count on the map together.' } },
+    { id: 'sum', outcome: 'fix', check: { prompt: '3 + 4', read: '8', feedback: 'Count again.' } }] }} />);
+  const buttons = screen.getAllByRole('button', { name: '✓ A grown-up says it looks good' });
+  expect(buttons).toHaveLength(1);
+  fireEvent.click(buttons[0]);
+  expect(passed).toEqual(['count']);
 });

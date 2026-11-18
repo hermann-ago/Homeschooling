@@ -1352,7 +1352,7 @@ class ActivityEngine:
         """
         from . import photo_check
         checks = checks or {}
-        # Hands-on work a grown-up confirmed after its photo check: done, with no verdict.
+        # Work a grown-up confirmed after its photo check could not settle it: done, with no verdict.
         confirmed = {(e.get("payload") or {}).get("activity_id") for e in self.db.find("activity_events", session_id=session_id)
                      if e["event_type"] == "grown_up_checked"}
         said = {}
@@ -1371,7 +1371,8 @@ class ActivityEngine:
             check = checks.get(action["action_id"])
             hands_on = photo_check.hands_on(action)
             outcome = ("skipped" if action["status"] == "skipped"
-                       else "grown_up" if action["status"] == "fix" and hands_on and (check or {}).get("result") == "Unreadable"
+                       else "grown_up" if action["status"] == "fix" and (hands_on and (check or {}).get("result") == "Unreadable"
+                                                                         or (check or {}).get("unsettled"))
                        else "done" if action["status"] == "answered" and action["action_id"] in confirmed
                        else ("practise" if finished else "fix") if action["status"] == "fix"
                        else ("unchecked" if finished or (check or {}).get("status") == "failed" else "checking") if action["status"] == "checking"

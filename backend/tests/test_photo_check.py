@@ -268,7 +268,8 @@ def test_a_question_the_photo_did_not_show_is_not_a_first_try(harness, monkeypat
     engine, state, question = lesson(harness, monkeypatch)
     monkeypatch.setattr(harness.ctx.ai, 'generate', reader(unseen, '', feedback='This question is not in your photo.'))
     state = snap(harness, engine, state)
-    assert state['progress']['items'][0]['outcome'] == 'fix'
+    # Not in the photo: take it again. Unreadable marks: a grown-up may also settle them.
+    assert state['progress']['items'][0]['outcome'] == ('fix' if unseen == 'Unanswered' else 'grown_up')
     state = event(engine, state, 'fix_work', {'activity_id': question['action_id']})
     monkeypatch.setattr(harness.ctx.ai, 'generate', reader())
     state = snap(harness, engine, state, 'again.png')
@@ -292,3 +293,21 @@ def test_a_photo_check_reads_the_exercise_page_not_the_whole_lesson(harness, mon
     assert 'The Mongols came from the north.' not in lean                     # not the rest of the lesson
     assert 'recent_sessions' not in lean and 'preferences' in lean
     assert len(lean) < len(full)
+
+
+@pytest.mark.parametrize('result,answer,uncertain', [('Unanswered', '3', False), ('Unreadable', '', True)])
+def test_a_written_answer_the_photo_cannot_settle_can_be_passed_by_a_grown_up(harness, monkeypatch, result, answer, uncertain):
+    """A count made on a map with a grown-up, or pencil marks over printed letters."""
+    engine, state, question = lesson(harness, monkeypatch)
+    monkeypatch.setattr(harness.ctx.ai, 'generate', reader(result, answer, uncertain=uncertain,
+                        feedback='Please have your parent check this with you.'))
+    state = snap(harness, engine, state)
+    item = state['progress']['items'][0]
+    assert item['outcome'] == 'grown_up' and not item.get('hands_on')
+    graded = harness.ctx.store.find('attempts', session_id=state['session_id'])
+    state = event(engine, state, 'grown_up_checked', {'activity_id': question['action_id']})
+    assert state['progress']['items'][0]['outcome'] == 'done'
+    assert harness.ctx.store.get('lesson_actions', question['id'])['status'] == 'answered'
+    assert harness.ctx.store.find('attempts', session_id=state['session_id']) == graded  # a grown-up's look adds no grade
+    state = event(engine, state, 'finish')
+    assert harness.ctx.store.get('tutor_sessions', state['session_id'])['status'] == 'completed'
