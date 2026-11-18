@@ -109,7 +109,8 @@ def test_preparation_and_live_feedback_pin_shared_style_and_age(harness,monkeypa
     assert h.call('PUT','/api/tutor/teaching-style',json={**body,'content':content.replace('FROZEN-FRIENDLY-STYLE','NEW-STYLE'),
        'expected_version':1}).status_code==200
     params={'learner':child,'topic':seeded['genghis']['id']}
-    assert not h.call('GET','/api/tutor/reader',params=params).json()['guide']['current']
+    kept=h.call('GET','/api/tutor/reader',params=params).json()['guide']  # reviewed: kept, not rewritten
+    assert kept['current'] and kept['earlier_skill']
     assert h.call('GET','/api/tutor/reader',params={**params,'session':state['session_id']}).json()['guide']['current']
     session=h.ctx.store.get('tutor_sessions',state['session_id'])
     action=h.ctx.store.find('lesson_actions',session_id=session['id'])[0]

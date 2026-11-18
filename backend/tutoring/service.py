@@ -735,7 +735,9 @@ class TutorService:
     def guide(self, topic: dict, package: dict, guide_id: str | None = None) -> dict | None:
         """The lesson's guided walk-through, if one was written (see tutoring/guide.py)."""
         skill = skills.packet(self.store, self.store.get("subjects", topic["subject_id"]))
-        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"], skill["sha256"])
+        # Freshness of everything except the teaching skills, which are judged apart below.
+        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"])
+        skills_changed = bool(row) and row.get("skill_sha256") != skill["sha256"]
         from . import library_materials
         shared_book = library_materials.book_for(self.store, topic['subject_id'])
         if row:
@@ -756,7 +758,13 @@ class TutorService:
                 if material:
                     fresh = fresh and guide_mod.guide_sha(material['data']['built']['sentences']) == row['guide_sha256']
             recorded_family = (row.get('context_snapshot') or {}).get('family_tutoring')
-            fresh = fresh and (recorded_family.get('sha256') == family['sha256'] if recorded_family else family['version'] == 0)
+            skills_changed = skills_changed or not (recorded_family.get('sha256') == family['sha256'] if recorded_family else family['version'] == 0)
+            if skills_changed and fresh:
+                # A teaching-skill edit does not rewrite a lesson that is still usable: one whose
+                # saved script passed its review. Its sources are current; the family can still
+                # ask for a new script. A script the review sent back is rewritten as before.
+                from .script_review import status as review_status
+                fresh = review_status(self.ctx, row)['status'] == 'approved'
         if row and hasattr(self.ctx, "books"):
             recorded = (row.get("context_snapshot") or {}).get("workbook_fingerprint")
             books = self.store.find("subject_books", subject_id=topic["subject_id"])
@@ -774,6 +782,7 @@ class TutorService:
         try:
             result = guide_mod.package(self.ctx, row, fresh)
             if not guide_id:
+                result['earlier_skill'] = skills_changed
                 from .lesson_context import preparation
                 subject = self.store.get("subjects", topic["subject_id"])
                 adaptive = preparation(self.ctx, subject["child_id"], topic, package)

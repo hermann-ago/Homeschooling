@@ -177,3 +177,8 @@ it('restores the previous provider and allows intentional script regeneration',a
   await screen.findByLabelText('Preparation estimate');
   expect(api.estimate.mock.calls[0][0]).toMatchObject({rewrite:true,teaching_provider:'google',maximum_guide_usd:2});
 });
+
+it('says when a kept script was written with an earlier teaching skill',()=>{
+  dialog({status:{...ready,script_status:'ready',earlier_skill:true}});
+  expect(screen.getByRole('note').textContent).toMatch(/earlier version of the teaching skill.*Generate a new tutor script/);
+});

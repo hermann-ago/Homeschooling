@@ -144,7 +144,8 @@ def test_current_saved_script_and_its_actual_google_recording_are_reported(harne
     with h.ctx.store.transaction() as tx:
         family_skill.save(tx,family_skill.current(tx)['content']+'\nAllow time to think.',{},0)
     row=h.call('GET','/api/tutor/preparation',params=params(s)).json()['lessons'][0]
-    assert row['script_status']=='outdated' and row['audio']['status']=='ready'
+    # A style edit keeps the reviewed script and its recording in use, and says so.
+    assert row['script_status']=='ready' and row['earlier_skill'] and row['audio']['status']=='ready'
     monkeypatch.setattr(h.ctx.tutor,'audio_tracks',lambda *args,**kw:[{'provider':'kokoro-local','synchronized':True,'status':'ready','voice':'Home'}])
     assert h.call('GET','/api/tutor/preparation',params=params(s)).json()['lessons'][0]['audio']['status']=='missing'
 

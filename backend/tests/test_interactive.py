@@ -70,16 +70,25 @@ def test_skills_are_versioned_isolated_exported_and_survive_grade_move(harness):
     assert harness.call("GET", url).json()["content"] == starter["content"].strip()
 
 
-def test_skill_edit_marks_guide_stale_but_session_pins_guide_and_skill(harness, monkeypatch):
+def test_skill_edit_keeps_a_reviewed_guide_and_a_session_pins_guide_and_skill(harness, monkeypatch):
+    from tutoring import script_review
     seeded, guide = prepare(harness, monkeypatch)
     state = start(harness, seeded, guide)
     subject_id = seeded["history"]["id"]
     skill = skills.current(harness.ctx.store, subject_id)
     assert harness.call("PUT", f"/api/subjects/{subject_id}/teaching-skill", json={"content": skill["content"] + "\nMore maps.", "expected_version": skill["version"]}).status_code == 200
     params = {"learner": seeded["lucas"]["id"], "topic": seeded["genghis"]["id"]}
-    assert not harness.call("GET", "/api/tutor/reader", params=params).json()["guide"]["current"]
+    # A skill edit does not send a reviewed, still usable lesson back to be written again.
+    kept = harness.call("GET", "/api/tutor/reader", params=params).json()["guide"]
+    assert kept["current"] and kept["earlier_skill"]
     pinned = harness.call("GET", "/api/tutor/reader", params={**params, "session": state["session_id"]}).json()["guide"]
     assert pinned["guide_id"] == guide["guide_id"] and pinned["skill_id"] == guide["skill_id"] and pinned["current"]
+    # A script its review sent back is written again under the edited skill.
+    row = harness.ctx.store.get("guides", guide["guide_id"])
+    finding = {"activity_ids": [], "category": "task", "detail": "A step does not wait for the answer.",
+               "severity": "blocking", "suggestion": "Wait for the answer."}
+    script_review.save(harness.ctx, row, script_review.inputs(harness.ctx, row), {"findings": [finding]}, "family")
+    assert not harness.call("GET", "/api/tutor/reader", params=params).json()["guide"]["current"]
 
 
 def test_book_only_link_offers_exact_saved_tutoring_session_without_starting_another(harness, monkeypatch):

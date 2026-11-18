@@ -60,6 +60,8 @@ def snapshot(ctx, topic, jobs=None, voice_jobs=None):
         'review':guide.get('script_review') if guide else None,
         'origin':guide.get('origin') if guide else None,'revision_of':guide.get('revision_of') if guide else None,
         'script_status':'ready' if guide and guide['current'] else 'outdated' if guide else 'missing',
+        # Ready but written with an earlier teaching skill: kept, since its review passed.
+        'earlier_skill':bool(guide and guide['current'] and guide.get('earlier_skill')),
         'audio':audio,'job':public_job(latest) if latest else None,'error':error,
         'can_prepare':bool(topic.get('document_id'))}
 
