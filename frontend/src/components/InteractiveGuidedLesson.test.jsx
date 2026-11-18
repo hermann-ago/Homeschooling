@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ conversation: vi.fn(), interactiveAction: vi.fn(), attachWork: vi.fn(), startInteractive: vi.fn(), audioManifest: vi.fn(), audioPart: vi.fn() }));
+const api = vi.hoisted(() => ({ conversation: vi.fn(), interactiveAction: vi.fn(), attachWork: vi.fn(), startInteractive: vi.fn(), audioManifest: vi.fn(), audioPart: vi.fn(), preloadAudioPart: vi.fn() }));
 vi.mock('../api/tutor', () => ({ tutorApi: api }));
 import InteractiveGuidedLesson from './InteractiveGuidedLesson';
 

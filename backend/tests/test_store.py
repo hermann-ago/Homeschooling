@@ -203,3 +203,58 @@ def test_a_subjects_folder_can_follow_its_own_grade():
     assert [layout.grade_of_folder(f) for f in ("Lucas/3rd Grade/History", "Olivia/Pre-K/Math", "Joshua/Reading", None)] \
         == ["3rd", "Pre-K", None, None]
     assert [layout.stored_grade(g) for g in ("4th ", "", None, "n/a", "Pre-K")] == ["4th", "N/A", "N/A", "N/A", "Pre-K"]
+
+
+def _scan(rows, **equals):
+    return [r for r in rows if all(r.get(k) == v for k, v in equals.items())]
+
+
+def test_find_matches_a_full_scan_through_changes_in_table_order(tmp_path):
+    """find() answers from an index; it must give what a scan of all rows gives, in the same order."""
+    store = open_store(tmp_path)
+    with store.transaction() as tx:
+        for name, color in [("Lucas", "#a"), ("Mila", "#b"), ("Olivia", "#a"), ("Joshua", "#c")]:
+            tx.insert("children", {"name": name, "color": color})
+    assert store.find("children", color="#a") == _scan(store.all("children"), color="#a")
+    with store.transaction() as tx:  # a row changes the indexed value, another leaves, a new one arrives
+        tx.update("children", 2, {"color": "#a"})
+        tx.update("children", 1, {"color": "#z"})
+        tx.delete("children", 4)
+        tx.insert("children", {"name": "Ana", "color": "#a"})
+    rows = store.all("children")
+    for equals in ({"color": "#a"}, {"color": "#z"}, {"color": "#c"}, {"color": "#a", "name": "Mila"}, {"name": "Nobody"}):
+        assert store.find("children", **equals) == _scan(rows, **equals)
+    assert [r["name"] for r in store.find("children", color="#a")] == ["Mila", "Olivia", "Ana"]
+    restarted = open_store(tmp_path)
+    assert restarted.find("children", color="#a") == store.find("children", color="#a")
+
+
+def test_find_inside_a_transaction_sees_staged_rows_in_order(tmp_path):
+    store = open_store(tmp_path)
+    with store.transaction() as tx:
+        for name in ("Lucas", "Mila", "Olivia"):
+            tx.insert("children", {"name": name, "color": "#a"})
+    with store.transaction() as tx:
+        tx.update("children", 1, {"color": "#b"})
+        tx.update("children", 3, {"color": "#b"})
+        tx.delete("children", 2)
+        tx.insert("children", {"name": "Ana", "color": "#b"})
+        assert tx.find("children", color="#b") == _scan(tx.all("children"), color="#b")
+        assert [r["name"] for r in tx.find("children", color="#b")] == ["Lucas", "Olivia", "Ana"]
+        assert tx.find("children", color="#a") == []
+
+
+def test_unique_keys_still_refuse_a_repeat(tmp_path):
+    store = open_store(tmp_path)
+    with store.transaction() as tx:
+        child = tx.insert("children", {"name": "Lucas"})
+        tx.insert("subjects", {"child_id": child["id"], "name": "Math"})
+        topic = tx.insert("topics", {"subject_id": 1, "title": "One", "page_start": 1, "page_end": 2})
+        tx.insert("topic_videos", {"id": "v1", "topic_id": topic["id"], "provider": "vimeo", "source": "a"})
+    with pytest.raises(IntegrityViolation):
+        with store.transaction() as tx:
+            tx.insert("topic_videos", {"id": "v2", "topic_id": topic["id"], "provider": "vimeo", "source": "b"})
+    with store.transaction() as tx:  # moving the key to a new row in one change is fine
+        tx.delete("topic_videos", "v1")
+        tx.insert("topic_videos", {"id": "v2", "topic_id": topic["id"], "provider": "vimeo", "source": "b"})
+    assert [r["id"] for r in store.find("topic_videos", topic_id=topic["id"])] == ["v2"]

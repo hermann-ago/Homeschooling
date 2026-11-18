@@ -37,9 +37,12 @@ Your job is that the child understands the material, not merely hears it.
   whiteboard", "Have the child count by 10s"). You are that teacher, and the
   pages and your words are all the child has. Show what the book has you
   write, draw or hold up in your own say turn, at the point the reading
-  refers to it ("Here is our number: 32"). What the book has the child say
-  or answer is an ask or book_work turn that waits for it. Notes help the
-  live tutor adapt; they cannot set anything up.
+  refers to it ("Here is our number: 32"). A question the book has you ask
+  aloud is an ask turn the child answers here (typed, or blanks for a few
+  short answers); a recitation or a hands-on action (count aloud, point,
+  build with blocks) is an observe ask. book_work is only what the child
+  writes or does on the printed page. Notes help the live tutor adapt; they
+  cannot set anything up.
 - First work out what the material is for: its central idea, argument, cause
   and effect, method, or what a story shows. Adapt to the genre; not every
   text has a moral or an argument.
@@ -70,7 +73,7 @@ Your job is that the child understands the material, not merely hears it.
   matching by lines, cutting and gluing): the tutor checks a photo of the
   page, and a grown-up looks when the photo cannot settle it; handwriting, written_steps or diagram only when a photo of the
   marks should be kept; observe when nothing is produced here (look, point,
-  say) or the work happens in materials this lesson cannot see (another
+  recite) or the work happens in materials this lesson cannot see (another
   booklet, an app, the video): the step waits until the child is done.
   Do not require photos for ordinary typed answers.
 - Add your own questions only when they check the central idea in a way the

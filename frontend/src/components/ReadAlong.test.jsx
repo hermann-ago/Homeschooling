@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-const api = vi.hoisted(() => ({ audioManifest: vi.fn(), audioPart: vi.fn() }));
+const api = vi.hoisted(() => ({ audioManifest: vi.fn(), audioPart: vi.fn(), preloadAudioPart: vi.fn() }));
 vi.mock('../api/tutor', () => ({ tutorApi: api }));
 
 import ReadAlong from './ReadAlong';
@@ -85,6 +85,7 @@ describe('ReadAlong', () => {
       tracks: [{ index: 0, startSentence: 0, sentenceStarts: [0.0, 2.0, 4.5] }],
     });
     api.audioPart.mockReset().mockResolvedValue('blob:audio');
+    api.preloadAudioPart.mockReset();
   });
 
   it('reloads the same track when missing recordings are filled in',async()=>{
@@ -152,6 +153,19 @@ describe('ReadAlong', () => {
     act(() => spoken[0].onend());
     await waitFor(() => expect(api.audioPart).toHaveBeenCalledWith('mixed', 2));
     expect(api.audioPart).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads only the part a step starts in, then fetches the next step's part ahead", async () => {
+    api.audioManifest.mockResolvedValue({ tracks: [
+      { index: 0, startSentence: 0, sentenceCount: 1, sentenceStarts: [0] },
+      { index: 1, startSentence: 1, sentenceCount: 1, sentenceStarts: [0] },
+      { index: 2, startSentence: 2, sentenceCount: 1, sentenceStarts: [0] },
+    ] });
+    const { container } = render(<ReadAlong passage={passage} tracks={[{ track_id: 'steps', status: 'ready', synchronized: true }]}
+      activeIndex={1} onActiveIndex={vi.fn()} rangeStart={1} rangeEnd={1} externalControls />);
+    await waitFor(() => expect(container.querySelector('audio')).not.toBeNull());
+    expect(api.audioPart.mock.calls).toEqual([['steps', 1]]);
+    await waitFor(() => expect(api.preloadAudioPart).toHaveBeenCalledWith('steps', 2));
   });
 
   it('highlights the sentence from provider timepoints', async () => {

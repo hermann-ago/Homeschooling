@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const api = vi.hoisted(() => ({ audioManifest: vi.fn(), audioPart: vi.fn() }));
+const api = vi.hoisted(() => ({ audioManifest: vi.fn(), audioPart: vi.fn(), preloadAudioPart: vi.fn() }));
 vi.mock('../api/tutor', () => ({ tutorApi: api }));
 import ReadAlong from './ReadAlong';
 import { pauseNarration } from '../utils/narration';

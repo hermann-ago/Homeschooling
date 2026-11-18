@@ -67,6 +67,9 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
   const cursorCallback = useRef(onCursorChange);
   const cursorRef = useRef(resumableCursor);
   const restoredCursor = useRef(false);
+  // The part this step starts in, until the player has moved to it: the first part is not
+  // downloaded on the way there.
+  const awaitedPart = useRef(null);
   const rangeEnded = useRef(false);
   useEffect(() => { cursorCallback.current = onCursorChange; }, [onCursorChange]);
   const reportCursor = useCallback((cursor) => {
@@ -122,6 +125,7 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
     setPartUrl(null);
     setPartIndex(0);
     restoredCursor.current = false;
+    awaitedPart.current = null;
     setPlaying(false);
     stopSpeech();
     if (source !== DEVICE) tutorApi.audioManifest(source).then((next) => { if (active) setManifest(next); }).catch((e) => { if (active) setError(e.message); });
@@ -135,12 +139,15 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
     const target = saved ? saved.part_index : partForSentence(manifest.tracks || [], rangeStart);
     if (target >= 0 && target < (manifest.tracks?.length || 0)) {
       pendingSeek.current = { time: saved?.offset_seconds || 0, play: false };
+      if (target !== partIndex) awaitedPart.current = target;
       setPartIndex(target);
     }
   }, [manifest, source, resumableCursor, rangeStart]);
 
   useEffect(() => {
     if (!manifest) return undefined;
+    if (awaitedPart.current !== null && awaitedPart.current !== partIndex) return undefined;
+    awaitedPart.current = null;
     if (manifest.tracks?.[partIndex]?.fallback) { setPartUrl(null); return undefined; }
     let url = null;
     let active = true;
@@ -148,6 +155,9 @@ export default function ReadAlong({ passage, tracks, activeIndex, onActiveIndex,
       url = next;
       if (active) setPartUrl(next);
       else { URL.revokeObjectURL(next); url = null; }
+      // The next part is usually the next step's: have it here before the child presses on.
+      const following = manifest.tracks?.[partIndex + 1];
+      if (following && !following.fallback) tutorApi.preloadAudioPart(source, partIndex + 1);
     }).catch((e) => setError(e.message));
     return () => {
       active = false;

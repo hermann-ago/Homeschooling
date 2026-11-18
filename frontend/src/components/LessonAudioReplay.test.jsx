@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import {cleanup,fireEvent,render,screen,waitFor} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-const api=vi.hoisted(()=>({audioManifest:vi.fn(),audioPart:vi.fn()}));
+const api=vi.hoisted(()=>({audioManifest:vi.fn(),audioPart:vi.fn(),preloadAudioPart:vi.fn()}));
 vi.mock('../api/tutor',()=>({tutorApi:api}));
 import LessonAudioReplay from './LessonAudioReplay';
 

@@ -54,11 +54,45 @@ export const tutorApi = {
     method: 'POST', body: JSON.stringify({ learner, topic, maximum_usd }),
   }),
   readerState: (session) => fetchApi(`/tutor/reader/${encodeURIComponent(session)}/state`),
-  audioManifest: (trackId) => fetchApi(`/tutor/audio/${encodeURIComponent(trackId)}/manifest`),
-  audioPart: async (trackId, index) => {
-    const response = await request(`/tutor/audio/${encodeURIComponent(trackId)}/parts/${index}`);
-    if (!response.ok) throw new Error('Audio could not be loaded');
-    return URL.createObjectURL(await response.blob());
+  audioManifest: (trackId) => {
+    const saved = manifests.get(trackId);
+    if (saved) return saved;
+    const loading = fetchApi(`/tutor/audio/${encodeURIComponent(trackId)}/manifest`).then((manifest) => {
+      // A finished recording never changes under its track id. One still being made, or with
+      // passages still to be recorded (they can be filled in later), is asked again.
+      if (manifest?.job_status !== 'ready' || manifest.fallback_parts) manifests.delete(trackId);
+      return manifest;
+    }, (error) => { manifests.delete(trackId); throw error; });
+    manifests.set(trackId, loading);
+    return loading;
   },
+  /** An object URL for one recorded part; the caller revokes it. */
+  audioPart: async (trackId, index) => URL.createObjectURL(await partBlob(trackId, index)),
+  /** Fetch a part ahead, so the next step's voice starts when the child presses on. */
+  preloadAudioPart: (trackId, index) => { partBlob(trackId, index).catch(() => {}); },
 };
+
+// Each lesson step plays its own part of the recording, and a step's player is new each
+// time. Without these, every step fetched the manifest and its whole part again (over a
+// home network the voice waited for the full download) before it could speak.
+const manifests = new Map();
+const parts = new Map();
+const KEPT_PARTS = 40;
+
+function partBlob(trackId, index) {
+  const key = `${trackId}/${index}`;
+  const saved = parts.get(key);
+  if (saved) {
+    parts.delete(key); parts.set(key, saved); // most recently used last
+    return saved;
+  }
+  const loading = request(`/tutor/audio/${encodeURIComponent(trackId)}/parts/${index}`).then(async (response) => {
+    if (!response.ok) throw new Error('Audio could not be loaded');
+    return response.blob();
+  });
+  loading.catch(() => parts.delete(key));
+  parts.set(key, loading);
+  while (parts.size > KEPT_PARTS) parts.delete(parts.keys().next().value);
+  return loading;
+}
 import { DEFAULT_SCRIPT_CAP_USD, DEFAULT_AUDIO_CAP_USD } from '../utils/preparationLimits';

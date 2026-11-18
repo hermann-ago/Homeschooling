@@ -140,7 +140,17 @@ class Transaction:
         return list(rows.values())
 
     def find(self, table: str, **equals) -> list[dict]:
-        return [r for r in self.all(table) if all(r.get(k) == v for k, v in equals.items())]
+        """As all() filtered by equals, in the same order, without copying the whole table."""
+        staged = [record_id for (name, record_id) in self._staged if name == table]
+        ids = self.store._find_with_ids(table, equals, staged)
+        saved = set(ids)
+        ids += [record_id for record_id in staged if record_id not in saved]  # new rows come last, as in all()
+        result = []
+        for record_id in ids:
+            row = self.get(table, record_id)
+            if row is not None and all(row.get(k) == v for k, v in equals.items()):
+                result.append(row)
+        return result
 
     # ── writes ────────────────────────────────────────────────────────────────
     def _stage(self, table: str, record_id, value):
@@ -193,7 +203,7 @@ class Transaction:
             for fk in child.foreign_keys:
                 if fk.table != table:
                     continue
-                dependants = [r for r in self.all(child.name) if r.get(fk.column) == record_id]
+                dependants = self.find(child.name, **{fk.column: record_id})
                 for dependant in dependants:
                     if fk.on_delete == "restrict":
                         raise IntegrityViolation(
@@ -240,16 +250,15 @@ class Transaction:
                 raise NotFound(f"{fk.table} {value} not found")
 
     def _check_unique(self):
-        touched = {table for table, _ in self._order}
-        for table in touched:
-            spec = TABLES[table]
-            for columns in spec.unique:
-                seen = {}
-                for row in self.all(table):
-                    key = tuple(row.get(c) for c in columns)
-                    if key in seen:
-                        raise IntegrityViolation(f"{table} already has {dict(zip(columns, key))}")
-                    seen[key] = row["id"]
+        # Saved rows are already unique, so only a key a staged row now holds can repeat.
+        for table, record_id in self._order:
+            row = self._staged[(table, record_id)]
+            if row is None:
+                continue
+            for columns in TABLES[table].unique:
+                key = {c: row.get(c) for c in columns}
+                if len(self.find(table, **key)) > 1:
+                    raise IntegrityViolation(f"{table} already has {key}")
 
     def changes(self) -> list[dict]:
         self._check_unique()
@@ -287,6 +296,77 @@ class Store:
         self._lock = threading.RLock()
         self._data: dict[str, dict] = {name: {} for name in TABLES}
         self._next_ids: dict[str, int] = {}
+        self._reset_indexes()
+
+    # ── lookup indexes ───────────────────────────────────────────────────────
+    # find() is called hundreds of times while one lesson's state is built, and a
+    # scan of every row holds the lock that every other request waits on. Each
+    # column a find() asks about gets an index of its values the first time; a
+    # commit keeps it current. Results keep the table's own row order.
+    def _reset_indexes(self):
+        self._indexes: dict[tuple[str, str], dict] = {}
+        self._unindexable: set[tuple[str, str]] = set()
+        self._positions: dict[str, dict] = {name: {} for name in TABLES}
+        self._counter = 0
+
+    def _position(self, table: str, record_id):
+        positions = self._positions[table]
+        if record_id not in positions:
+            self._counter += 1
+            positions[record_id] = self._counter
+
+    def _index(self, table: str, column: str):
+        key = (table, column)
+        if key in self._unindexable:
+            return None
+        index = self._indexes.get(key)
+        if index is None:
+            index = {}
+            try:
+                for record_id, row in self._data[table].items():
+                    index.setdefault(row.get(column), {})[record_id] = None
+            except TypeError:  # a list or object column; those are scanned
+                self._unindexable.add(key)
+                return None
+            self._indexes[key] = index
+        return index
+
+    def _reindex(self, table: str, record_id, old: dict | None, new: dict | None):
+        for (name, column), index in list(self._indexes.items()):
+            if name != table:
+                continue
+            if old is not None:
+                bucket = index.get(old.get(column))
+                if bucket is not None:
+                    bucket.pop(record_id, None)
+                    if not bucket:
+                        index.pop(old.get(column), None)
+            if new is not None:
+                try:
+                    index.setdefault(new.get(column), {})[record_id] = None
+                except TypeError:
+                    del self._indexes[(name, column)]
+                    self._unindexable.add((name, column))
+
+    def _candidate_ids(self, table: str, equals: dict):
+        """The ids that can match equals, in table order; None when they must all be scanned."""
+        best = None
+        for column, value in equals.items():
+            index = self._index(table, column)
+            if index is None:
+                continue
+            try:
+                bucket = index.get(value, {})
+            except TypeError:
+                continue
+            if best is None or len(bucket) < len(best):
+                best = bucket
+                if not best:
+                    break
+        if best is None:
+            return None
+        positions = self._positions[table]
+        return sorted(best, key=positions.__getitem__)
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
     def _connect(self) -> sqlite3.Connection:
@@ -297,6 +377,7 @@ class Store:
 
     def load(self):
         with self._lock:
+            self._reset_indexes()
             connection = self._connect()
             try:
                 connection.execute("CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT)")
@@ -314,6 +395,8 @@ class Store:
                         record = {c: _from_db(column_kind(spec, c), v) for c, v in zip(columns, values)}
                         table[record["id"]] = record
                     self._data[spec.name] = table
+                    for record_id in table:
+                        self._position(spec.name, record_id)
                     if spec.id_type == "int" and table:
                         self._next_ids[spec.name] = max(table) + 1
             finally:
@@ -342,8 +425,20 @@ class Store:
 
     def find(self, table: str, **equals) -> list[dict]:
         with self._lock:
-            return [dict(r) for r in self._data[table].values()
-                    if all(r.get(k) == v for k, v in equals.items())]
+            rows = self._data[table]
+            ids = self._candidate_ids(table, equals) if equals else None
+            candidates = rows.values() if ids is None else (rows[i] for i in ids)
+            return [dict(r) for r in candidates if all(r.get(k) == v for k, v in equals.items())]
+
+    def _find_with_ids(self, table: str, equals: dict, extra_ids) -> list:
+        """Ids of saved rows that may match equals, plus extra_ids that are saved rows, in table order."""
+        with self._lock:
+            rows = self._data[table]
+            ids = self._candidate_ids(table, equals) if equals else None
+            if ids is None:
+                return list(rows)
+            positions = self._positions[table]
+            return sorted(set(ids) | {i for i in extra_ids if i in rows}, key=positions.__getitem__)
 
     def first(self, table: str, **equals) -> dict | None:
         rows = self.find(table, **equals)
@@ -406,11 +501,17 @@ class Store:
         finally:
             connection.close()
         for change in changes:  # the database committed; mirror it in memory
-            rows = self._data[change["table"]]
+            table = change["table"]
+            rows = self._data[table]
+            old = rows.get(change["id"])
             if change["action"] == "delete":
                 rows.pop(change["id"], None)
+                self._positions[table].pop(change["id"], None)
+                self._reindex(table, change["id"], old, None)
             else:
                 rows[change["id"]] = dict(change["row"])
+                self._position(table, change["id"])
+                self._reindex(table, change["id"], old, rows[change["id"]])
         return {"operation_id": tx.operation_id, "sync": SAVED, "changes": len(changes) - 1}
 
     @staticmethod

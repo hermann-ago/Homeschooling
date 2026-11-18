@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FeedbackVoice from './FeedbackVoice';
 import { tutorApi } from '../api/tutor';
 
-vi.mock('../api/tutor', () => ({ tutorApi: { feedbackAudio: vi.fn(), actionAudio: vi.fn(), audioManifest: vi.fn(), audioPart: vi.fn() } }));
+vi.mock('../api/tutor', () => ({ tutorApi: { feedbackAudio: vi.fn(), actionAudio: vi.fn(), audioManifest: vi.fn(), audioPart: vi.fn(), preloadAudioPart: vi.fn() } }));
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
   window.speechSynthesis = { cancel: vi.fn(), speak: vi.fn() };
