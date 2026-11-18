@@ -236,7 +236,8 @@ def reveals_answer(turn, before):
     answer = _words(turn.answer)
     if len(answer) < 4 or answer in BINARY_ANSWERS:
         return  # Letters, numbers and true/false cannot be checked by wording.
-    printed = {_words(item) for item in turn.items}
+    # The exercise's printed items, and the printed problems labelling its answer boxes.
+    printed = {_words(item) for item in [*turn.items, *turn.response.blanks]}
     parts = [_words(part) for part in re.split(r'[;\n]', turn.answer or '') if _words(part)]
     if parts and all(part in printed for part in parts):
         return  # The book prints these very words (copywork, tracing): the child sees them on the page.

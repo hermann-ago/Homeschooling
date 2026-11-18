@@ -121,6 +121,9 @@ def test_copywork_whose_answer_is_the_printed_words_is_not_a_leak():
     words = ['thirteen', 'fourteen', 'eleven', 'twelve']
     copy = work(prompt='Write the number words.\n\n' + '\n\n'.join(words), answer='; '.join(words))
     compile_({'type': 'say', 'text': 'Each printed word is a model showing its letters in order.'}, {**copy, 'items': words})
+    # The same copywork written as answer boxes labelled with the printed words.
+    boxes = work(prompt=copy['prompt'], answer='; '.join(words) + '.', format='blanks', blanks=words)
+    compile_({'type': 'say', 'text': 'The printed number words are models.'}, {**boxes, 'answers': words})
     # A printed item that is not the answer still cannot be spoken before its question.
     with pytest.raises(ValueError, match='reveals its answer'):
         compile_({'type': 'say', 'text': 'It was Mehmed the Conqueror.'}, {**work(), 'items': ['3']})
