@@ -195,14 +195,18 @@ class InteractiveTutor:
             if slot_id and not existing["slot_id"]:
                 tx.update("lesson_playback", session["id"], {"slot_id": slot_id})
             return session["id"]
+        guide = guide_mod.package(self.ctx, guide_row, True)
         if guide_row["mode"] != "practice":
             books = tx.find("subject_books", subject_id=topic["subject_id"])
             if any(b["role"] in ("workbook", "test", "combined") and not b["archived"] and b["status"] in ("queued", "running", "failed") for b in books):
                 raise TutorError("Finish workbook preparation before starting this guided lesson")
             recorded = (guide_row.get("context_snapshot") or {}).get("workbook_fingerprint")
-            if any(b["active_index"] for b in books) and recorded != self.ctx.books.fingerprint(topic["subject_id"]):
+            # Mapped workbook exercises must match the lesson (stale ones, or new ones it lacks).
+            # Where there are none, other book changes (an answer key added, a role changed)
+            # only offer an update.
+            exercises = any(a.get("exercise_id") for a in guide["actions"]) or any(tx.find("exercises", book_id=b["id"]) for b in books)
+            if exercises and any(b["active_index"] for b in books) and recorded != self.ctx.books.fingerprint(topic["subject_id"]):
                 raise TutorError("The books or exercise mappings changed; update this guide before starting it")
-        guide = guide_mod.package(self.ctx, guide_row, True)
         from . import book_questions
         read_along = book_questions.read_along(guide_row.get('context_snapshot'))
         if read_along:
@@ -214,7 +218,7 @@ class InteractiveTutor:
         if not guide["actions"] and not read_along and not grown_up_checks:
             raise TutorError("Update this guided lesson to add student actions before starting it")
         source = passages.load(self.ctx, topic)
-        if guide_row["source_sha256"] != source["passage_sha256"]:
+        if not passages.written_for(source, guide_row["source_sha256"]):
             raise TutorError("The book pages changed; update the guided lesson before starting it")
         reviews = self.db.find("reviews", child_id=child_id)
         packet = self.tutor.context(child_id, topic["subject_id"])
@@ -1016,7 +1020,9 @@ Reply using the supplied JSON schema. result describes THIS response, not any ea
             "next_action": "Revisit pending questions." if skipped else "Continue with the next lesson." if remaining else "Subject complete.",
             "reading_mode": "interactive guided lesson"})
         slot_id = state["playback"]["slot_id"]
-        if slot_id and not tx.find("completions", slot_id=slot_id):
+        # Re-planning replaces calendar slots; the lesson's own scheduled days are
+        # completed with the topic (service.finish), so a replaced slot is skipped.
+        if slot_id and tx.get("scheduled_slots", slot_id) and not tx.find("completions", slot_id=slot_id):
             from .service import _now
             tx.insert("completions", {"slot_id": slot_id, "completed_at": _now()})
         return result

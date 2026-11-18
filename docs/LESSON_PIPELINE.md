@@ -62,7 +62,8 @@ checked with the eval set — not by adding another prohibition to the prompt.
   such as a buyer's watermark (which can carry a name, email or ID number), a
   running head or a copyright footer. Book-work quotations are checked against
   the same text, and `guide.save` removes furniture from transcribed readings and
-  quotations, whichever way the lesson was written.
+  quotations, whichever way the lesson was written. A lesson prepared from the
+  same pages before furniture was left out stays current (`passages.written_for`).
 
 ## 2. Writing (one AI call, or Codex)
 

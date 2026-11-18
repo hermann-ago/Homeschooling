@@ -928,12 +928,15 @@ def guide_sha(sentences: list[dict]) -> str:
 
 # ── Storage ──────────────────────────────────────────────────────────────────
 
-def current_row(store, topic_id: int, source_sha: str, skill_sha: str | None = None) -> tuple[dict | None, bool]:
-    """(latest guide row, whether it was written for this passage text)."""
+def current_row(store, topic_id: int, source, skill_sha: str | None = None) -> tuple[dict | None, bool]:
+    """(latest guide row, whether it was written for this passage text). ``source`` is the
+    passage package (see passages.written_for) or a passage checksum."""
     rows = sorted((r for r in store.find("guides", topic_id=topic_id) if r["mode"] != "practice"), key=lambda r: (r["created_at"], r["id"]), reverse=True)
     if not rows:
         return None, False
-    return rows[0], rows[0]["source_sha256"] == source_sha and (skill_sha is None or rows[0].get("skill_sha256") == skill_sha)
+    from .passages import written_for
+    package = source if isinstance(source, dict) else {"passage_sha256": source}
+    return rows[0], written_for(package, rows[0]["source_sha256"]) and (skill_sha is None or rows[0].get("skill_sha256") == skill_sha)
 
 
 def display_sentences(content, context):

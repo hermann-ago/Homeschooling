@@ -154,14 +154,22 @@ def passage_sha256(passage: str) -> str:
     return hashlib.sha256(passage.encode("utf-8")).hexdigest()
 
 
-def extract(pdf_bytes: bytes, pdf_start: int, pdf_end: int, start_at: str | None, stop_before: str | None) -> dict:
+def written_for(package: dict, source_sha256: str | None) -> bool:
+    """Whether a lesson prepared from ``source_sha256`` was written for this passage: its
+    text now, or the same pages as extracted before page furniture was left out (the
+    lesson's teaching did not change; only a watermark or running head was dropped)."""
+    return bool(source_sha256) and source_sha256 in (package["passage_sha256"], package.get("earlier_passage_sha256"))
+
+
+def extract(pdf_bytes: bytes, pdf_start: int, pdf_end: int, start_at: str | None, stop_before: str | None,
+            furniture: frozenset | None = None) -> dict:
     reader = PdfReader(io.BytesIO(pdf_bytes))
     issues = []
     if pdf_start < 1 or pdf_end > len(reader.pages) or pdf_start > pdf_end:
         return {"passage": "", "issues": [f"PDF pages {pdf_start}–{pdf_end} are outside this document"],
                 "page_texts": []}
     page_texts = []
-    furniture = page_furniture(pdf_bytes)
+    furniture = page_furniture(pdf_bytes) if furniture is None else furniture
     for number in range(pdf_start, pdf_end + 1):
         text = without_furniture(reader.pages[number - 1].extract_text() or "", furniture)
         if len(_norm(text)) < MIN_PAGE_CHARACTERS:
@@ -205,6 +213,7 @@ def student_package(topic: dict, document: dict | None, content: dict, status: s
         "start_at": topic.get("start_at"), "stop_before": topic.get("stop_before"),
         "status": status, "issues": issues, "passage": content.get("passage", ""),
         "passage_sha256": passage_sha256(content.get("passage", "")),
+        **({"earlier_passage_sha256": content["earlier_passage_sha256"]} if content.get("earlier_passage_sha256") else {}),
         "sentences": content.get("sentences") or split_sentences(content.get("passage", "")),
         "images": [{k: image.get(k) for k in ("pdf_page", "classification", "alt", "caption", "before_sentence")}
                    for image in content.get("selected_images", [])],
@@ -250,13 +259,17 @@ def load(ctx, topic: dict) -> dict:
             stale + ["Review the selected student reading before narration" if safe_text else "Combined-book student reading needs source review"])
     key = cache_key(document["sha256"], pdf_start, pdf_end, topic.get("start_at"), topic.get("stop_before"))
     path = ctx.config.cache_dir / "passages" / f"{key}.json"
-    if path.exists():
-        draft = json.loads(path.read_text(encoding="utf-8"))
-    else:
+    draft = json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+    if draft is None or "earlier_passage_sha256" not in draft:
         pdf = ctx.file_bytes(document["file_path"], document["sha256"])
-        draft = extract(pdf, pdf_start, pdf_end, topic.get("start_at"), topic.get("stop_before"))
-        draft.pop("page_texts", None)
-        draft["sentences"] = split_sentences(draft["passage"])
+        bounds = (pdf_start, pdf_end, topic.get("start_at"), topic.get("stop_before"))
+        if draft is None:
+            draft = extract(pdf, *bounds)
+            draft.pop("page_texts", None)
+            draft["sentences"] = split_sentences(draft["passage"])
+        # Lessons prepared before page furniture was left out stay current (written_for).
+        earlier = passage_sha256(extract(pdf, *bounds, furniture=frozenset())["passage"])
+        draft["earlier_passage_sha256"] = earlier if earlier != passage_sha256(draft["passage"]) else None
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(draft, ensure_ascii=False), encoding="utf-8")
     if draft["issues"] and hasattr(ctx, "books"):

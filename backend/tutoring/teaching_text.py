@@ -23,7 +23,7 @@ def correct(ctx, row, expected_sha256, replacements):
     if book:
         common = family_skill.current(ctx.store)
         family = {**family, 'sha256': family_skill.digest(common['content'], {})}
-    if (row['source_sha256'] != package['passage_sha256'] or row['skill_sha256'] != skill['sha256']
+    if (not passages.written_for(package, row['source_sha256']) or row['skill_sha256'] != skill['sha256']
             or not visual_source.current(ctx, row, topic)
             or (frozen.get('source_annotations') or []) != source_annotations.packet(ctx.store, topic)
             or (frozen.get('family_tutoring') or {}).get('sha256') != family['sha256']):

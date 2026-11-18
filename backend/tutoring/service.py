@@ -736,7 +736,7 @@ class TutorService:
         """The lesson's guided walk-through, if one was written (see tutoring/guide.py)."""
         skill = skills.packet(self.store, self.store.get("subjects", topic["subject_id"]))
         # Freshness of everything except the teaching skills, which are judged apart below.
-        row, fresh = guide_mod.current_row(self.store, topic["id"], package["passage_sha256"])
+        row, fresh = guide_mod.current_row(self.store, topic["id"], package)
         skills_changed = bool(row) and row.get("skill_sha256") != skill["sha256"]
         from . import library_materials
         shared_book = library_materials.book_for(self.store, topic['subject_id'])

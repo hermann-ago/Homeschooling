@@ -83,3 +83,32 @@ def test_the_books_page_offset_settles_pages_whose_edges_are_ambiguous():
     assert printed_page(page("PALEONTOLOGY\nLESSON 1\nDiscovering Fossils\nText"), 26, offset=19) == 7
     # One clear number that differs: the book's numbering restarts (a second part).
     assert printed_page(page("3\nPart two begins\nText of the page"), 50, offset=19) == 3
+
+
+def test_a_lesson_prepared_before_furniture_was_left_out_is_still_current(harness):
+    pdf = watermarked_book()
+    path = harness.add_file(pdf, "Books/Letters.pdf")
+    with harness.ctx.store.transaction() as tx:
+        child = tx.insert("children", {"name": "Learner"})
+        subject = tx.insert("subjects", {"child_id": child["id"], "name": "Reading"})
+        doc = tx.insert("documents", {"file_path": path, "original_filename": "Letters.pdf", "size_bytes": len(pdf),
+                                      "page_count": 11, "sha256": hashlib.sha256(pdf).hexdigest(), "source": "drive"})
+        topic = tx.insert("topics", {"subject_id": subject["id"], "document_id": doc["id"], "title": "Letter P",
+                                     "page_start": 2, "page_end": 3})
+    passages._furniture.clear()
+    package = passages.load(harness.ctx, topic)
+    assert MARK not in package["passage"]
+    # The text a lesson was written from before: the same pages with the watermark still in.
+    before = passages.passage_sha256(passages.extract(pdf, 2, 3, None, None, furniture=frozenset())["passage"])
+    assert before != package["passage_sha256"] and package["earlier_passage_sha256"] == before
+    assert passages.written_for(package, before) and passages.written_for(package, package["passage_sha256"])
+    assert not passages.written_for(package, "another") and not passages.written_for(package, None)
+    assert passages.load(harness.ctx, topic)["earlier_passage_sha256"] == before  # kept in the cached draft
+    # A book without furniture has no earlier text.
+    plain = make_pdf([[f"Page {n} teaches the sound of a new letter with a short story."] for n in range(1, 11)])
+    with harness.ctx.store.transaction() as tx:
+        other = tx.insert("documents", {"file_path": harness.add_file(plain, "Books/Plain.pdf"), "original_filename": "Plain.pdf",
+                                        "size_bytes": len(plain), "page_count": 10, "sha256": hashlib.sha256(plain).hexdigest(), "source": "drive"})
+        lesson = tx.insert("topics", {"subject_id": subject["id"], "document_id": other["id"], "title": "Letter Q",
+                                      "page_start": 2, "page_end": 3})
+    assert "earlier_passage_sha256" not in passages.load(harness.ctx, lesson)
