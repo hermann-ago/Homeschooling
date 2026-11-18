@@ -24,6 +24,14 @@ checked with the eval set — not by adding another prohibition to the prompt.
   titles and leader dots are handled; numbered lessons are preferred over unit
   headings), lessons from the main book, the PDF filed into the child's subject
   folder, and the book's text fingerprint for answer keys. No AI is involved.
+  The map also records the book's page offset (printed page labels on a lesson's
+  pages come from it when the page's own number is unclear) and any contents
+  entries past the PDF's last page, which the chapter maps panel reports as
+  missing pages. A new book's lessons are planned at once only when nothing else
+  in the subject still is; otherwise they wait as an extra book until the family
+  makes it the main book or lets it continue the course. They take the subject's
+  recorded language and the book's file name. A corrected chapter map replaces a
+  book's map-made lessons only while nothing uses them.
 - **Lesson pages** (`navigation.selections`) add exercise or reference pages from
   other books in the subject. Chapter maps make choosing them quick.
 - **Answer keys** (`answer_keys.py`) are found locally, from a per-book
