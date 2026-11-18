@@ -298,3 +298,10 @@ def test_a_title_gets_a_pause_before_the_text_that_follows():
     assert [s['text'] for s in spoken(sentences)] == ['Mini Lesson.', 'Sometimes we must regroup.', 'First, subtract', 'the digits.', 'Quick Tip!']
     assert sentences[0]['text'] == 'Mini Lesson'  # what the child sees is untouched
     assert spoken([{'text': 'Yes'}]) == [{'text': 'Yes'}]  # a single line is said as written
+
+
+def test_book_text_in_square_brackets_is_said_not_taken_as_a_delivery_tag():
+    from tutoring.inworld_audio import spoken
+    sentences = [{'text': '3 × 4 = 12 [Write 2, Carry 1] 2.', 'paragraphIndex': '1:0'}]
+    assert spoken(sentences)[0]['text'] == '3 × 4 = 12 (Write 2, Carry 1) 2.'
+    assert sentences[0]['text'] == '3 × 4 = 12 [Write 2, Carry 1] 2.'  # what the child sees is untouched

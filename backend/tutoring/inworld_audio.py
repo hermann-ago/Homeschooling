@@ -27,9 +27,13 @@ CLOSED = ".!?:;…\"”’')]»"
 def spoken(sentences):
     """The sentences as the voice should say them: a heading or title (a line with no closing
     punctuation before a new paragraph) gets a full stop, so the narrator pauses after it instead
-    of reading it into the next sentence. The text shown to the child is not changed."""
+    of reading it into the next sentence. Inworld treats square brackets as delivery tags
+    ("[happy]") and does not say what is inside, so book text in brackets ("[Write 2, Carry 1]")
+    is sent in parentheses. The text shown to the child is not changed."""
     result = []
     for index, sentence in enumerate(sentences):
+        if '[' in sentence['text'] or ']' in sentence['text']:
+            sentence = {**sentence, 'text': sentence['text'].replace('[', '(').replace(']', ')')}
         text = sentence['text'].rstrip()
         following = sentences[index + 1] if index + 1 < len(sentences) else None
         new_paragraph = following is None or following.get('paragraphIndex') != sentence.get('paragraphIndex')
