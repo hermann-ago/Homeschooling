@@ -16,7 +16,7 @@ from contextlib import nullcontext
 from pydantic import BaseModel, Field
 
 from . import guide as guide_mod
-from .service import TutorConflict, TutorError
+from .service import OPEN_SESSION, TutorConflict, TutorError
 from .keyed_assessment import checked_binary_assessment, checked_ordering_assessment
 from .assessment_policy import can_continue as can_continue_discussion
 from .capture_policy import activity_content as capture_content
@@ -838,6 +838,7 @@ class ActivityEngine:
                         return self.state(session_id)  # it was taken as the exercise's answer
                     return self._support_question(session_id, operation_id)
                 if event_type == "finish":
+                    self._close_again(session_id, activity_id)
                     return self._finish(session_id)
                 if event_type in book_check.EVENTS:
                     return book_check.run(self, session_id)
@@ -990,9 +991,7 @@ class ActivityEngine:
                         raise TutorConflict("Complete or skip unfinished activities before finishing")
                     if photo_check.running(tx, session_id):
                         raise TutorConflict("Your photos are still being checked. Finish in a moment")
-                    tx.update("lesson_actions", action["id"], {"status": "answered"})
-                    tx.update("activity_interactions", interaction["id"], {"status": "completed"})
-                    tx.update("lesson_playback", session_id, {"action_id": None, "reading_finished": True})
+                    self._close(tx, session_id, action, interaction)
                 elif event_type == "assess":
                     response = self._owned_response(tx, session_id, activity_id, interaction_id, payload.get("response_id"))
                     if answer_recheck_available(self.ctx,tx,action,response):
@@ -1881,10 +1880,51 @@ class ActivityEngine:
         return {**state, **({"error": result["error"]} if failed else {})}
 
     def _finish(self, session_id):
-        from . import book_check, photo_check
         session = self._session(session_id)
         if session["status"] == "completed":
             return self.state(session_id)
+        try:
+            self._complete(session_id, session)
+        except Exception:
+            # The closing step was already saved as done; reopen it so Finish shows again.
+            self._reopen_closing(session_id)
+            raise
+        self.tutor.close_reader(session_id)
+        # The tutor's honest look back, for the next lesson's "Last time" (written in the background).
+        from . import tutor_voice
+        tutor_voice.remember_in_background(self.ctx, session_id)
+        return self.state(session_id)
+
+    @staticmethod
+    def _close(tx, session_id, action, interaction):
+        tx.update("lesson_actions", action["id"], {"status": "answered"})
+        tx.update("activity_interactions", interaction["id"], {"status": "completed"})
+        tx.update("lesson_playback", session_id, {"action_id": None, "reading_finished": True})
+
+    def _close_again(self, session_id, activity_id):
+        """A repeated finish whose first try failed and reopened the closing step."""
+        with self.db.transaction(kind="activity.close_again") as tx:
+            playback = tx.get("lesson_playback", session_id)
+            action = self._action(tx, session_id, activity_id)
+            if (tx.get("tutor_sessions", session_id)["status"] in OPEN_SESSION and playback["action_id"] == activity_id
+                    and action["activity_kind"] == "close_lesson" and action["status"] == "pending"):
+                self._close(tx, session_id, action, self._interaction(tx, session_id, activity_id))
+
+    def _reopen_closing(self, session_id):
+        with self.db.transaction(kind="activity.reopen_closing") as tx:
+            session = tx.get("tutor_sessions", session_id)
+            playback = tx.get("lesson_playback", session_id)
+            closing = next((a for a in tx.find("lesson_actions", session_id=session_id)
+                            if a.get("activity_kind") == "close_lesson" and a["status"] == "answered"), None)
+            if not closing or session["status"] == "completed" or playback["action_id"]:
+                return
+            tx.update("lesson_actions", closing["id"], {"status": "pending"})
+            interaction = self._interaction(tx, session_id, closing["action_id"])
+            tx.update("activity_interactions", interaction["id"], {"status": "ready_to_continue"})
+            tx.update("lesson_playback", session_id, {"action_id": closing["action_id"]})
+
+    def _complete(self, session_id, session):
+        from . import book_check, photo_check
         with self.db.transaction(kind="activity.finish") as tx:
             self.tutor.interactive.finish(tx, session_id, session["revision"])
             actions = tx.find("lesson_actions", session_id=session_id)
@@ -1913,11 +1953,6 @@ class ActivityEngine:
                 **({"book_work": book_check.summary(tx, session_id, actions)} if _paced(tx.get("lesson_playback", session_id)) else {}),
                 **({"photo_checks": photo_check.summary(tx, session_id, actions)}
                    if any(a["status"] in ("fix", "checking") for a in actions) else {})}})
-        self.tutor.close_reader(session_id)
-        # The tutor's honest look back, for the next lesson's "Last time" (written in the background).
-        from . import tutor_voice
-        tutor_voice.remember_in_background(self.ctx, session_id)
-        return self.state(session_id)
 
 
 def service(ctx):
