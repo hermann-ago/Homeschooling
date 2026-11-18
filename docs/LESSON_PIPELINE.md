@@ -159,7 +159,11 @@ Curriculum → Prepare lesson → Script review → **Answer key (teacher only)*
 
 Finishing a lesson queues the subject's next lesson (script, review, voice) as
 a background preparation job (`curriculum_preparation.prepare_next`, off with
-config `preparation.auto_next = false`). Each saved script shows its origin:
+config `preparation.auto_next = false`). Editing a teaching skill (the
+subject's or the family style) does not rewrite a lesson whose saved script
+passed its review: it stays current, marked as written with an earlier skill,
+and the family can still choose "Generate a new tutor script". A script its
+review sent back is written again under the edited skill. Each saved script shows its origin:
 written by the app, revised (an app script changed afterwards, with
 `revision_of`), or written by hand.
 
