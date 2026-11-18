@@ -274,3 +274,21 @@ def test_a_question_the_photo_did_not_show_is_not_a_first_try(harness, monkeypat
     state = snap(harness, engine, state, 'again.png')
     # The first answer the tutor could see was right: right on the first try, not "after another go".
     assert state['progress']['items'][0]['outcome'] == 'first_try'
+
+
+def test_a_photo_check_reads_the_exercise_page_not_the_whole_lesson(harness, monkeypatch):
+    """Photos go to the careful model: a keyed exercise is checked against its own page."""
+    from tutoring import interactive
+    engine, state, question = lesson(harness, monkeypatch)
+    session = harness.ctx.store.get('tutor_sessions', state['session_id'])
+    action = harness.ctx.store.get('lesson_actions', question['id'])
+    doc = harness.ctx.store.get('topics', action['topic_id'])['document_id']
+    monkeypatch.setattr(interactive, 'SHORT_PASSAGE', 10)  # the seeded lesson stands in for a long one
+    message = {'id': 'photo-test', 'text': '', 'evidence_ids': []}
+    full, _, _ = engine.tutor.interactive._prompt(session, action, message)
+    lean, _, _ = engine.tutor.interactive._prompt(session, action, message, source_pages=[(doc, 3)], lean=True)
+    assert 'The Mongols came from the north.' in full and 'recent_sessions' in full
+    assert 'Genghis Khan united the tribes.' in lean and 'PDF page 3' in lean   # the exercise's own page
+    assert 'The Mongols came from the north.' not in lean                     # not the rest of the lesson
+    assert 'recent_sessions' not in lean and 'preferences' in lean
+    assert len(lean) < len(full)

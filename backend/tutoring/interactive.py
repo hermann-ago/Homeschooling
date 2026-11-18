@@ -90,6 +90,9 @@ def gemini_workbook(prompt_text, images, models, replace_invalid=False, expected
     return gemini_turn(prompt_text, images, models, schema, **({"replace_invalid": True} if replace_invalid else {}))
 
 
+# A lesson passage up to this length goes whole to a photo check; a longer one gives way to
+# the exercise's own pages (the checker has the answer key; whole lessons ran 10k+ tokens).
+SHORT_PASSAGE = 6000
 WITHOUT_PAGES = ('The book pages are not attached to this reply; the lesson text above is. If the question can '
                  'only be answered from a picture, diagram or table on the pages, return result Source disputed '
                  'with a short holding line: the pages will be attached and you will be asked again.')
@@ -434,7 +437,23 @@ class InteractiveTutor:
             current = self.db.get("lesson_actions", current["source_action_id"]) if current["source_action_id"] else None
         return passages.load(self.ctx, source_topic)["passage"]
 
-    def _prompt(self, session, action, message, source_key=None):
+    def _pages_text(self, refs):
+        """The text of these original book pages (document id, PDF page), furniture removed."""
+        parts = []
+        for document_id in dict.fromkeys(d for d, _ in refs):
+            doc = self.db.get("documents", document_id)
+            if not doc or not doc.get("file_path"):
+                continue
+            pdf = self.ctx.file_bytes(doc["file_path"], doc["sha256"])
+            for page in sorted({p for d, p in refs if d == document_id}):
+                text = passages.extract(pdf, page, page, None, None)["passage"]
+                parts.append(f"[{doc['original_filename']}, PDF page {page}]\n{text}")
+        return "\n\n".join(parts)
+
+    def _prompt(self, session, action, message, source_key=None, *, source_pages=None, lean=False):
+        """The grading context. ``source_pages`` (document id, PDF page) replaces a long lesson
+        passage with the exercise's own pages; ``lean`` keeps only the learner's preferences
+        from the observations. Photo checks use both: they run on the careful model."""
         captures = self.db.find("activity_responses", session_id=session["id"], message_id=message["id"])
         support = captures[0].get("support_snapshot") if captures else None
         if support is not None:
@@ -444,6 +463,8 @@ class InteractiveTutor:
         skill = skill or skills.packet(self.db, self.db.get("subjects", session["subject_id"]))
         source_topic = self.db.get("topics", action["topic_id"])
         source = self._source(action)
+        if source_pages and len(source) > SHORT_PASSAGE:
+            source = self._pages_text(source_pages) or source
         packet = self.tutor.context(session["child_id"], session["subject_id"])
         started = attempt_start(self.db, session["id"], action["action_id"])
         history = sorted((m for m in self.db.find("lesson_dialogue", session_id=session["id"], action_id=action["action_id"])
@@ -471,12 +492,15 @@ class InteractiveTutor:
             from .page_script import answer_for
             grading = source_key if source_key is not None else resolve(self.db, action)
             grading = grading or answer_for(self.ctx, action)
-        observations = {k: packet[k] for k in ("preferences", "recent_sessions", "due_reviews")}
-        observations["learning_memory"] = self.ctx.learning_memory.packet(session["child_id"], session["subject_id"],
-            action["topic_id"], action.get("concept_ids") or [])
         pinned = (playback.get("context_snapshot") or {}).get("started_with", {})
-        observations["pinned_subject_sources"] = pinned.get("subject_sources", {})
-        observations["learning_memory_note"] = "This turn uses current observed evidence; the running lesson's guide, source map and starting snapshot remain fixed."
+        if lean:
+            observations = {"preferences": packet["preferences"]}
+        else:
+            observations = {k: packet[k] for k in ("preferences", "recent_sessions", "due_reviews")}
+            observations["learning_memory"] = self.ctx.learning_memory.packet(session["child_id"], session["subject_id"],
+                action["topic_id"], action.get("concept_ids") or [])
+            observations["pinned_subject_sources"] = pinned.get("subject_sources", {})
+            observations["learning_memory_note"] = "This turn uses current observed evidence; the running lesson's guide, source map and starting snapshot remain fixed."
         other_help = [{"question": a["prompt"], "help": a["help_given"]} for a in self.db.find("lesson_actions", session_id=session["id"])
             if a["id"] != action["id"] and a["help_given"]]
         if support is not None:

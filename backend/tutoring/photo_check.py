@@ -146,8 +146,16 @@ def _prompt(engine, job):
     snapshot = job['input_snapshot']
     session = engine._session(job['session_id'])
     action = engine._action(engine.db, session['id'], snapshot['items'][0])
+    # Photos are read by the careful model, so the context stays lean: with every task's answer
+    # key at hand, the tasks' own book pages stand in for a long lesson passage, and the
+    # learner's history is left out (it does not change how written work is read or marked).
+    actions = [engine._action(engine.db, session['id'], item) for item in snapshot['items']]
+    pages = [(r['document_id'], r['page']) for a in actions for r in (a.get('source_refs') or [])
+             if r.get('document_id') and r.get('page')]
+    keyed = bool(pages) and all(t.get('teacher_key') for t in snapshot['tasks'])
     context, _, _ = engine.tutor.interactive._prompt(session, action,
-        {'id': 'photo-' + job['id'], 'text': '', 'evidence_ids': snapshot['evidence_ids']})
+        {'id': 'photo-' + job['id'], 'text': '', 'evidence_ids': snapshot['evidence_ids']},
+        source_pages=pages if keyed else None, lean=True)
     return (context + '\nThe child did this book work on paper and photographed it. Assess each task below separately. '
         'For each task: answer = the child\'s visible answer copied exactly as written, mistakes included (empty when '
         'none is visible); uncertain = true when you cannot read it with confidence. result: Correct; Partly correct; '
