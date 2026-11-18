@@ -326,7 +326,8 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
   return <div className="registry-lesson">
     {!sessionId && <header className="tutor-chat-header"><div className="tutor-header-top"><p className="font-semibold text-sm">Your tutor</p><LessonOptions>{options}</LessonOptions></div>{sessionControls({ activity: null, state: {}, busy })}</header>}
     {!sessionId && <LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} closed={closed} onChanged={onVoiceBuilt}/>}
-    {!sessionId ? <div className="p-5 mt-auto flex flex-col gap-3">
+    {/* Before the lesson starts, this part scrolls: a short screen (a tablet) can still reach Start. */}
+    {!sessionId ? <div className="registry-lesson-start flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col"><div className="p-5 mt-auto flex flex-col gap-3">
       {warmUp && (warmUp.last || warmUp.next) ? <WarmUpCard warmUp={warmUp} onFinished={() => focusLessonControl(nextStepButton())} /> : <p className="text-sm text-muted">Read with your book beside you. Your teacher will show one activity at a time and keep your answers and saved place together.</p>}
       {resumeLesson && <><p className="text-sm text-muted">Your place in {resumeLesson.title} stays saved while you start this lesson.</p><a href={modeHref(resumeLesson.path)} className="text-sm font-semibold text-action underline">Resume unfinished lesson</a></>}
       {earlierVersion ? <EarlierVersionChoice earlier={earlierVersion} guide={guide} busy={busy} closed={closed}
@@ -335,7 +336,7 @@ export default function RegistryGuidedLesson({ guide, learner, topic, session, s
           catch (error) { setProblem(error.message); } finally { setBusy(false); } }} />
         : <Button data-lesson-start variant="primary" disabled={busy || closed} onClick={start}>{busy ? 'Opening lesson and preparing its voice…' : 'Start lesson'}</Button>}
       {problem && <p role="alert" className="text-sm text-problem">{problem}</p>}
-    </div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
+    </div></div> : <ActivityLesson key={sessionId} sessionId={sessionId} language={language} onState={handleState}
       onRepeat={repeat} onContinue={advance} onPauseNarration={pauseNarration} getNarrationCursor={getCursor} renderReading={reading} renderSpokenText={spokenText} renderNarration={narration} isVoicePending={voicePending} renderSessionControls={sessionControls}
       renderFeedback={({message,history=false,play=false})=>feedbackVoice && ['google-gemini','elevenlabs','kokoro-local','inworld'].includes(feedbackVoice.provider) ? <FeedbackVoice key={`${message.id}.${selectedSource}`} session={sessionId} message={message} language={language} trackId={selectedSource} speed={selectedSpeed} autoPlay={play || (!history && settings.feedbackAudio !== false && feedbackRequest?.sessionId===sessionId && feedbackRequest.id===message.id)} /> : !history && <p className="mt-2 text-xs text-muted">This reply is text-only with the selected narrator.</p>}
       sessionNotice={<>{newerVersion?.session_id === sessionId && <NewerVersionNotice newer={newerVersion} onSwitched={onStarted} />}<LessonVoiceStatus compact guide={guide} learner={learner} topic={topic} session={sessionId} closed={closed} onChanged={onVoiceBuilt}/></>} onSource={onSource} options={options} completionActions={finished ? completionActions : null} />}
