@@ -5,6 +5,9 @@ import { Button } from '../../ui';
 import { useWorkCamera } from './sharedCamera';
 
 const SEND_AFTER = 1200;
+// A photo the camera thinks is soft is sent too, a little later so it can be retaken: the tutor's reader
+// decides whether the page can be read, and asks for a new photo when it cannot.
+const SEND_SOFT_AFTER = 2500;
 const TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 /**
@@ -58,8 +61,8 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
   const sendRef = useRef(send);
   useEffect(() => { sendRef.current = send; });
   useEffect(() => {
-    if (stage !== 'taken') return undefined;
-    const timer = setTimeout(() => sendRef.current(), SEND_AFTER);
+    if (stage !== 'taken' && stage !== 'blurry') return undefined;
+    const timer = setTimeout(() => sendRef.current(), stage === 'blurry' ? SEND_SOFT_AFTER : SEND_AFTER);
     return () => clearTimeout(timer);
   }, [stage]);
   // Space reaches the step's main button by itself; focus follows only the child's own presses.
@@ -131,9 +134,9 @@ export default function SnapWork({ onSnap, busy, holdCamera = false, label = 'Ph
       <Button onClick={() => act(() => { file.current = null; setStage('camera'); })}>Retake</Button>
     </>}
     {stage === 'blurry' && <>
-      <p role="status" className="text-sm font-semibold text-problem">That photo looks blurry.</p>
-      <Button onClick={() => act(() => void send())}>Send it anyway</Button>
-      <Button ref={main} data-lesson-primary variant="primary" onKeyDown={repeat} onClick={() => act(() => { file.current = null; setStage('camera'); })}>Take it again</Button>
+      <p role="status" className="text-sm font-semibold text-problem">That photo looks a little blurry. Sending it…</p>
+      <Button onClick={() => act(() => { file.current = null; setStage('camera'); })}>Take it again</Button>
+      <Button ref={main} data-lesson-primary variant="primary" onKeyDown={repeat} onClick={() => act(() => void send())}>Send now</Button>
     </>}
     {stage === 'sending' && <p role="status" className="text-sm font-semibold text-action">Sending your photo…</p>}
   </div>;

@@ -42,6 +42,30 @@ def _keep_host_awake(enable: bool):
     ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | (ES_SYSTEM_REQUIRED if enable else 0))
 
 
+class SlowRequests:
+    """Write each request that takes longer than SLOW seconds to the server log (method, path, seconds,
+    and the device's address), so a lesson that drags can be traced to the request that held it."""
+
+    SLOW = 0.8
+
+    def __init__(self, app):
+        self.app = app
+        self.log = logging.getLogger("homeschooling.slow")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        import time
+        started = time.perf_counter()
+        try:
+            return await self.app(scope, receive, send)
+        finally:
+            took = time.perf_counter() - started
+            if took >= self.SLOW:
+                self.log.warning("Slow request %.2fs %s %s from %s", took, scope.get("method"), scope.get("path"),
+                                 (scope.get("client") or ("?",))[0])
+
+
 class CompressText:
     """Gzip text responses (the app's script, JSON). PDFs and audio are compressed already, and books can be
     large, so their bytes pass through untouched."""
@@ -102,6 +126,7 @@ def create_app(app_context=None) -> FastAPI:
     app.add_middleware(PrivateNetworkMiddleware,
                        extra_hosts=(app_context.config.get("allowed_hosts") if app_context else ()) or ())
     app.add_middleware(CompressText)
+    app.add_middleware(SlowRequests)  # outermost: the whole time the device waited
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, exc: RequestValidationError):
